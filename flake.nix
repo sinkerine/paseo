@@ -72,13 +72,56 @@
         system:
         let
           pkgs = pkgsFor system;
+          browserLibraries = with pkgs; [
+            alsa-lib
+            at-spi2-atk
+            cairo
+            cups
+            dbus
+            expat
+            glib
+            gtk3
+            libdrm
+            libgbm
+            libx11
+            libxcb
+            libxcomposite
+            libxcursor
+            libxdamage
+            libxext
+            libxfixes
+            libxi
+            libxkbcommon
+            libxrandr
+            libxrender
+            libxtst
+            nspr
+            nss
+            pango
+            stdenv.cc.cc.lib
+            udev
+          ];
         in
         {
           default = pkgs.mkShell {
-            packages = [
-              pkgs.nodejs_22
-              pkgs.python3
+            packages = with pkgs; [
+              nodejs_22
+              python3
+              pkg-config
+              git
+              ripgrep
+              jq
+              ffmpeg
+            ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              xvfb-run
             ];
+
+            # Use the browser revision installed by the project's Playwright,
+            # which can differ from the version packaged in pinned Nixpkgs.
+            shellHook = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath browserLibraries}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              export FONTCONFIG_FILE="${pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; }}"
+            '';
           };
         }
       );

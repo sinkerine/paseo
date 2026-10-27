@@ -9,6 +9,7 @@ out/
 result
 
 # Environment variables
+.direnv/
 .env
 .env.test
 .env.local

@@ -5,6 +5,39 @@
 - Node.js (see `.tool-versions` for exact version)
 - npm workspaces (comes with Node)
 
+### Nix and direnv
+
+The default flake shell provides Node 22, Python and the native build toolchain,
+Git, ripgrep, jq, and FFmpeg. On Linux it also provides the runtime libraries and
+fonts for Playwright Chromium and Electron, plus `xvfb-run` for desktop tests.
+
+Enter it with `nix develop`, or install direnv, enable its shell hook, and run
+`direnv allow` in this checkout. The checked-in `.envrc` uses the flake; nix-direnv
+can cache the environment when installed. `.direnv/` stays local.
+
+Install project dependencies and the browser matching the npm lockfile inside
+the shell:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run build:server
+npm run build:app-deps
+```
+
+Use the normal development scripts below. To run one browser test file:
+
+```bash
+npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/commit-diff-panel.spec.ts
+```
+
+Playwright's browser revision follows `package-lock.json`. Re-run the browser
+install after Playwright upgrades. Do not point `PLAYWRIGHT_BROWSERS_PATH` at
+Nixpkgs' browser bundle: its Playwright version can differ from the checkout's.
+On Linux, the shell supplies shared libraries through `LD_LIBRARY_PATH`; no
+`playwright install --with-deps` or system package installation is needed for
+Chromium. Native Android and iOS builds still require their platform SDKs.
+
 ## Running the dev server
 
 ```bash

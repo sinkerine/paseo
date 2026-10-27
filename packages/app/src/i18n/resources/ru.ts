@@ -988,8 +988,7 @@ export const ru: TranslationResources = {
         modifiedFile: "Файл изменён",
         commits: {
           title: "Коммиты",
-          countLabel: "Коммитов в рабочем пространстве: {{count}}",
-          noneAhead: "Пока нет коммитов, отсутствующих в {{baseRef}}",
+          countLabel: "Коммитов: {{count}}",
           fileDiffEmpty: "Нет изменений для отображения",
           fileDiffError: "Не удалось загрузить дифф файла",
           loading: "Загрузка коммитов…",

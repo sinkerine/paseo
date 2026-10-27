@@ -7,24 +7,34 @@ import { openChangesTreePanel } from "../support/helpers/workspace-tabs";
 
 const COMMIT_SUBJECT = "Show commit timestamps";
 
-test("commit history explains when the workspace has no commits ahead of its base", async ({
-  page,
-  withWorkspace,
-}) => {
-  const workspace = await withWorkspace({ prefix: "commit-history-empty-workspace-" });
-  execFileSync("git", ["checkout", "-b", "feature"], { cwd: workspace.repoPath, stdio: "ignore" });
-  await workspace.navigateTo();
+for (const branch of ["main", "feature"]) {
+  test(`commit history shows shared history on ${branch} without commits ahead of base`, async ({
+    page,
+    withWorkspace,
+  }) => {
+    const workspace = await withWorkspace({ prefix: "commit-history-shared-" });
+    if (branch === "feature") {
+      execFileSync("git", ["checkout", "-b", branch], { cwd: workspace.repoPath, stdio: "ignore" });
+    }
+    const shortSha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: workspace.repoPath,
+      encoding: "utf8",
+    }).trim();
+    await workspace.navigateTo();
 
-  await openChangesTreePanel(page);
-  const commitsSection = page.getByRole("button", { name: /Commits/i });
-  await expect(commitsSection).toBeVisible({ timeout: 30_000 });
-  await commitsSection.click();
+    await openChangesTreePanel(page);
+    const commitsSection = page.getByRole("button", { name: /Commits/i });
+    await expect(commitsSection).toBeVisible({ timeout: 30_000 });
+    await commitsSection.click();
 
-  await expect(page.getByTestId("commits-section-no-workspace-commits")).toHaveText(
-    "No commits ahead of main yet",
-    { timeout: 30_000 },
-  );
-});
+    const commitRow = page.getByTestId(`commit-row-${shortSha}`);
+    await expect(commitRow).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-testid^="commit-row-"]')).toHaveCount(1);
+    await expect(commitsSection).toHaveText("Commits1");
+    await commitRow.click();
+    await expect(page.getByTestId("commit-diff-panel").filter({ visible: true })).toBeVisible();
+  });
+}
 
 test("commit history shows dates and shares diff layout preferences", async ({
   page,
@@ -44,7 +54,8 @@ test("commit history shows dates and shares diff layout preferences", async ({
     hasText: COMMIT_SUBJECT,
   });
   await expect(commitRow).toContainText(COMMIT_SUBJECT, { timeout: 30_000 });
-  await expect(page.locator('[data-testid^="commit-row-"]')).toHaveCount(1);
+  await expect(page.locator('[data-testid^="commit-row-"]')).toHaveCount(2);
+  await expect(commitsSection).toHaveText("Commits2");
   await expect(commitRow).toContainText("Jan 15");
   await commitRow.click();
 

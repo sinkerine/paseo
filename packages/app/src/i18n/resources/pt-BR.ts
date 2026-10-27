@@ -994,8 +994,7 @@ export const ptBR: TranslationResources = {
         modifiedFile: "Modificado",
         commits: {
           title: "Commits",
-          countLabel: "{{count}} commits do espaço de trabalho",
-          noneAhead: "Ainda não há commits à frente de {{baseRef}}",
+          countLabel: "{{count}} commits",
           fileDiffEmpty: "Nenhuma alteração para exibir",
           fileDiffError: "Falha ao carregar diff do arquivo",
           loading: "Carregando commits…",

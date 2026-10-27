@@ -971,8 +971,7 @@ export const ar: TranslationResources = {
         modifiedFile: "معدّل",
         commits: {
           title: "الإيداعات",
-          countLabel: "{{count}} من إيداعات مساحة العمل",
-          noneAhead: "لا توجد إيداعات متقدمة على {{baseRef}} بعد",
+          countLabel: "{{count}} إيداعات",
           fileDiffEmpty: "لا توجد تغييرات لعرضها",
           fileDiffError: "تعذّر تحميل فروق الملف",
           loading: "جارٍ تحميل الإيداعات…",

@@ -6,7 +6,7 @@ import { checkoutCommitsQueryKey } from "@/git/query-keys";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 
-// Commits ahead of base change rarely while the section is open; this keeps a
+// Commit history changes rarely while the section is open; this keeps a
 // collapse/re-expand cycle warm without leaving the fetch result stale for long.
 const CHECKOUT_COMMITS_STALE_TIME = 30_000;
 

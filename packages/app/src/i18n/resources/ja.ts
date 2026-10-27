@@ -984,8 +984,7 @@ export const ja: TranslationResources = {
         modifiedFile: "変更済み",
         commits: {
           title: "コミット",
-          countLabel: "ワークスペースのコミット数: {{count}}",
-          noneAhead: "{{baseRef}} より先のコミットはまだありません",
+          countLabel: "コミット数: {{count}}",
           fileDiffEmpty: "表示する変更はありません",
           fileDiffError: "ファイル差分の読み込みに失敗しました",
           loading: "コミットを読み込み中…",

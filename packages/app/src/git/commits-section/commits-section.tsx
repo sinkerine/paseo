@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { useCheckoutCommitsQuery, type CheckoutCommitsQueryResult } from "@/git/use-commits-query";
 import { ThemedChevron, chevronColorMapping } from "@/git/themed-chevron";
 import { treeRowPaddingLeft } from "@/components/tree-primitives";
-import { normalizeBranchOptionName } from "@/utils/branch-suggestions";
 import { CommitRow } from "./commit-row";
 
 interface CommitsSectionProps {
@@ -55,25 +54,22 @@ function CommitsSectionContent({
   if (query.status !== "loaded") {
     return <CommitsSectionSkeleton />;
   }
-  const workspaceCommits = query.data.commits.filter((commit) => !commit.isOnBase);
-  const baseRef = normalizeBranchOptionName(query.data.baseRef) ?? t("workspace.git.diff.base");
-  if (workspaceCommits.length === 0) {
+  const commits = query.data.commits;
+  if (commits.length === 0) {
     return (
-      <View style={styles.noWorkspaceCommitsRow} testID="commits-section-no-workspace-commits">
-        <Text style={styles.noWorkspaceCommitsText}>
-          {t("workspace.git.diff.commits.noneAhead", { baseRef })}
-        </Text>
+      <View style={styles.emptyRow} testID="commits-section-empty">
+        <Text style={styles.emptyText}>{t("workspace.git.diff.commits.empty")}</Text>
       </View>
     );
   }
   return (
     <View style={styles.list}>
-      {workspaceCommits.map((commit, index) => (
+      {commits.map((commit, index) => (
         <CommitRow
           key={commit.sha}
           commit={commit}
           isFirst={index === 0}
-          isLast={index === workspaceCommits.length - 1}
+          isLast={index === commits.length - 1}
           onCommitPress={onCommitPress}
         />
       ))}
@@ -112,10 +108,7 @@ export function CommitsSection({
   if (query.status === "unsupported") {
     return null;
   }
-  const commitCount =
-    query.status === "loaded"
-      ? query.data.commits.filter((commit) => !commit.isOnBase).length
-      : null;
+  const commitCount = query.status === "loaded" ? query.data.commits.length : null;
 
   return (
     <View style={containerStyle}>
@@ -188,7 +181,7 @@ const styles = StyleSheet.create((theme) => ({
   list: {
     paddingBottom: theme.spacing[1],
   },
-  noWorkspaceCommitsRow: {
+  emptyRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingLeft: theme.spacing[2],
@@ -196,7 +189,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[1],
     paddingBottom: theme.spacing[2],
   },
-  noWorkspaceCommitsText: {
+  emptyText: {
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },

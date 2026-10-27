@@ -978,8 +978,7 @@ export const ko: TranslationResources = {
         modifiedFile: "수정됨",
         commits: {
           title: "커밋",
-          countLabel: "워크스페이스 커밋 {{count}}개",
-          noneAhead: "아직 {{baseRef}}보다 앞서 커밋이 없습니다.",
+          countLabel: "커밋 {{count}}개",
           fileDiffEmpty: "표시할 변경사항이 없습니다.",
           fileDiffError: "파일 diff를 불러오지 못했습니다.",
           loading: "커밋 로드 중…",
