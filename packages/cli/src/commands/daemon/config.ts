@@ -75,6 +75,23 @@ export function daemonConfigCommand(): Command {
   const config = new Command("config").description(
     "Read or edit persistent local configuration (local operation)",
   );
+  config.addHelpText(
+    "after",
+    `
+Paths use dotted object keys, including provider IDs, environment variables, and plugin IDs.
+Values accept JSON; use --string for literal strings. Replace arrays as whole JSON values.
+Use containing-object JSON for keys that contain dots. Passwords use daemon set-password.
+Edits validate the complete file and request a reload; they never restart the daemon.
+
+Examples:
+  paseo daemon config set agents.providers.claude.enabled false
+  paseo daemon config set agents.providers.pi.command '["/usr/local/bin/pi"]'
+  paseo daemon config set agents.providers.pi.env.PI_CODING_AGENT_DIR /path/to/pi
+  paseo daemon config set agents.providers.pi.options.rpcTimeoutMs 120000
+  paseo daemon config set log.console.level debug
+  paseo daemon config unset agents.providers.pi.command
+`,
+  );
   addLocalDaemonOptions(config.command("get [path]")).action(
     withOutput(async (field: string | undefined, options: CommandOptions, _command: Command) => {
       const persisted = readPersistedConfig(homeOf(options));

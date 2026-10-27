@@ -52,7 +52,21 @@ paseo daemon config set daemon.listen 127.0.0.1:6800 --home ~/paseo-test
 paseo daemon config unset features.webUi.enabled --home ~/paseo-test
 ```
 
-`get [path]` 报告已配置的值，并把缺失的字段标记为 unset。它不会创建主目录。`set` 会把输入解析为 JSON，否则当作字符串；`--string` 强制作为字面字符串。`--json` 选择输出格式。对于包含点号的动态键，请使用整个对象的 JSON。未知路径、无效值和无效的现有文件都会被拒绝，不会写入。密码使用 `set-password`。
+`get [path]` 报告已配置的值，并把缺失的字段标记为 unset。它不会创建主目录。`set` 会把输入解析为 JSON，否则当作字符串；`--string` 强制作为字面字符串。`--json` 选择输出格式。密码使用 `set-password`。
+
+点分路径支持固定设置，也支持 Provider ID、Provider 环境变量和选项、插件 ID 等动态条目：
+
+```bash
+paseo daemon config set agents.providers.claude.enabled false
+paseo daemon config set agents.providers.pi.command '["/usr/local/bin/pi"]'
+paseo daemon config set agents.providers.pi.env.PI_CODING_AGENT_DIR /path/to/pi
+paseo daemon config set agents.providers.pi.options.rpcTimeoutMs 120000
+paseo daemon config set plugins.my-plugin.enabled false
+paseo daemon config set log.console.level debug
+paseo daemon config unset agents.providers.pi.command
+```
+
+数组需要用完整的 JSON 值替换。对于包含点号的键，请用 JSON 替换其所在的对象。新条目必须在一次编辑中提供所有必填字段；例如，先运行 `paseo daemon config set plugins.my-plugin '{"source":"directory","path":"/path/to/plugin"}'` 创建目录插件，再编辑其中的字段。未知路径、无效值和无效的现有文件都会被拒绝，不会写入。对不存在的路径执行 `unset` 不会创建该路径。
 
 编辑成功后会保存经过校验的文件，然后在实例可达时重新加载一次。输出会区分已应用的更改、需要重启的项和部署覆盖项。已停止、未绑定或不可达的实例会报告 **saved; not applied**。重新加载失败时会报告 **saved; reload failed** 并以非零状态退出；文件仍然保存。编辑从不会隐式重启。
 
@@ -75,6 +89,26 @@ paseo daemon restart
 空闲运行时清理、监听地址、身份验证、中继端点和 TLS、worktree 分配、服务代理地址、内置的 Web UI、日志、语音合成与识别、语音、凭据以及本地模型设置都需要重启。重新加载会先应用同一文件中的其他有效编辑，再报告这些路径。
 
 部署环境变量和旧版进程管理器参数仍然具有最终决定权。当某个启动覆盖项阻止了文件中已更改的设置生效时，重新加载会在 `overrideControlledPaths` 下报告它。这包括启动设置，例如监听地址、密码、中继端点和 TLS、服务代理和 Web UI 设置、日志、语音合成与识别以及语音配置。主机名和 CORS 来源等列表设置仍然在各个来源之间追加，因此 `config.json` 中的值继续生效。要让文件中的值具有决定权，请停止该部署并在不带覆盖项的情况下重新启动。
+
+## 桌面应用偏好设置 {#desktop-app-preferences}
+
+使用 `paseo app config` 读取和修改本机正在运行的桌面应用的一般偏好和快捷键覆盖：
+
+```bash
+paseo app config get
+paseo app config get settings.theme --json
+paseo app config set settings.vimKeybindings true
+paseo app config set settings.openInSidePane.chatFiles true
+paseo app config unset settings.vimKeybindings
+paseo app config shortcuts --json
+paseo app config set shortcuts.workspace-new-cmd-n-mac 'Mod+Shift+N'
+paseo app config set shortcuts.workspace-new-cmd-n-mac null
+paseo app config unset shortcuts.workspace-new-cmd-n-mac
+```
+
+不指定路径的 `get` 会列出一般设置和已保存的快捷键覆盖。`shortcuts` 会列出绑定 ID、平台条件、默认值、覆盖值和有效组合。将快捷键设为 `null` 表示取消分配，`unset` 恢复默认绑定；对一般设置执行 `unset` 会恢复默认值。数组需要用完整的 JSON 值替换。无效路径和值会在保存前被拒绝。
+
+桌面应用必须正在运行并打开一个窗口。更改通过应用的设置存储保存，并刷新其他窗口。这些命令独立于 daemon 的 `--home` 和 `--host` 选择器。使用 `--user-data <directory>` 或 `PASEO_ELECTRON_USER_DATA_DIR` 指定独立的桌面配置目录。浏览器和移动应用存储、主机连接、缓存和 Electron 的 daemon 管理设置不在此命令范围内。
 
 ## Agent Provider {#agent-providers}
 

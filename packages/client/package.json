@@ -25,6 +25,10 @@
       "types": "./dist/daemon-client-websocket-transport.d.ts",
       "default": "./dist/daemon-client-websocket-transport.js"
     },
+    "./project-icon": {
+      "types": "./dist/project-icon.d.ts",
+      "default": "./dist/project-icon.js"
+    },
     "./node": {
       "types": "./dist/node/index.d.ts",
       "default": "./dist/node/index.js"

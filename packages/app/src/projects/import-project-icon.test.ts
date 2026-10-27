@@ -1,6 +1,6 @@
 import { Buffer } from "buffer";
 import { describe, expect, it } from "vitest";
-import { importProjectIconFromUrl } from "./import-project-icon";
+import { importProjectIconFromUrl } from "@getpaseo/client/project-icon";
 
 const IMAGE = new Uint8Array([1, 2, 3, 4]);
 

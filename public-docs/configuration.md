@@ -54,7 +54,21 @@ paseo daemon config set daemon.listen 127.0.0.1:6800 --home ~/paseo-test
 paseo daemon config unset features.webUi.enabled --home ~/paseo-test
 ```
 
-`get [path]` reports configured values and labels missing fields unset. It does not create a home. `set` parses JSON, otherwise treats the input as a string; `--string` forces a literal string. `--json` selects output format. Use whole-object JSON for dynamic keys containing dots. Unknown paths, invalid values, and invalid existing files are rejected without writing. Passwords use `set-password`.
+`get [path]` reports configured values and labels missing fields unset. It does not create a home. `set` parses JSON, otherwise treats the input as a string; `--string` forces a literal string. `--json` selects output format. Passwords use `set-password`.
+
+Dotted paths support fixed settings and dynamic entries such as provider IDs, provider environment variables and options, and plugin IDs:
+
+```bash
+paseo daemon config set agents.providers.claude.enabled false
+paseo daemon config set agents.providers.pi.command '["/usr/local/bin/pi"]'
+paseo daemon config set agents.providers.pi.env.PI_CODING_AGENT_DIR /path/to/pi
+paseo daemon config set agents.providers.pi.options.rpcTimeoutMs 120000
+paseo daemon config set plugins.my-plugin.enabled false
+paseo daemon config set log.console.level debug
+paseo daemon config unset agents.providers.pi.command
+```
+
+Replace arrays as whole JSON values. For keys containing dots, replace their containing object with JSON. New entries must supply all required fields in one edit; for example, create a directory plugin with `paseo daemon config set plugins.my-plugin '{"source":"directory","path":"/path/to/plugin"}'` before editing its individual fields. Unknown paths, invalid values, and invalid existing files are rejected without writing. Unsetting a missing path leaves it absent.
 
 A successful edit saves the validated file, then reloads once if the instance is reachable. Output distinguishes applied changes, restart requirements, and deployment overrides. A stopped/unbound/unreachable instance reports **saved; not applied**. A failed reload reports **saved; reload failed** with a nonzero exit; the file remains saved. Edits never implicitly restart.
 
@@ -77,6 +91,26 @@ New homes keep relay disabled when you remove `daemon.relay.enabled`. A daemon w
 Idle runtime cleanup, listen addresses, authentication, relay endpoints and TLS, worktree allocation, service-proxy addresses, the bundled web UI, logging, speech, voice, credentials, and local model settings require a restart. Reload applies other valid edits in the same file before reporting those paths.
 
 Deployment environment variables and legacy supervisor flags remain authoritative. Reload reports a changed file setting under `overrideControlledPaths` when a launch override prevents it from taking effect. This includes startup settings such as listen addresses, passwords, relay endpoints and TLS, service-proxy and web UI settings, logging, speech, and voice configuration. List settings such as hostnames and CORS origins still append across sources, so values from `config.json` continue to apply. Stop and relaunch the deployment without the override to make the file value authoritative.
+
+## Desktop app preferences
+
+Use `paseo app config` to read and write the running local desktop app's general preferences and keyboard shortcut overrides:
+
+```bash
+paseo app config get
+paseo app config get settings.theme --json
+paseo app config set settings.vimKeybindings true
+paseo app config set settings.openInSidePane.chatFiles true
+paseo app config unset settings.vimKeybindings
+paseo app config shortcuts --json
+paseo app config set shortcuts.workspace-new-cmd-n-mac 'Mod+Shift+N'
+paseo app config set shortcuts.workspace-new-cmd-n-mac null
+paseo app config unset shortcuts.workspace-new-cmd-n-mac
+```
+
+`get` without a path lists the general settings and saved shortcut overrides. `shortcuts` lists binding IDs, platform conditions, defaults, overrides, and effective combinations. Set an override to `null` to unassign a shortcut; `unset` restores its default. Unsetting a general preference restores its default. Arrays use whole-array JSON. Invalid paths and values fail before saving.
+
+The desktop app must be running with an open window. Changes use the app's settings storage and refresh its open windows. These commands target the local desktop app independently of daemon `--home` and `--host` selectors. Use `--user-data <directory>` or `PASEO_ELECTRON_USER_DATA_DIR` for an isolated desktop profile. Browser and mobile app storage, host connections, caches, and Electron daemon-management settings are outside this command's scope.
 
 ## Agent providers
 

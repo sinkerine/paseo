@@ -145,6 +145,19 @@ paseo project delete <project-id>
 
 `--reset` 恢复由项目目录推导出的名称。删除项目会归档它的活动工作区，并把项目从 Paseo 中移除。它不会删除项目目录。
 
+使用项目 ID 读取、设置或重置项目图标：
+
+```bash
+paseo project icon get <project-id> --json
+paseo project icon set <project-id> ./icon.png
+paseo project icon set <project-id> https://github.com/owner/repo
+paseo project icon reset <project-id>
+```
+
+`set` 接受本地图片文件、直接图片 URL，或可自动发现图标的网站 URL。图片必须不超过 512 KB，并通过 daemon 的图片校验。URL 下载在 CLI 所在机器上进行，然后把图片字节上传到所选主机。`get` 返回有效图标的 base64 数据和 MIME 类型；没有图标时返回 `null`。`reset` 恢复自动图标选择。
+
+读取和修改本机桌面应用偏好和快捷键，见[桌面应用偏好设置](/docs/configuration#desktop-app-preferences)。
+
 对于本地 daemon，`paseo project create [path]` 默认使用当前目录，并在 CLI 所在机器上解析相对路径。当你使用全局的 `--host` 选项或 `PASEO_HOST` 时，请提供目标 daemon 能访问的路径：
 
 ```bash

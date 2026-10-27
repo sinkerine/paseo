@@ -608,7 +608,7 @@ function parseConfigText(raw: string): unknown {
 
 function configPathParts(field: string): string[] {
   const parts = field.split(".");
-  let schema: z.ZodType = PersistedConfigSchema;
+  let schema: z.core.$ZodType = PersistedConfigSchema;
   for (const part of parts) {
     if (!part || ["__proto__", "prototype", "constructor"].includes(part)) {
       throw new Error(`Invalid configuration path: ${field}`);
@@ -617,8 +617,20 @@ function configPathParts(field: string): string[] {
       schema instanceof z.ZodOptional ||
       schema instanceof z.ZodDefault ||
       schema instanceof z.ZodPipe
-    )
-      schema = (schema instanceof z.ZodPipe ? schema.in : schema.unwrap()) as z.ZodType;
+    ) {
+      if (schema instanceof z.ZodPipe) {
+        schema = schema.in instanceof z.ZodTransform ? schema.out : schema.in;
+      } else {
+        schema = schema.unwrap();
+      }
+    }
+    if (schema instanceof z.ZodRecord) {
+      if (!z.safeParse(schema.keyType, part).success) {
+        throw new Error(`Invalid configuration path: ${field}`);
+      }
+      schema = schema.valueType;
+      continue;
+    }
     if (schema instanceof z.ZodUnion) {
       const variant = schema.options.find(
         (option) => option instanceof z.ZodObject && Object.hasOwn(option.shape, part),
@@ -627,7 +639,7 @@ function configPathParts(field: string): string[] {
     }
     if (!(schema instanceof z.ZodObject) || !Object.hasOwn(schema.shape, part)) {
       throw new Error(
-        `Unknown configuration path: ${field}. Replace its containing object with JSON for dynamic keys.`,
+        `Unknown configuration path: ${field}. Use JSON to replace arrays or keys containing dots.`,
       );
     }
     schema = schema.shape[part];
@@ -655,8 +667,17 @@ export function editPersistedConfig(
   const config = readPersistedConfig(paseoHome, { defaultsIfMissing: true });
   let object = config as Record<string, unknown>;
   for (const part of parts.slice(0, -1)) {
-    object[part] ??= {};
-    object = object[part] as Record<string, unknown>;
+    if (object[part] === undefined) {
+      if ("unset" in edit) return config;
+      object[part] = {};
+    }
+    const child = object[part];
+    if (!isConfigRecord(child)) {
+      throw new Error(
+        `Cannot edit ${field}: ${part} is not an object. Replace it with JSON first.`,
+      );
+    }
+    object = child;
   }
   const key = parts.at(-1)!;
   if (field === "daemon") {

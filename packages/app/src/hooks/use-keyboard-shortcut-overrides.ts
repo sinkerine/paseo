@@ -9,7 +9,7 @@ import {
 import { readValidatedJson } from "@/storage/validated-storage";
 
 const STORAGE_KEY = "@paseo:keyboard-shortcut-overrides";
-const QUERY_KEY = ["keyboard-shortcut-overrides"];
+export const QUERY_KEY = ["keyboard-shortcut-overrides"];
 
 const EMPTY_OVERRIDES: ShortcutOverrides = {};
 const ShortcutOverridesSchema = z.record(z.string(), z.string().nullable());
@@ -33,7 +33,7 @@ export function useKeyboardShortcutOverrides(): UseKeyboardShortcutOverridesRetu
     gcTime: Infinity,
   });
 
-  const store = getStore(queryClient);
+  const store = getShortcutOverrideStore(queryClient);
   const overrides = data ?? EMPTY_OVERRIDES;
 
   return {
@@ -54,7 +54,7 @@ export function useKeyboardShortcutOverrides(): UseKeyboardShortcutOverridesRetu
  */
 const stores = new WeakMap<QueryClient, ShortcutOverrideStore>();
 
-function getStore(queryClient: QueryClient): ShortcutOverrideStore {
+export function getShortcutOverrideStore(queryClient: QueryClient): ShortcutOverrideStore {
   const existing = stores.get(queryClient);
   if (existing) return existing;
 
@@ -77,12 +77,15 @@ function getStore(queryClient: QueryClient): ShortcutOverrideStore {
   return created;
 }
 
+export async function readShortcutOverrides(): Promise<ShortcutOverrides> {
+  return (
+    (await readValidatedJson(AsyncStorage, STORAGE_KEY, ShortcutOverridesSchema)) ?? EMPTY_OVERRIDES
+  );
+}
+
 async function loadOverridesFromStorage(): Promise<ShortcutOverrides> {
   try {
-    return (
-      (await readValidatedJson(AsyncStorage, STORAGE_KEY, ShortcutOverridesSchema)) ??
-      EMPTY_OVERRIDES
-    );
+    return await readShortcutOverrides();
   } catch (err) {
     console.error("[KeyboardShortcutOverrides] Failed to load overrides:", err);
   }

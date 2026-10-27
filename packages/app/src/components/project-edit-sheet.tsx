@@ -21,7 +21,7 @@ import {
   type ProjectEditSubmission,
   type ProjectIconIntent,
 } from "@/projects/edit-form";
-import { importProjectIconFromUrl } from "@/projects/import-project-icon";
+import { importProjectIconFromUrl } from "@getpaseo/client/project-icon";
 import { toErrorMessage } from "@/utils/error-messages";
 
 export interface ProjectEditSheetProps {

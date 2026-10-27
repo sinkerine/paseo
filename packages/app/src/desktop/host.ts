@@ -177,6 +177,11 @@ export interface DesktopHostBridge {
   windowChromeMode?: string;
   invoke?: DesktopInvokeBridge["invoke"];
   getPendingOpenProject?: () => Promise<string | null>;
+  appConfig?: {
+    onRequest(handler: (id: string, request: unknown) => void): () => void;
+    reply(id: string, response: unknown): Promise<unknown>;
+    onChanged(handler: () => void): () => void;
+  };
   agentNavigation?: DesktopAgentNavigationBridge;
   events?: DesktopEventsBridge;
   window?: DesktopWindowModuleBridge;

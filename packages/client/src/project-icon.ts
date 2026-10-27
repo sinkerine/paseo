@@ -1,4 +1,3 @@
-import { Buffer } from "buffer";
 import type { ProjectIconSource } from "@getpaseo/protocol/messages";
 
 const MAX_ICON_BYTES = 512 * 1024;
@@ -27,12 +26,12 @@ async function fetchOk(fetchIcon: FetchIcon, url: URL): Promise<Response> {
   return response;
 }
 
-async function readBytes(response: Response, maxBytes: number): Promise<Buffer> {
+async function readBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     throw new Error("Icon must be 512 KB or smaller");
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.length > maxBytes) throw new Error("Icon must be 512 KB or smaller");
   return bytes;
 }
@@ -60,6 +59,12 @@ function iconCandidates(html: string, pageUrl: URL): URL[] {
 }
 
 /** Acquires a URL on the client and collapses it into the normal upload payload. */
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export async function importProjectIconFromUrl(
   value: string,
   fetchIcon: FetchIcon = fetch,
@@ -69,17 +74,17 @@ export async function importProjectIconFromUrl(
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
 
   if (!contentType.includes("text/html")) {
-    return { type: "upload", data: (await readBytes(response, MAX_ICON_BYTES)).toString("base64") };
+    return { type: "upload", data: base64(await readBytes(response, MAX_ICON_BYTES)) };
   }
 
-  const html = (await readBytes(response, MAX_HTML_BYTES)).toString("utf8");
+  const html = new TextDecoder().decode(await readBytes(response, MAX_HTML_BYTES));
   let lastError: unknown = new Error("Website does not expose a supported icon");
   for (const candidate of iconCandidates(html, url)) {
     try {
       const iconResponse = await fetchOk(fetchIcon, candidate);
       return {
         type: "upload",
-        data: (await readBytes(iconResponse, MAX_ICON_BYTES)).toString("base64"),
+        data: base64(await readBytes(iconResponse, MAX_ICON_BYTES)),
       };
     } catch (error) {
       lastError = error;

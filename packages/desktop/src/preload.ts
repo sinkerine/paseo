@@ -36,6 +36,21 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     ipcRenderer.invoke("paseo:invoke", command, args),
   getPendingOpenProject: () =>
     ipcRenderer.invoke("paseo:get-pending-open-project") as Promise<string | null>,
+  appConfig: {
+    onRequest: (handler: (id: string, request: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, id: string, request: unknown) =>
+        handler(id, request);
+      ipcRenderer.on("paseo:app-config:request", listener);
+      return () => ipcRenderer.removeListener("paseo:app-config:request", listener);
+    },
+    reply: (id: string, response: unknown) =>
+      ipcRenderer.invoke("paseo:app-config:reply", id, response),
+    onChanged: (handler: () => void) => {
+      const listener = () => handler();
+      ipcRenderer.on("paseo:app-config:changed", listener);
+      return () => ipcRenderer.removeListener("paseo:app-config:changed", listener);
+    },
+  },
   agentNavigation: {
     ready: () =>
       ipcRenderer.invoke("paseo:agent-navigation:ready") as Promise<{

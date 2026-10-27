@@ -477,6 +477,38 @@ function buildOpenChangeHandler(
   };
 }
 
+function useAgentProfileSelectShortcut({
+  modelSelectorServerId,
+  agentProfiles,
+  onApplyAgentProfile,
+  disabled,
+}: Pick<
+  ControlledAgentControlsProps,
+  "modelSelectorServerId" | "agentProfiles" | "onApplyAgentProfile" | "disabled"
+>) {
+  const handlerId = useId();
+  const isRouteFocused = useIsFocused();
+  const isPanelActive = useRetainedPanelActive();
+  const { isActiveComposer } = useComposerKeyboardScope();
+  useKeyboardActionHandler({
+    handlerId,
+    actions: ["agent-profile.select"],
+    enabled: isActiveComposer && isRouteFocused && isPanelActive && !disabled,
+    priority: 200,
+    handle: (action) => {
+      if (action.id !== "agent-profile.select" || action.serverId !== modelSelectorServerId)
+        return false;
+      if (
+        !onApplyAgentProfile ||
+        !agentProfiles?.rows.some((profile) => profile.id === action.profileId)
+      )
+        return false;
+      onApplyAgentProfile(action.profileId);
+      return true;
+    },
+  });
+}
+
 function ControlledAgentControls({
   provider,
   providerOptions,
@@ -509,6 +541,12 @@ function ControlledAgentControls({
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
+  useAgentProfileSelectShortcut({
+    modelSelectorServerId,
+    agentProfiles,
+    onApplyAgentProfile,
+    disabled,
+  });
   const isCompactFormFactor = useIsCompactFormFactor();
   const isCompact = isCompactLayout ?? isCompactFormFactor;
   const { fontScale } = useWindowDimensions();
@@ -1889,24 +1927,6 @@ export function DraftAgentControls({
     serverId: modelSelectorServerId,
     availableProviders: profileProviders,
     target: profileTarget,
-  });
-  const profileShortcutHandlerId = useId();
-  const isRouteFocused = useIsFocused();
-  const isPanelActive = useRetainedPanelActive();
-  const { isActiveComposer } = useComposerKeyboardScope();
-  const profileShortcutEnabled = isActiveComposer && isRouteFocused && isPanelActive && !disabled;
-  useKeyboardActionHandler({
-    handlerId: profileShortcutHandlerId,
-    actions: ["agent-profile.select"],
-    enabled: profileShortcutEnabled,
-    priority: 200,
-    handle: (action) => {
-      if (action.id !== "agent-profile.select" || action.serverId !== modelSelectorServerId)
-        return false;
-      if (!agentProfiles?.rows.some((profile) => profile.id === action.profileId)) return false;
-      agentProfiles.applyProfile(action.profileId);
-      return true;
-    },
   });
   const handleEditAgentProfiles = useEditAgentProfilesNavigation(
     modelSelectorServerId,

@@ -151,6 +151,19 @@ paseo project delete <project-id>
 
 `--reset` restores the name derived from the project directory. Deleting a project archives its active workspaces and removes the project from Paseo. It does not delete the project directory.
 
+Read, set, or reset a project icon using the project ID:
+
+```bash
+paseo project icon get <project-id> --json
+paseo project icon set <project-id> ./icon.png
+paseo project icon set <project-id> https://github.com/owner/repo
+paseo project icon reset <project-id>
+```
+
+`set` accepts a local image file, a direct image URL, or a website URL whose icon is discovered automatically. Images must be 512 KB or smaller and pass the daemon's image validation. URL downloads run on the CLI machine, then upload the image bytes to the selected host. `get` returns the effective icon's base64 data and MIME type, or `null` when none is available. `reset` restores automatic icon selection.
+
+For reading and changing local desktop preferences and keyboard shortcuts, see [Desktop app preferences](/docs/configuration#desktop-app-preferences).
+
 For a local daemon, `paseo project create [path]` defaults to the current directory and resolves relative paths on the CLI machine. When you use the global `--host` option or `PASEO_HOST`, provide a path that the target daemon can access:
 
 ```bash
