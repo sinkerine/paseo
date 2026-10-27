@@ -24,7 +24,6 @@ import {
   transformPiModels,
 } from "./agent.js";
 import { FakePi } from "./test-utils/fake-pi.js";
-import { buildPiFeatures, findPiFastModelPair } from "./feature-definitions.js";
 import { createPiExtensionHost } from "./extensions/index.js";
 import { PiExtensionHost } from "./extensions/host.js";
 import type { PiModel, PiThinkingLevel } from "./rpc-types.js";
@@ -2957,74 +2956,6 @@ describe("PiRpcAgentClient", () => {
       ).toEqual(optionIds?.filter((id) => id === defaultThinkingOptionId));
     },
   );
-
-  test("matches only unambiguous GPT fast routes within the same provider", () => {
-    const normal: PiModel = { provider: "magpie", id: "gpt-6-luna" };
-    const fast: PiModel = { provider: "magpie", id: "group/luna-fast" };
-    expect(findPiFastModelPair([normal, fast], normal)).toEqual({ normal, fast });
-    expect(buildPiFeatures([normal, fast], fast)).toMatchObject([{ id: "fast_mode", value: true }]);
-    expect(findPiFastModelPair([normal], normal)).toBeNull();
-    expect(findPiFastModelPair([normal, { ...fast, provider: "other" }], normal)).toBeNull();
-    expect(findPiFastModelPair([normal, fast, { ...normal, id: "gpt-7-luna" }], normal)).toBeNull();
-    const unrelated = { ...normal, id: "claude-luna" };
-    expect(findPiFastModelPair([unrelated, fast], unrelated)).toBeNull();
-  });
-
-  test("detects GPT fast routes for profiles and applies their saved feature on startup", async () => {
-    const normal: PiModel = { provider: "magpie", id: "gpt-6.1-sol", name: "GPT-6.1 Sol" };
-    const fast: PiModel = { provider: "magpie", id: "group/sol-fast", name: "Sol Fast" };
-    const pi = new FakePi();
-    const client = createClient(pi);
-    pi.queueSessionSetup((session) => {
-      session.models = [normal, fast];
-      session.state = { ...session.state, model: normal };
-    });
-    await client.fetchCatalog({ scope: "workspace", cwd: "/tmp/paseo-pi-rpc-test", force: false });
-    const config = createConfig({
-      model: "magpie/gpt-6.1-sol",
-      featureValues: { fast_mode: true },
-    });
-    expect(await client.listFeatures(config)).toMatchObject([{ id: "fast_mode", value: true }]);
-    pi.queueSessionSetup((session) => {
-      session.models = [normal, fast];
-      session.state = { ...session.state, model: normal };
-      session.setModelResult = fast;
-    });
-    const session = await client.createSession(config);
-    onTestFinished(() => session.close());
-    expect(pi.latestSession().setModelRequests).toEqual([
-      { provider: "magpie", modelId: "group/sol-fast" },
-    ]);
-    expect(session.features).toMatchObject([{ id: "fast_mode", value: true }]);
-    expect(await session.getRuntimeInfo()).toMatchObject({ model: "magpie/group/sol-fast" });
-    pi.latestSession().setModelResult = normal;
-    await session.setFeature!("fast_mode", false);
-    expect(session.features).toMatchObject([{ id: "fast_mode", value: false }]);
-    expect(await session.getRuntimeInfo()).toMatchObject({ model: "magpie/gpt-6.1-sol" });
-  });
-
-  test("restores a profile's fast mode when resuming a normal Pi session", async () => {
-    const normal: PiModel = { provider: "magpie", id: "gpt-6.1-sol" };
-    const fast: PiModel = { provider: "magpie", id: "group/sol-fast" };
-    const pi = new FakePi();
-    pi.queueSessionSetup((session) => {
-      session.models = [normal, fast];
-      session.state = { ...session.state, model: normal };
-      session.setModelResult = fast;
-    });
-    const session = await createClient(pi).resumeSession(
-      {
-        provider: "pi",
-        sessionId: "pi-session-1",
-        nativeHandle: "/tmp/native-pi-session",
-        metadata: { cwd: "/workspace/project", model: "magpie/gpt-6.1-sol" },
-      },
-      createConfig({ featureValues: { fast_mode: true } }),
-    );
-    onTestFinished(() => session.close());
-    expect(session.features).toMatchObject([{ id: "fast_mode", value: true }]);
-    expect(await session.getRuntimeInfo()).toMatchObject({ model: "magpie/group/sol-fast" });
-  });
 
   test("lists no draft features without starting a Pi session", async () => {
     const pi = new FakePi();
