@@ -57,6 +57,8 @@ buildNpmPackage {
       && baseName != "release";
   };
 
+  patches = [ ./precompiled-plugins.patch ];
+
   nodejs = nodejs_22;
   inherit (paseo) npmDeps;
 
@@ -97,11 +99,16 @@ buildNpmPackage {
   buildPhase = ''
     runHook preBuild
 
+    source nix/patch-dependencies.sh
+
     # Native deps (terminal emulation; libuv-linked on Linux)
     npm rebuild node-pty
 
     # Server workspaces (highlight + relay + protocol + client + server + cli)
     npm run build:server
+
+    # Generate bundles before desktop packaging copies the built-in resources.
+    node nix/precompile-plugins.mjs
 
     # App workspace deps not covered by build:server
     npm run build --workspace=@getpaseo/expo-two-way-audio

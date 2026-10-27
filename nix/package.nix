@@ -61,6 +61,8 @@ buildNpmPackage rec {
       && baseName != ".DS_Store";
   };
 
+  patches = [ ./precompiled-plugins.patch ];
+
   nodejs = nodejs_22;
 
   # Default hash lives in nix/npm-deps.hash (see arg default above).
@@ -90,6 +92,8 @@ buildNpmPackage rec {
   buildPhase = ''
     runHook preBuild
 
+    source nix/patch-dependencies.sh
+
     # Rebuild only node-pty (native addon for terminal emulation). The sherpa
     # speech runtime ships prebuilt platform packages and is copied into the
     # daemon closure by scripts/trace-daemon.mjs.
@@ -98,6 +102,9 @@ buildNpmPackage rec {
     # Build all server packages in dependency order (defined in package.json)
     npm run build:server
     npm run build:daemon-web-ui
+
+    # Built-ins cannot compile into the immutable Nix store at runtime.
+    node nix/precompile-plugins.mjs
 
     runHook postBuild
   '';
