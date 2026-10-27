@@ -6,6 +6,7 @@ import { join, resolve as resolvePath } from "node:path";
 import type { Logger } from "pino";
 import stripAnsi from "strip-ansi";
 import { z } from "zod";
+import { buildPiFeatures, findPiFastModelPair } from "./feature-definitions.js";
 
 import {
   type AgentCapabilityFlags,
@@ -1195,6 +1196,41 @@ export class PiRpcAgentSession implements AgentSession {
   private outOfBandCompactionCompleted = false;
   private commandCache: AgentSlashCommand[] | null = null;
   private state: PiSessionState;
+  private availableModels: PiModel[] = [];
+
+  get features(): AgentFeature[] {
+    return buildPiFeatures(this.availableModels, this.state.model);
+  }
+
+  async initializeFeatures(): Promise<this> {
+    this.availableModels = await this.runtimeSession.getAvailableModels();
+    const enabled = this.config.featureValues?.fast_mode;
+    if (
+      typeof enabled === "boolean" &&
+      findPiFastModelPair(this.availableModels, this.state.model)
+    ) {
+      await this.setFeature("fast_mode", enabled);
+    }
+    return this;
+  }
+
+  async setFeature(featureId: string, value: unknown): Promise<void> {
+    if (featureId !== "fast_mode" || typeof value !== "boolean") {
+      throw new Error("Unsupported Pi feature or value: " + featureId);
+    }
+    const pair = findPiFastModelPair(this.availableModels, this.state.model);
+    if (!pair) throw new Error("The current Pi model has no matching fast route");
+    const target = value ? pair.fast : pair.normal;
+    if (this.state.model?.id !== target.id) {
+      await this.setModel(target.provider + "/" + target.id);
+      this.emit({
+        type: "model_changed",
+        provider: this.provider,
+        runtimeInfo: await this.getRuntimeInfo(),
+      });
+    }
+    this.config.featureValues = { ...this.config.featureValues, fast_mode: value };
+  }
   private readonly currentModeId: string | null;
   private readonly logger: Logger;
   private readonly usagePoller: PiUsagePoller;
@@ -1677,6 +1713,11 @@ export class PiRpcAgentSession implements AgentSession {
     const model = await this.runtimeSession.setModel(parsedReference.provider, parsedReference.id);
     await this.refreshState();
     this.config.model = `${model.provider}/${model.id}`;
+    const pair = findPiFastModelPair(this.availableModels, model);
+    this.config.featureValues = {
+      ...this.config.featureValues,
+      fast_mode: pair !== null && model.id === pair.fast.id,
+    };
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
@@ -2523,6 +2564,7 @@ export class PiRpcAgentClient implements AgentClient {
   private readonly logger: Logger;
   private readonly runtimeSettings?: ProviderRuntimeSettings;
   private readonly runtime?: PiRuntime;
+  private readonly catalogModels = new Map<string, { models: PiModel[]; model?: PiModel | null }>();
   private readonly usagePollScheduler?: PiUsagePollScheduler;
 
   constructor(options: PiRpcAgentClientOptions) {
@@ -2567,7 +2609,7 @@ export class PiRpcAgentClient implements AgentClient {
       throw error;
     }
     try {
-      return new PiRpcAgentSession({
+      return await new PiRpcAgentSession({
         runtimeSession,
         config,
         initialState: await runtimeSession.getState(),
@@ -2576,7 +2618,7 @@ export class PiRpcAgentClient implements AgentClient {
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
-      });
+      }).initializeFeatures();
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       mcpConfigFile?.cleanup();
@@ -2638,7 +2680,7 @@ export class PiRpcAgentClient implements AgentClient {
     }
     try {
       const initialState = await this.applyResumeModel(runtimeSession, resumeConfig.model);
-      return new PiRpcAgentSession({
+      return await new PiRpcAgentSession({
         runtimeSession,
         config: {
           ...resumeConfig.config,
@@ -2650,7 +2692,7 @@ export class PiRpcAgentClient implements AgentClient {
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
-      });
+      }).initializeFeatures();
     } catch (error) {
       await runtimeSession.close().catch(() => undefined);
       mcpConfigFile?.cleanup();
@@ -2722,6 +2764,10 @@ export class PiRpcAgentClient implements AgentClient {
         "get_state",
         () => catalogSession.getState(),
       );
+      this.catalogModels.set(options.scope === "global" ? homedir() : options.cwd, {
+        models: piModels,
+        model: configuredModel,
+      });
       const models = transformPiModels(
         piModels.map((model) => {
           const mapped = mapPiModel(model, PI_PROVIDER);
@@ -2738,8 +2784,16 @@ export class PiRpcAgentClient implements AgentClient {
     }
   }
 
-  async listFeatures(_config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return [];
+  async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
+    const catalog = this.catalogModels.get(config.cwd) ?? this.catalogModels.get(homedir());
+    if (!catalog) return [];
+    const reference = parseModelReference(config.model ?? null);
+    const model = reference
+      ? catalog.models.find(
+          (candidate) => candidate.provider === reference.provider && candidate.id === reference.id,
+        )
+      : catalog.model;
+    return buildPiFeatures(catalog.models, model, config.featureValues);
   }
 
   async listImportableSessions(
