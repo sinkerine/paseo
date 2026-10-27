@@ -2564,6 +2564,12 @@ export const ru: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "Профили агента · {{host}}",
+        select: "Выбрать профиль: {{name}}",
+        start: "Запустить агента: {{name}}",
+        starting: "Запуск агента: {{name}}",
+      },
       dialogTitle: "Сочетания клавиш",
       searchPlaceholder: "Поиск сочетаний клавиш",
       unavailableOnMobile: "Сочетания клавиш доступны только на рабочем столе.",

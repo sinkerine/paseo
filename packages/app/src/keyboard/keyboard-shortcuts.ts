@@ -1,3 +1,4 @@
+import { agentProfileShortcutBinding } from "@/agent-profiles/shortcuts";
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import type {
   KeyboardActionId,
@@ -82,6 +83,7 @@ interface ShortcutWhen {
 }
 
 type ShortcutPayloadDef =
+  | { type: "agent-profile"; serverId: string; profileId: string }
   | { type: "index" }
   | { type: "delta"; delta: 1 | -1 }
   | { type: "message-input"; kind: MessageInputKeyboardActionKind };
@@ -1226,7 +1228,14 @@ export function isShortcutCaptureComplete(bindingId: string, combos: readonly st
 }
 
 export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShortcutBinding[] {
-  return DEFAULT_BINDINGS.map(function (binding) {
+  const profileBindings = Object.keys(overrides).flatMap((id) => {
+    const binding = agentProfileShortcutBinding(id);
+    return binding ? [binding] : [];
+  });
+  const bindings = [...DEFAULT_BINDINGS, ...profileBindings];
+  return bindings.map(applyOverride);
+
+  function applyOverride(binding: ParsedShortcutBinding): ParsedShortcutBinding {
     const override = overrides[binding.id];
     if (override === UNASSIGNED_COMBO) {
       return { ...binding, combo: "", parsedChord: [] };
@@ -1251,7 +1260,7 @@ export function buildEffectiveBindings(overrides: ShortcutOverrides): ParsedShor
     }
     const { defaultDisplayKeys: _defaultDisplayKeys, ...help } = binding.help;
     return { ...binding, combo: override, parsedChord, when, help };
-  });
+  }
 }
 
 /**
@@ -1370,6 +1379,8 @@ function resolvePayload(
 ): KeyboardShortcutPayload {
   if (!def) return null;
   switch (def.type) {
+    case "agent-profile":
+      return { serverId: def.serverId, profileId: def.profileId };
     case "index": {
       const index = parseDigit(event);
       return index ? { index } : null;

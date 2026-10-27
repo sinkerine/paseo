@@ -8,6 +8,10 @@ import {
   type ReactElement,
   type RefObject,
 } from "react";
+import { useId } from "react";
+import { useIsFocused } from "expo-router/react-navigation";
+import { useRetainedPanelActive } from "@/components/retained-panel";
+import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import {
@@ -1885,6 +1889,24 @@ export function DraftAgentControls({
     serverId: modelSelectorServerId,
     availableProviders: profileProviders,
     target: profileTarget,
+  });
+  const profileShortcutHandlerId = useId();
+  const isRouteFocused = useIsFocused();
+  const isPanelActive = useRetainedPanelActive();
+  const { isActiveComposer } = useComposerKeyboardScope();
+  const profileShortcutEnabled = isActiveComposer && isRouteFocused && isPanelActive && !disabled;
+  useKeyboardActionHandler({
+    handlerId: profileShortcutHandlerId,
+    actions: ["agent-profile.select"],
+    enabled: profileShortcutEnabled,
+    priority: 200,
+    handle: (action) => {
+      if (action.id !== "agent-profile.select" || action.serverId !== modelSelectorServerId)
+        return false;
+      if (!agentProfiles?.rows.some((profile) => profile.id === action.profileId)) return false;
+      agentProfiles.applyProfile(action.profileId);
+      return true;
+    },
   });
   const handleEditAgentProfiles = useEditAgentProfilesNavigation(
     modelSelectorServerId,

@@ -2491,6 +2491,12 @@ export const zhCN: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "智能体配置 · {{host}}",
+        select: "选择配置：{{name}}",
+        start: "启动智能体：{{name}}",
+        starting: "正在启动智能体：{{name}}",
+      },
       dialogTitle: "快捷键",
       searchPlaceholder: "搜索快捷键",
       unavailableOnMobile: "键盘快捷键仅在桌面端可用",

@@ -2541,6 +2541,12 @@ export const ja: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "エージェントプロファイル · {{host}}",
+        select: "プロファイルを選択: {{name}}",
+        start: "エージェントを開始: {{name}}",
+        starting: "エージェントを開始中: {{name}}",
+      },
       dialogTitle: "ショートカット",
       searchPlaceholder: "ショートカットを検索",
       unavailableOnMobile: "キーボードショートカットはデスクトップでのみ利用できます",

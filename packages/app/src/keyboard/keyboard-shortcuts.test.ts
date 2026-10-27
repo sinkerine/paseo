@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { agentProfileShortcutId } from "@/agent-profiles/shortcuts";
 import { formatShortcut } from "@/utils/format-shortcut";
 import { keyboardEventToComboString } from "./shortcut-string";
 import {
@@ -70,6 +71,75 @@ function resolveShortcut(input: {
     ...(input.bindings ? { bindings: input.bindings } : {}),
   });
 }
+
+describe("saved agent profile shortcuts", () => {
+  it.each(["agent-profile.select", "agent-profile.start"] as const)(
+    "resolves %s with stable host and profile identity",
+    (action) => {
+      const id = agentProfileShortcutId(action, "host:one", "profile/two");
+      const bindings = buildEffectiveBindings({ [id]: "Ctrl+Shift+9" });
+      const result = resolveShortcut({
+        event: { key: "9", code: "Digit9", ctrlKey: true, shiftKey: true },
+        bindings,
+      });
+      expect(result.match).toEqual({
+        action,
+        payload: { serverId: "host:one", profileId: "profile/two" },
+        preventDefault: true,
+        stopPropagation: true,
+      });
+      expect(
+        resolveShortcut({
+          event: { key: "9", code: "Digit9", ctrlKey: true, shiftKey: true, repeat: true },
+          bindings,
+        }).match,
+      ).toBeNull();
+      expect(
+        resolveShortcut({
+          event: { key: "9", code: "Digit9", ctrlKey: true, shiftKey: true },
+          context: { commandCenterOpen: true },
+          bindings,
+        }).match,
+      ).toBeNull();
+    },
+  );
+
+  it("ignores malformed profile bindings and cleared shortcuts", () => {
+    const id = agentProfileShortcutId("agent-profile.select", "host", "profile");
+    const bindings = buildEffectiveBindings({
+      [id]: null,
+      '["agent-profile.select",42,"profile"]': "Ctrl+Shift+9",
+      '["agent-profile.broken"]': "Ctrl+Shift+9",
+    });
+    expect(
+      resolveShortcut({
+        event: { key: "9", code: "Digit9", ctrlKey: true, shiftKey: true },
+        bindings,
+      }).match,
+    ).toBeNull();
+  });
+
+  it("supports chord sequences for profiles", () => {
+    vi.useFakeTimers();
+    try {
+      const id = agentProfileShortcutId("agent-profile.select", "host", "profile");
+      const bindings = buildEffectiveBindings({ [id]: "Ctrl+K Ctrl+9" });
+      const prefix = resolveShortcut({
+        event: { key: "k", code: "KeyK", ctrlKey: true },
+        bindings,
+      });
+      expect(prefix.match).toBeNull();
+      const completed = resolveShortcut({
+        event: { key: "9", code: "Digit9", ctrlKey: true },
+        chordState: prefix.nextChordState,
+        bindings,
+      });
+      expect(completed.match?.payload).toEqual({ serverId: "host", profileId: "profile" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 function expectShortcutResolution(input: {
   event: Partial<KeyboardShortcutInput>;

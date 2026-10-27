@@ -25,6 +25,24 @@ function makeCtx(overrides: Partial<ShortcutRoutingContext> = {}): ShortcutRouti
   };
 }
 
+describe("saved profile routing", () => {
+  it.each(["agent-profile.select", "agent-profile.start"])(
+    "dispatches %s to its host and profile",
+    (action) => {
+      expect(
+        routeKeyboardShortcut(
+          { action, payload: { serverId: "host", profileId: "profile" } },
+          makeCtx(),
+        ),
+      ).toEqual({
+        kind: "dispatch",
+        action: { id: action, scope: "workspace", serverId: "host", profileId: "profile" },
+      });
+      expect(routeKeyboardShortcut({ action, payload: null }, makeCtx())).toEqual({ kind: "none" });
+    },
+  );
+});
+
 describe("routeKeyboardShortcut — dispatch passthroughs", () => {
   it.each([
     ["agent.interrupt", { id: "agent.interrupt", scope: "global" }],

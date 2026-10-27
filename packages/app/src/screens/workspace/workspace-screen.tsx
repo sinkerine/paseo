@@ -62,6 +62,7 @@ import { WorkspaceOpenInEditorButton } from "@/workspace/open-in-editor/button";
 import { WorkspaceScriptsButton } from "@/screens/workspace/scripts";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 import { useNavigateToImportedAgent } from "@/hooks/use-import-session";
+import { useAgentProfileStartShortcut } from "@/agent-profiles";
 import { useToast } from "@/contexts/toast-context";
 import { getOrCreateClientId } from "@/utils/client-id";
 import { selectIsAgentListOpen, usePanelStore } from "@/stores/panel-store";
@@ -2736,6 +2737,14 @@ function WorkspaceScreenContent({
       workspaceLayout,
     ],
   );
+
+  useAgentProfileStartShortcut({
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    cwd: workspaceDirectory,
+    enabled: isRouteFocused,
+    onCreated: handleImportedAgent,
+  });
 
   // Shared by every handler below: these actions only exist on a focused workspace route.
   const workspaceActionsEnabled = Boolean(

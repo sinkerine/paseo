@@ -2557,6 +2557,12 @@ export const ptBR: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "Perfis de agente · {{host}}",
+        select: "Selecionar perfil: {{name}}",
+        start: "Iniciar agente: {{name}}",
+        starting: "Iniciando agente: {{name}}",
+      },
       dialogTitle: "Atalhos",
       searchPlaceholder: "Pesquisar atalhos",
       unavailableOnMobile: "Atalhos de teclado estão disponíveis apenas no desktop",

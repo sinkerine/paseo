@@ -2556,6 +2556,12 @@ export const ar: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "ملفات الوكيل · {{host}}",
+        select: "اختيار الملف: {{name}}",
+        start: "بدء وكيل: {{name}}",
+        starting: "جارٍ بدء الوكيل: {{name}}",
+      },
       dialogTitle: "الاختصارات",
       searchPlaceholder: "البحث في الاختصارات",
       unavailableOnMobile: "اختصارات لوحة المفاتيح متاحة فقط على سطح المكتب",

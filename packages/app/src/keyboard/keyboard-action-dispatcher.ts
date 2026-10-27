@@ -5,6 +5,8 @@ export type WorkspacePanelPlacement = "supporting" | "side-pane" | "focused-pane
 
 export type KeyboardActionId =
   | "agent.interrupt"
+  | "agent-profile.select"
+  | "agent-profile.start"
   | "message-input.focus"
   | "message-input.send"
   | "message-input.dictation-toggle"
@@ -57,6 +59,12 @@ export type KeyboardActionId =
   | "workspace.setup.show";
 
 export type KeyboardActionDefinition =
+  | {
+      id: "agent-profile.select" | "agent-profile.start";
+      scope: KeyboardActionScope;
+      serverId: string;
+      profileId: string;
+    }
   | { id: "agent.interrupt"; scope: KeyboardActionScope }
   | { id: "message-input.focus"; scope: KeyboardActionScope }
   | { id: "message-input.send"; scope: KeyboardActionScope }

@@ -2532,6 +2532,12 @@ export const ko: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "에이전트 프로필 · {{host}}",
+        select: "프로필 선택: {{name}}",
+        start: "에이전트 시작: {{name}}",
+        starting: "에이전트 시작 중: {{name}}",
+      },
       dialogTitle: "단축키",
       searchPlaceholder: "검색 단축키",
       unavailableOnMobile: "키보드 단축키는 데스크톱에서만 사용할 수 있습니다",

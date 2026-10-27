@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAgentProfiles } from "@/agent-profiles";
+import { agentProfileShortcutBinding, agentProfileShortcutId } from "@/agent-profiles/shortcuts";
+import { useHosts } from "@/runtime/host-runtime";
+import type { HostProfile } from "@/types/host-connection";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { View, Text, type PressableStateCallbackType } from "react-native";
 import { useIsFocused } from "expo-router/react-navigation";
@@ -18,6 +22,7 @@ import { Shortcut } from "@/components/ui/shortcut";
 import { useKeyboardShortcutOverrides } from "@/hooks/use-keyboard-shortcut-overrides";
 import {
   buildKeyboardShortcutHelpSections,
+  buildEffectiveBindings,
   getBindingIdForAction,
   normalizeCapturedShortcutCombo,
   isShortcutCaptureComplete,
@@ -27,6 +32,7 @@ import {
 } from "@/keyboard/keyboard-shortcuts";
 import {
   comboStringToShortcutKeys,
+  chordStringToShortcutKeys,
   heldModifiersFromEvent,
   keyboardEventToComboString,
 } from "@/keyboard/shortcut-string";
@@ -330,8 +336,38 @@ function ShortcutRow({
   );
 }
 
+function ProfileShortcutSection({
+  host,
+  renderRow,
+}: {
+  host: HostProfile;
+  renderRow: (row: KeyboardShortcutHelpRow, index: number) => ReactNode;
+}) {
+  const { t } = useTranslation();
+  const { profiles, isSupported } = useAgentProfiles(host.serverId);
+  if (!isSupported || !profiles?.length) return null;
+  const rows = profiles.flatMap((profile) => {
+    return (["agent-profile.select", "agent-profile.start"] as const).map((action) => {
+      const key = action === "agent-profile.select" ? "select" : "start";
+      const label = t(`settings.shortcuts.profiles.${key}`, { name: profile.name });
+      return {
+        id: agentProfileShortcutId(action, host.serverId, profile.id),
+        label,
+        labelKey: label,
+        chord: null,
+      };
+    });
+  });
+  return (
+    <SettingsSection title={t("settings.shortcuts.profiles.title", { host: host.label })}>
+      <View style={settingsStyles.card}>{rows.map(renderRow)}</View>
+    </SettingsSection>
+  );
+}
+
 export function KeyboardShortcutsSection() {
   const { t } = useTranslation();
+  const hosts = useHosts();
   const [capturingBindingId, setCapturingBindingId] = useState<string | null>(null);
   const [capturedCombos, setCapturedCombos] = useState<string[]>([]);
   const [heldModifiers, setHeldModifiers] = useState<string | null>(null);
@@ -436,6 +472,67 @@ export function KeyboardShortcutsSection() {
     [removeOverride],
   );
 
+  const resetAllButton = hasOverrides ? (
+    <Button variant="ghost" size="sm" onPress={handleResetAll}>
+      {t("settings.shortcuts.actions.resetAll")}
+    </Button>
+  ) : undefined;
+
+  const renderShortcutRow = useCallback(
+    function renderShortcutRow(row: KeyboardShortcutHelpRow, index: number) {
+      const platform = { isMac, isDesktop: isDesktopApp };
+      const profileBinding = agentProfileShortcutBinding(row.id);
+      const bindingId = profileBinding ? row.id : getBindingIdForAction(row.id, platform);
+      let displayChord = resolveShortcutKeysForAction(row.id, overrides, platform);
+      if (profileBinding) {
+        const effective = buildEffectiveBindings(overrides).find(
+          (binding) => binding.id === row.id,
+        );
+        displayChord =
+          effective && effective.parsedChord.length > 0
+            ? chordStringToShortcutKeys(effective.combo)
+            : null;
+      }
+      const hasOverride = bindingId !== null && bindingId in overrides;
+      const hasDefault = !profileBinding && getDefaultKeysForAction(row.id, platform) !== null;
+      return (
+        <View key={row.id}>
+          {index > 0 && <View style={styles.separator} />}
+          <ShortcutRowContainer
+            row={row}
+            bindingId={bindingId}
+            displayChord={displayChord}
+            hasOverride={hasOverride}
+            hasDefault={hasDefault}
+            isCapturing={capturingBindingId === bindingId}
+            capturedCombos={
+              capturingBindingId === bindingId ? capturedCombos : EMPTY_CAPTURED_COMBOS
+            }
+            heldModifiers={capturingBindingId === bindingId ? heldModifiers : null}
+            onStartCapture={startCapture}
+            onSaveCapture={saveCapture}
+            onCancelCapture={cancelCapture}
+            onClearOverride={handleClearOverride}
+            onRemoveOverride={handleRemoveOverride}
+          />
+        </View>
+      );
+    },
+    [
+      isMac,
+      isDesktopApp,
+      overrides,
+      capturingBindingId,
+      capturedCombos,
+      heldModifiers,
+      startCapture,
+      saveCapture,
+      cancelCapture,
+      handleClearOverride,
+      handleRemoveOverride,
+    ],
+  );
+
   if (isNative) {
     return (
       <SettingsSection title={t("settings.sections.shortcuts")}>
@@ -446,14 +543,11 @@ export function KeyboardShortcutsSection() {
     );
   }
 
-  const resetAllButton = hasOverrides ? (
-    <Button variant="ghost" size="sm" onPress={handleResetAll}>
-      {t("settings.shortcuts.actions.resetAll")}
-    </Button>
-  ) : undefined;
-
   return (
     <>
+      {hosts.map((host) => (
+        <ProfileShortcutSection key={host.serverId} host={host} renderRow={renderShortcutRow} />
+      ))}
       {sections.map(function (section, sectionIndex) {
         return (
           <SettingsSection
@@ -461,41 +555,7 @@ export function KeyboardShortcutsSection() {
             title={t(section.titleKey)}
             trailing={sectionIndex === 0 ? resetAllButton : undefined}
           >
-            <View style={settingsStyles.card}>
-              {section.rows.map(function (row, index) {
-                const platform = { isMac, isDesktop: isDesktopApp };
-                const bindingId = getBindingIdForAction(row.id, platform);
-                const displayChord = resolveShortcutKeysForAction(row.id, overrides, platform);
-                // `in`, not a truthiness check: an unassigned shortcut stores
-                // null, and Reset has to stay available to undo it.
-                const hasOverride = bindingId !== null && bindingId in overrides;
-                // A binding authored with `combo: ""` has nothing to reset to.
-                const hasDefault = getDefaultKeysForAction(row.id, platform) !== null;
-
-                return (
-                  <View key={row.id}>
-                    <ShortcutRowContainer
-                      row={row}
-                      bindingId={bindingId}
-                      displayChord={displayChord}
-                      hasOverride={hasOverride}
-                      hasDefault={hasDefault}
-                      isCapturing={capturingBindingId === bindingId}
-                      capturedCombos={
-                        capturingBindingId === bindingId ? capturedCombos : EMPTY_CAPTURED_COMBOS
-                      }
-                      heldModifiers={capturingBindingId === bindingId ? heldModifiers : null}
-                      onStartCapture={startCapture}
-                      onSaveCapture={saveCapture}
-                      onCancelCapture={cancelCapture}
-                      onClearOverride={handleClearOverride}
-                      onRemoveOverride={handleRemoveOverride}
-                    />
-                    {index < section.rows.length - 1 && <View style={styles.separator} />}
-                  </View>
-                );
-              })}
-            </View>
+            <View style={settingsStyles.card}>{section.rows.map(renderShortcutRow)}</View>
           </SettingsSection>
         );
       })}

@@ -161,6 +161,13 @@ function routeMessageInputAction(payload: KeyboardShortcutPayload): ShortcutActi
   return dispatch(action);
 }
 
+function routeAgentProfile(input: ShortcutRoutingInput): ShortcutAction {
+  if (input.action !== "agent-profile.select" && input.action !== "agent-profile.start")
+    return NONE;
+  if (!input.payload || !("profileId" in input.payload)) return NONE;
+  return dispatch({ id: input.action, scope: "workspace", ...input.payload });
+}
+
 function routeSettingsToggle(ctx: ShortcutRoutingContext): ShortcutAction {
   if (!ctx.pathname.startsWith("/settings")) {
     return { kind: "router-push", route: buildSettingsRoute() };
@@ -193,6 +200,9 @@ export function routeKeyboardShortcut(
   }
 
   switch (input.action) {
+    case "agent-profile.select":
+    case "agent-profile.start":
+      return routeAgentProfile(input);
     case "workspace.tab.navigate.index":
       return routeWorkspaceTabNavigateIndex(input.payload);
     case "workspace.tab.navigate.relative":

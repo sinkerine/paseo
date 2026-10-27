@@ -19,6 +19,8 @@ export type MessageInputKeyboardActionKind =
 export type KeyboardActionId =
   | "agent.interrupt"
   | "agent.new"
+  | "agent-profile.select"
+  | "agent-profile.start"
   | "workspace.tab.menu.open"
   | "workspace.tab.target.agent"
   | "workspace.tab.target.browser"
@@ -58,6 +60,7 @@ export type KeyboardActionId =
   | "message-input.action";
 
 export type KeyboardShortcutPayload =
+  | { serverId: string; profileId: string }
   | { index: number }
   | { delta: 1 | -1 }
   | { kind: MessageInputKeyboardActionKind }

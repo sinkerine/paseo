@@ -2644,6 +2644,12 @@ export const en = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "Agent profiles · {{host}}",
+        select: "Select profile: {{name}}",
+        start: "Start agent: {{name}}",
+        starting: "Starting agent: {{name}}",
+      },
       dialogTitle: "Shortcuts",
       searchPlaceholder: "Search shortcuts",
       unavailableOnMobile: "Keyboard shortcuts are only available on desktop",

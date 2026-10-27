@@ -2577,6 +2577,12 @@ export const fr: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "Profils d’agent · {{host}}",
+        select: "Sélectionner le profil : {{name}}",
+        start: "Démarrer un agent : {{name}}",
+        starting: "Démarrage de l’agent : {{name}}",
+      },
       dialogTitle: "Raccourcis",
       searchPlaceholder: "Rechercher des raccourcis",
       unavailableOnMobile: "Les raccourcis clavier ne sont disponibles que sur l’app de bureau",

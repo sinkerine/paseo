@@ -2576,6 +2576,12 @@ export const es: TranslationResources = {
       },
     },
     shortcuts: {
+      profiles: {
+        title: "Perfiles de agente · {{host}}",
+        select: "Seleccionar perfil: {{name}}",
+        start: "Iniciar agente: {{name}}",
+        starting: "Iniciando agente: {{name}}",
+      },
       dialogTitle: "Atajos",
       searchPlaceholder: "Buscar atajos",
       unavailableOnMobile: "Los atajos de teclado solo están disponibles en el escritorio",
