@@ -32,12 +32,17 @@ describe("selectActiveGitWorkspaceProject", () => {
 });
 
 describe("shouldShowWorktreeSetupCallout", () => {
+  it("suppresses the prompt even with cached project config when disabled", () => {
+    expect(shouldShowWorktreeSetupCallout({ ok: true, config: {} }, false)).toBe(false);
+  });
+
   it("shows only after a successful config read with no setup command", () => {
-    expect(shouldShowWorktreeSetupCallout({ ok: true, config: {} })).toBe(true);
+    expect(shouldShowWorktreeSetupCallout({ ok: true, config: {} }, true)).toBe(true);
     expect(
-      shouldShowWorktreeSetupCallout({ ok: true, config: { worktree: { setup: "npm i" } } }),
+      shouldShowWorktreeSetupCallout({ ok: true, config: { worktree: { setup: "npm i" } } }, true),
     ).toBe(false);
-    expect(shouldShowWorktreeSetupCallout({ ok: false })).toBe(false);
+    expect(shouldShowWorktreeSetupCallout({ ok: false }, true)).toBe(false);
+    expect(shouldShowWorktreeSetupCallout(undefined, true)).toBe(false);
   });
 });
 

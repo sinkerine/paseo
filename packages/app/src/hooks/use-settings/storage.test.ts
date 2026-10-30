@@ -44,6 +44,18 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it("persists disabled worktree setup prompts across reloads", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    expect((await loadAppSettingsFromStorage(deps)).worktreeSetupPromptEnabled).toBe(true);
+    await saveAppSettings({
+      queryClient,
+      deps,
+      updates: { worktreeSetupPromptEnabled: false },
+    });
+    expect((await loadAppSettingsFromStorage(deps)).worktreeSetupPromptEnabled).toBe(false);
+  });
+
   it("persists file panel associations, including panels absent from this host", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();

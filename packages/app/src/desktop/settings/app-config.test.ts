@@ -21,6 +21,18 @@ function setup() {
 }
 
 describe("desktop app configuration", () => {
+  it("disables and restores worktree setup prompts through app config", async () => {
+    const { handler, settings } = setup();
+    await handler({ operation: "set", path: "settings.worktreeSetupPromptEnabled", value: false });
+    expect(settings().worktreeSetupPromptEnabled).toBe(false);
+    await expect(
+      handler({ operation: "set", path: "settings.worktreeSetupPromptEnabled", value: "false" }),
+    ).rejects.toThrow();
+    expect(settings().worktreeSetupPromptEnabled).toBe(false);
+    await handler({ operation: "unset", path: "settings.worktreeSetupPromptEnabled" });
+    expect(settings().worktreeSetupPromptEnabled).toBe(true);
+  });
+
   it("reads, changes, and resets preferences while preserving other settings", async () => {
     const { handler, settings } = setup();
     expect(await handler({ operation: "get", path: "settings.vimKeybindings" })).toEqual({

@@ -108,6 +108,14 @@ paseo app config unset shortcuts.workspace-new-cmd-n-mac
 
 不指定路径的 `get` 会列出一般设置和已保存的快捷键覆盖。`shortcuts` 会列出绑定 ID、平台条件、默认值、覆盖值和有效组合。将快捷键设为 `null` 表示取消分配，`unset` 恢复默认绑定；对一般设置执行 `unset` 会恢复默认值。数组需要用完整的 JSON 值替换。无效路径和值会在保存前被拒绝。
 
+要在当前桌面配置中隐藏所有项目的 **设置 worktree scripts** 提示，请运行：
+
+```bash
+paseo app config set settings.worktreeSetupPromptEnabled false
+```
+
+此偏好默认为 `true`，更改后立即生效。使用 `paseo app config unset settings.worktreeSetupPromptEnabled` 恢复默认值。提示上的 × 按钮会在当前设备上关闭该项目的提示。
+
 桌面应用必须正在运行并打开一个窗口。更改通过应用的设置存储保存，并刷新其他窗口。这些命令独立于 daemon 的 `--home` 和 `--host` 选择器。使用 `--user-data <directory>` 或 `PASEO_ELECTRON_USER_DATA_DIR` 指定独立的桌面配置目录。浏览器和移动应用存储、主机连接、缓存和 Electron 的 daemon 管理设置不在此命令范围内。
 
 ## Agent Provider {#agent-providers}

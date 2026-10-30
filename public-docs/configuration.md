@@ -110,6 +110,14 @@ paseo app config unset shortcuts.workspace-new-cmd-n-mac
 
 `get` without a path lists the general settings and saved shortcut overrides. `shortcuts` lists binding IDs, platform conditions, defaults, overrides, and effective combinations. Set an override to `null` to unassign a shortcut; `unset` restores its default. Unsetting a general preference restores its default. Arrays use whole-array JSON. Invalid paths and values fail before saving.
 
+To hide the **Set up worktree scripts** prompt for all projects in this desktop profile, run:
+
+```bash
+paseo app config set settings.worktreeSetupPromptEnabled false
+```
+
+This preference defaults to `true` and applies immediately. Use `paseo app config unset settings.worktreeSetupPromptEnabled` to restore the default. The prompt's × button dismisses it for one project on the current device.
+
 The desktop app must be running with an open window. Changes use the app's settings storage and refresh its open windows. These commands target the local desktop app independently of daemon `--home` and `--host` selectors. Use `--user-data <directory>` or `PASEO_ELECTRON_USER_DATA_DIR` for an isolated desktop profile. Browser and mobile app storage, host connections, caches, and Electron daemon-management settings are outside this command's scope.
 
 ## Agent providers

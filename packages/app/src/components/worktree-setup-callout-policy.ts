@@ -47,8 +47,11 @@ export function selectActiveGitWorkspaceProject(
   return { serverId, projectId, repoRoot };
 }
 
-export function shouldShowWorktreeSetupCallout(readResult: ReadProjectConfigResult | undefined) {
-  return readResult?.ok === true && !hasSetupCommands(readResult.config ?? {});
+export function shouldShowWorktreeSetupCallout(
+  readResult: ReadProjectConfigResult | undefined,
+  promptEnabled: boolean,
+) {
+  return promptEnabled && readResult?.ok === true && !hasSetupCommands(readResult.config ?? {});
 }
 
 export function buildWorktreeSetupCalloutPolicy(

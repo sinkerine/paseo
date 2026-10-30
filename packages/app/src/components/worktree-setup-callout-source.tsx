@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo } from "react";
 import { useSidebarCallouts } from "@/contexts/sidebar-callout-context";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { useAppSettings } from "@/hooks/use-settings";
 import { useHostRuntimeClient } from "@/runtime/host-runtime";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { useWorkspaceFields } from "@/stores/session-store-hooks";
@@ -13,6 +14,8 @@ import {
 } from "./worktree-setup-callout-policy";
 
 export function WorktreeSetupCalloutSource() {
+  const { settings, isLoading: settingsLoading } = useAppSettings();
+  const promptEnabled = !settingsLoading && settings.worktreeSetupPromptEnabled;
   const selection = useActiveWorkspaceSelection();
   const selectedWorkspaceProject = useWorkspaceFields(
     selection?.serverId ?? null,
@@ -38,16 +41,16 @@ export function WorktreeSetupCalloutSource() {
       }
       return client.readProjectConfig(activeProject.repoRoot);
     },
-    enabled: Boolean(client && activeProject),
+    enabled: Boolean(promptEnabled && client && activeProject),
     retry: false,
   });
 
   const calloutPolicy = useMemo(
     () =>
-      activeProject && shouldShowWorktreeSetupCallout(readQuery.data)
+      activeProject && shouldShowWorktreeSetupCallout(readQuery.data, promptEnabled)
         ? buildWorktreeSetupCalloutPolicy(activeProject)
         : null,
-    [activeProject, readQuery.data],
+    [activeProject, readQuery.data, promptEnabled],
   );
 
   useEffect(() => {
