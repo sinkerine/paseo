@@ -21,7 +21,7 @@ import { WorkspaceSetupObservation } from "./workspace-setup-observation.js";
 import { SessionDelivery, type OwnedSubscription } from "./session/owned-subscriptions/index.js";
 import { v4 as uuidv4 } from "uuid";
 import { lstat, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
-import { basename, join, resolve, sep } from "path";
+import { basename, dirname, join, resolve, sep } from "path";
 import { homedir } from "node:os";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";
 import { formatPluginSourceReference } from "@getpaseo/protocol/plugin-source-reference";
@@ -5178,12 +5178,22 @@ export class Session {
       const workspaceCwd = cwd?.trim();
       const searchesWorkspace = Boolean(workspaceCwd);
       const homeRoot = process.env.HOME ?? homedir();
+      const normalizedQuery = query.trim().replace(/\\/g, "/");
+      const browsesAbsolutePath = !searchesWorkspace && isAbsolute(normalizedQuery);
+      let searchRoot = homeRoot;
+      if (workspaceCwd) {
+        searchRoot = expandTilde(workspaceCwd);
+      } else if (browsesAbsolutePath) {
+        searchRoot = normalizedQuery.endsWith("/") ? normalizedQuery : dirname(normalizedQuery);
+      }
       // readdir on TCC-protected folders under ~/Library blocks forever for a process that cannot
       // show a consent prompt, and each blocked call holds a libuv threadpool thread.
       const excludedDiscoveryPaths =
         !searchesWorkspace && process.platform === "darwin" ? [join(homeRoot, "Library")] : [];
       const entries = await searchDirectoryEntries({
-        root: workspaceCwd ? expandTilde(workspaceCwd) : homeRoot,
+        root: searchRoot,
+        // Explicit paths browse a single level, including partial names, without scanning mounts.
+        maxDepth: browsesAbsolutePath ? 1 : undefined,
         query,
         pathFormat: searchesWorkspace ? "relative" : "absolute",
         pathQueryPolicy: searchesWorkspace ? "slashes" : "rooted",

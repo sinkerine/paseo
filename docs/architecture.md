@@ -301,8 +301,10 @@ status once at the directory boundary rather than maintaining a second activity 
 `directory_suggestions_request` is one daemon-owned filesystem search capability. The daemon
 configures the same `searchDirectoryEntries` engine with a root, output format, path-query policy,
 entry-kind filters, match mode, blank-query behavior, and hidden-directory traversal policy. A
-request without `cwd` searches the host home for absolute project paths; a request with `cwd`
-searches that workspace and returns relative entries. Clients may prepend their small host-scoped
+request without `cwd` searches the host home for project names and home-relative paths. Explicit
+absolute paths browse their immediate directory level anywhere the daemon can access, so `/` does
+not recursively scan system directories or mounts. A request with `cwd` stays scoped to that
+workspace and returns relative entries. Clients may prepend their small host-scoped
 recent-project list for bare queries, but must not parse filesystem query syntax or re-filter a
 correlated daemon response. The legacy `directories` response field remains a projection of the
 typed `entries` list.

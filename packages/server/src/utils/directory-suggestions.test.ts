@@ -297,7 +297,7 @@ describe("searchDirectoryEntries", () => {
     });
   });
 
-  it("anchors single-segment absolute queries when the search root is a filesystem root", async () => {
+  it("completes single-segment absolute queries without descending below root children", async () => {
     const filesystemRoot = path.parse(searchRoot).root;
     const exactPath = path.join(filesystemRoot, filesystemRootDirectoryName);
     const incompletePath = exactPath.slice(0, -1);
@@ -307,18 +307,19 @@ describe("searchDirectoryEntries", () => {
       includeFiles: false,
       includeDirectories: true,
       pathQueryPolicy: "rooted" as const,
-      limit: 5,
+      maxDepth: 1,
+      limit: 100,
     };
 
-    await expect(searchDirectoryEntries({ ...common, query: incompletePath })).resolves.toEqual([]);
+    const incompleteEntries = await searchDirectoryEntries({ ...common, query: incompletePath });
+    expect(incompleteEntries).toContainEqual({ path: exactPath, kind: "directory" });
+    expect(incompleteEntries.every((entry) => path.dirname(entry.path) === filesystemRoot)).toBe(
+      true,
+    );
 
     const exactEntries = await searchDirectoryEntries({ ...common, query: exactPath });
     expect(exactEntries[0]).toEqual({ path: exactPath, kind: "directory" });
-    expect(
-      exactEntries.every(
-        (entry) => entry.path === exactPath || entry.path.startsWith(`${exactPath}${path.sep}`),
-      ),
-    ).toBe(true);
+    expect(exactEntries.every((entry) => path.dirname(entry.path) === filesystemRoot)).toBe(true);
   });
 
   it("does not return entries below the configured traversal depth", async () => {

@@ -110,6 +110,33 @@ describe("checkout discard", () => {
 });
 
 describe("file explorer", () => {
+  test("project suggestions browse absolute paths outside home one level at a time", async () => {
+    const directory = tmpCwd();
+    const project = path.join(directory, "project");
+    try {
+      mkdirSync(path.join(project, "nested"), { recursive: true });
+      const browse = await ctx.client.getDirectorySuggestions({
+        query: `${directory}${path.sep}`,
+      });
+      expect(browse.error).toBeNull();
+      expect(browse.entries).toEqual([{ path: project, kind: "directory" }]);
+
+      const partial = await ctx.client.getDirectorySuggestions({
+        query: path.join(directory, "proj"),
+      });
+      expect(partial.error).toBeNull();
+      expect(partial.entries).toEqual([{ path: project, kind: "directory" }]);
+
+      const root = path.parse(directory).root;
+      const rootBrowse = await ctx.client.getDirectorySuggestions({ query: root, limit: 100 });
+      expect(rootBrowse.error).toBeNull();
+      expect(rootBrowse.entries?.length).toBeGreaterThan(0);
+      expect(rootBrowse.entries?.every((entry) => path.dirname(entry.path) === root)).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test.each(["..", "..."])(
     "workspace suggestions resolve exact paths starting with %s",
     async (prefix) => {

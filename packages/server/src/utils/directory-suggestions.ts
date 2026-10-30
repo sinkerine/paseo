@@ -43,7 +43,6 @@ interface QueryPlan {
   parentPart: string;
   searchTerm: string;
   normalizedQuery: string;
-  browseExactPath?: boolean;
 }
 
 interface ChildEntry {
@@ -195,8 +194,7 @@ export async function searchDirectoryEntries(
   if (!input) return [];
 
   const exact =
-    input.plan.browseExactPath ||
-    (input.plan.isPathQuery && (input.matchMode === "suffix" || resolvesTypedPath(input)))
+    input.plan.isPathQuery && (input.matchMode === "suffix" || resolvesTypedPath(input))
       ? await findExactEntry(input)
       : null;
   if (exact && input.limit === 1) return [exact];
@@ -210,8 +208,7 @@ export async function searchDirectoryEntries(
 
 async function searchCandidates(input: SearchInput): Promise<RankedEntry[]> {
   const browsesRoot = input.plan.isPathQuery && !input.plan.normalizedQuery;
-  const browsesAbsoluteParent = input.plan.browseExactPath === true;
-  if (browsesRoot || browsesAbsoluteParent) return searchChildren(input);
+  if (browsesRoot) return searchChildren(input);
   if (!resolvesTypedPath(input) || !input.plan.parentPart) return searchTree(input);
 
   // A typed parent such as `~/Developer/pas` anchors the walk under `~/Developer`. A parent that
@@ -666,15 +663,6 @@ function parseQuery(input: {
     if (!explicitlyBrowseRoot && input.blankBehavior !== "children") return null;
     return { isPathQuery: true, parentPart: "", searchTerm: "", normalizedQuery: "" };
   }
-  if (normalizedInput.isAbsolute && isFilesystemRoot(input.root) && !normalized.includes("/")) {
-    return {
-      isPathQuery: true,
-      parentPart: normalized,
-      searchTerm: "",
-      normalizedQuery: normalized,
-      browseExactPath: true,
-    };
-  }
   const isPathQuery = rooted || (input.policy === "slashes" && normalized.includes("/"));
   const slash = normalized.lastIndexOf("/");
   return {
@@ -690,11 +678,10 @@ function normalizeQueryInput(input: {
   root: string;
   configuredRoot: string;
   aliases: string[];
-}): { typed: string; normalized: string; rooted: boolean; isAbsolute: boolean } | null {
+}): { typed: string; normalized: string; rooted: boolean } | null {
   const typed = input.query.trim().replace(/\\/g, "/");
   let normalized = typed;
   let rooted = false;
-  let isAbsolute = false;
   for (const alias of input.aliases) {
     if (normalized === alias || normalized.startsWith(`${alias}/`)) {
       rooted = true;
@@ -703,7 +690,6 @@ function normalizeQueryInput(input: {
     }
   }
   if (path.isAbsolute(normalized)) {
-    isAbsolute = true;
     const browseAbsoluteDirectory = normalized.endsWith("/");
     const absolutePath = path.resolve(normalized);
     let queryRoot: string | null = null;
@@ -724,11 +710,7 @@ function normalizeQueryInput(input: {
   if (normalized === "." && (rooted || typed === ".")) {
     normalized = "";
   }
-  return { typed, normalized, rooted, isAbsolute };
-}
-
-function isFilesystemRoot(inputPath: string): boolean {
-  return path.relative(path.parse(inputPath).root, inputPath) === "";
+  return { typed, normalized, rooted };
 }
 
 async function resolveDirectory(inputPath: string): Promise<string | null> {
