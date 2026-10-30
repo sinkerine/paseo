@@ -111,6 +111,7 @@ interface FlowRowOption {
   subtitle: string | null;
   icon: ComponentType<{ size?: number; color?: string }>;
   disabled?: boolean;
+  completionPath?: string;
   testID: string;
   select: () => void;
 }
@@ -142,6 +143,7 @@ const lastCloneParentByHost = new Map<string, string>();
 const EMPTY_PATHS: string[] = [];
 const NAVIGATION_HINT_KEYS = ["Up", "Down"];
 const SELECT_HINT_KEYS = ["Enter"];
+const COMPLETE_HINT_KEYS = ["Tab"];
 const ESCAPE_HINT_KEYS = ["Esc"];
 
 function FlowBackButton({ onPress }: { onPress: () => void }) {
@@ -649,6 +651,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           id: option.path,
           title: shortPath,
           subtitle: directoryOptionSubtitle(option, shortPath),
+          completionPath: option.kind === "suggestion" ? option.path : undefined,
           icon: Folder,
           testID: pathTestId(option.path),
           select: () => void openAddedProject(option.path, "directory-search"),
@@ -711,6 +714,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         id: option.path,
         title: shortenPath(option.path),
         subtitle: option.kind === "path" ? "Use this parent" : option.path,
+        completionPath: option.kind === "suggestion" ? option.path : undefined,
         icon: Folder,
         testID: pathTestId(option.path),
         select: () =>
@@ -796,12 +800,24 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     if (option && !option.disabled) option.select();
   }, [activeIndex, createDirectory, page.kind, rows]);
 
+  const completionPath =
+    rows[activeIndex]?.completionPath ?? rows.find((row) => row.completionPath)?.completionPath;
+  const completeDirectory = useCallback(() => {
+    if (!completionPath || submissionInFlightRef.current) return false;
+    const completed = `${completionPath.replace(/[\\/]+$/, "")}/`;
+    setState((current) => setAddProjectPageInput(current, completed));
+    inputRef.current?.replaceText(completed, { start: completed.length, end: completed.length });
+    inputRef.current?.focus();
+    return true;
+  }, [completionPath]);
+
   const handleKey = useCallback(
     (key: string): boolean => {
       if (key === "Escape") {
         handleBack();
         return true;
       }
+      if (key === "Tab") return completeDirectory();
       if (key === "Enter") {
         submitActive();
         return true;
@@ -815,12 +831,18 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       setState((current) => setAddProjectActiveIndex(current, next));
       return true;
     },
-    [activeIndex, handleBack, rows, submitActive],
+    [activeIndex, completeDirectory, handleBack, rows, submitActive],
   );
 
   const modalLayer = useGlobalWebOverlayLayer("modal", isWeb);
   const handleWebOverlayKeyDown = useCallback(
     (event: KeyboardEvent) => {
+      if (
+        event.key === "Tab" &&
+        (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
+      ) {
+        return false;
+      }
       if (!handleKey(event.key)) return false;
       event.preventDefault();
       return true;
@@ -835,7 +857,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
 
   const handleNativeKeyPress = useCallback(
     ({ nativeEvent: { key } }: { nativeEvent: { key: string } }) => {
-      if (key === "ArrowDown" || key === "ArrowUp" || key === "Escape") {
+      if (key === "ArrowDown" || key === "ArrowUp" || key === "Escape" || key === "Tab") {
         handleKey(key);
       }
     },
@@ -992,6 +1014,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
           <View style={styles.footer} testID="add-project-flow-footer">
             <FlowHint keys={NAVIGATION_HINT_KEYS} action="Navigate" />
             <FlowHint keys={SELECT_HINT_KEYS} action="Select" />
+            {completionPath ? <FlowHint keys={COMPLETE_HINT_KEYS} action="Complete" /> : null}
             <FlowHint keys={ESCAPE_HINT_KEYS} action={state.pages.length > 1 ? "Back" : "Close"} />
           </View>
         </View>

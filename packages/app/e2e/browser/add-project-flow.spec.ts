@@ -84,6 +84,50 @@ test.describe("Add Project command-center flow", () => {
     await expect(page.getByTestId("add-project-flow-page-host")).toHaveCount(0);
   });
 
+  test("Tab completes a directory candidate in the input without opening the project", async ({
+    page,
+  }) => {
+    const directory = await mkdtemp(path.join(tmpdir(), "paseo-tab-completion-"));
+    const first = path.join(directory, "main");
+    const second = path.join(directory, "sub");
+    await mkdir(path.join(first, "nested"), { recursive: true });
+    await mkdir(second);
+    try {
+      await gotoAppShell(page);
+      await openAddProjectFlow(page);
+      await chooseAddProjectMethod(page, "directory-search");
+      const input = addProjectFlowInput(page);
+      await input.fill(`${directory}/`);
+      await expect(
+        page.getByTestId(`add-project-flow-path-${encodeURIComponent(second)}`),
+      ).toBeVisible();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("Tab");
+      await expect(input).toHaveValue(`${second}/`);
+      await expect(input).toBeFocused();
+      await expectAddProjectPage(page, "directory-search");
+
+      await input.fill(`${directory}/`);
+      await expect(
+        page.getByTestId(`add-project-flow-path-${encodeURIComponent(first)}`),
+      ).toBeVisible();
+      await page.keyboard.press("Tab");
+      await expect(input).toHaveValue(`${first}/`);
+      const nested = path.join(first, "nested");
+      await expect(
+        page.getByTestId(`add-project-flow-path-${encodeURIComponent(nested)}`),
+      ).toBeVisible();
+      await page.keyboard.press("Tab");
+      await expect(input).toHaveValue(`${nested}/`);
+      await expectAddProjectPage(page, "directory-search");
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test("an offline extra host neither appears nor forces host selection", async ({ page }) => {
     await gotoAppShell(page);
     await addOfflineHostAndReload(page, {
