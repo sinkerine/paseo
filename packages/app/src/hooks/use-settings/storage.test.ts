@@ -44,6 +44,31 @@ function makeDeps(
 }
 
 describe("loadAppSettingsFromStorage", () => {
+  it("persists the terminal close confirmation preference across reloads", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+    expect((await loadAppSettingsFromStorage(deps)).confirmTerminalClose).toBe(true);
+
+    for (const confirmTerminalClose of [false, true]) {
+      await saveAppSettings({ queryClient, deps, updates: { confirmTerminalClose } });
+      expect((await loadAppSettingsFromStorage(deps)).confirmTerminalClose).toBe(
+        confirmTerminalClose,
+      );
+    }
+  });
+
+  it.each([undefined, null, "false", 0])(
+    "defaults missing or malformed terminal close confirmation to enabled: %j",
+    async (confirmTerminalClose) => {
+      const deps = makeDeps({
+        storage: createInMemoryKeyValueStorage({
+          [APP_SETTINGS_KEY]: JSON.stringify({ confirmTerminalClose }),
+        }),
+      });
+      expect((await loadAppSettingsFromStorage(deps)).confirmTerminalClose).toBe(true);
+    },
+  );
+
   it("persists disabled worktree setup prompts across reloads", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();

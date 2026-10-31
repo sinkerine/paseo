@@ -1942,6 +1942,11 @@ export const en = {
       openParent: "Open parent",
     },
     title: "Subagents",
+    expandRow: "Expand subagent",
+    collapseRow: "Collapse subagent",
+    moreDescendants: "{{count}} more",
+    moreDescendants_one: "{{count}} more",
+    moreDescendants_other: "{{count}} more",
     pillLabelOne: "1 subagent",
     pillLabelMany: "{{count}} subagents",
     pillLabelWorking: "{{count}} working",
@@ -2482,6 +2487,11 @@ export const en = {
           inApp: "In Paseo",
           external: "External browser",
         },
+      },
+      confirmTerminalClose: {
+        label: "Confirm before closing terminal",
+        description:
+          "Ask for confirmation before closing a terminal tab and stopping its processes",
       },
       terminalScrollback: {
         label: "Terminal scrollback",

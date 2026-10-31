@@ -1949,6 +1949,11 @@ export const ru: TranslationResources = {
       openParent: "Открыть родителя",
     },
     title: "Субагенты",
+    expandRow: "Развернуть субагента",
+    collapseRow: "Свернуть субагента",
+    moreDescendants: "Ещё {{count}}",
+    moreDescendants_one: "Ещё {{count}}",
+    moreDescendants_other: "Ещё {{count}}",
     pillLabelOne: "1 субагент",
     pillLabelMany: "Субагентов: {{count}}",
     pillLabelWorking: "{{count}} в работе",
@@ -2396,6 +2401,11 @@ export const ru: TranslationResources = {
           inApp: "В Paseo",
           external: "Внешний браузер",
         },
+      },
+      confirmTerminalClose: {
+        label: "Подтверждать закрытие терминала",
+        description:
+          "Запрашивать подтверждение перед закрытием вкладки терминала и остановкой её процессов",
       },
       terminalScrollback: {
         label: "Буфер прокрутки терминала",

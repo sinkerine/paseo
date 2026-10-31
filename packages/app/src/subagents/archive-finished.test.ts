@@ -29,6 +29,7 @@ function provider(
     kind: "provider",
     id,
     parentAgentId: "parent",
+    parentSubagentId: null,
     provider: "codex",
     title: id,
     description: null,

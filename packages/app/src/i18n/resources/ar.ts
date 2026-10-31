@@ -1917,6 +1917,11 @@ export const ar: TranslationResources = {
       openParent: "فتح الوكيل الأصلي",
     },
     title: "الوكلاء الفرعيون",
+    expandRow: "توسيع الوكيل الفرعي",
+    collapseRow: "طي الوكيل الفرعي",
+    moreDescendants: "{{count}} أخرى",
+    moreDescendants_one: "{{count}} أخرى",
+    moreDescendants_other: "{{count}} أخرى",
     pillLabelOne: "وكيل فرعي واحد",
     pillLabelMany: "{{count}} وكلاء فرعيين",
     pillLabelWorking: "{{count}} قيد التشغيل",
@@ -2393,6 +2398,10 @@ export const ar: TranslationResources = {
           inApp: "في Paseo",
           external: "متصفح خارجي",
         },
+      },
+      confirmTerminalClose: {
+        label: "التأكيد قبل إغلاق الطرفية",
+        description: "طلب التأكيد قبل إغلاق علامة تبويب الطرفية وإيقاف عملياتها",
       },
       terminalScrollback: {
         label: "التمرير Terminal",

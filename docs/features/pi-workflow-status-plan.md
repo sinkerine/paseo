@@ -1,6 +1,26 @@
 # Pi subagent workflows in workspace status — plan
 
-Status: **approved by the user (2026-10-30)**
+Status: **superseded by user-approved Option C (2026-10-31)**
+
+## Current reconciliation contract — Option C
+
+The original plan below records evidence from Pi 1.0.4 / pi-subagents 0.71.0. Preserve it as historical evidence; its workflow identity, discovery and lifecycle rules are superseded here.
+
+The current user environment is Pi 1.4.0 / pi-subagents 0.84.0 (`/nix/store/spwn6yyrml8by6wpw6l4a0f0jhybs9m9-pi-subagents-0.84.0`). In that version, `subagent-executor.ts:4830,6525` completes dispatch with uncollected running children and freezes the artifact through `persistClosed`. Later incremental notices carry `workflowRunning=false`. Paused dispatch detaches children (`:6554`); children settle later and resume uses a new run ID. `parentWorkflowRunId` is always stamped (`:4371`). Stale reconciliation requires a later process, so owner death is the missing evidence Paseo must handle.
+
+- Keep main's `workflow.ts` and `notice.ts` tree: `pi-subagents-workflow:<runId>`, groups, keyed child runs, presentation, explicit status policy, and incremental/terminal notices.
+- Paused workflow or child status adds no lifecycle evidence. Keep polling. A terminal workflow never infers child lifecycle; explicit running children remain running until their own evidence settles them.
+- For queued/running/paused artifacts, a recorded PID returning ESRCH cancels the Workflow and children without explicit final evidence, then stops polling. EPERM means alive; no PID means unknown. Terminal dispatch with unsettled children keeps checking owner liveness too. Preserve completed, failed and canceled child evidence on live tracking and replay.
+- Require exact `parentWorkflowRunId === runId` for steps and transcripts. Reject a launch when an artifact's `toolCallId` differs from the launching call ID. No missing-parent exception.
+- Codemode workflows arrive only through nested `<outer>/<n>` subagent execution events. Remove the runtime bridge, codemode output parsing and temp-root discovery. Replay uses persisted notices and the artifacts they name.
+- Keep `async-runs.ts` only for ordinary non-workflow runs: per-step status, partial/paused/rejected handling, multi-step owner settlement, dead-owner checks, row diffing, complete/completed compatibility, and transcript re-follow on resume.
+- Retain main's workflow fixtures and tests. Remove superseded feature workflow fixtures/tests; retain historical QA evidence. Real E2E is rerun against the current Pi/extension versions after integration.
+
+Current-version E2E launches `subagent` directly through the model. Pi 1.4 documents `model-only` tools as unavailable to `codemode` / `ctx.executeTool`, and pi-subagents 0.84 registers `subagent` with that exposure. The historical `tools.subagent` journey returns `TypeError: tools.subagent does not exist`. Current codemode launch validation is unsupported, not passed; historical nested-event fixtures remain the adapter compatibility proof. Do not override provider exposure to manufacture an E2E pass.
+
+## Original approved plan (historical)
+
+Status: **approved by the user (2026-10-30); superseded above**
 Branch: `fix-pi-subagent-workflow-status-indicator` (base `08ea9a1d5`, `origin/main`)
 
 ## Problem

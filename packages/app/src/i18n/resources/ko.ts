@@ -1927,6 +1927,11 @@ export const ko: TranslationResources = {
       openParent: "상위 에이전트 열기",
     },
     title: "하위 에이전트",
+    expandRow: "하위 에이전트 펼치기",
+    collapseRow: "하위 에이전트 접기",
+    moreDescendants: "{{count}}개 더",
+    moreDescendants_one: "{{count}}개 더",
+    moreDescendants_other: "{{count}}개 더",
     pillLabelOne: "하위 에이전트 1개",
     pillLabelMany: "하위 에이전트 {{count}}개",
     pillLabelWorking: "{{count}}개 실행 중",
@@ -2370,6 +2375,10 @@ export const ko: TranslationResources = {
           inApp: "Paseo에서",
           external: "외부 브라우저",
         },
+      },
+      confirmTerminalClose: {
+        label: "터미널을 닫기 전에 확인",
+        description: "터미널 탭을 닫고 프로세스를 중지하기 전에 확인합니다",
       },
       terminalScrollback: {
         label: "터미널 스크롤백",

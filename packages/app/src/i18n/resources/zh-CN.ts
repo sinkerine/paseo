@@ -1895,6 +1895,11 @@ export const zhCN: TranslationResources = {
       openParent: "打开父代理",
     },
     title: "Subagent",
+    expandRow: "展开子代理",
+    collapseRow: "折叠子代理",
+    moreDescendants: "还有 {{count}} 个",
+    moreDescendants_one: "还有 {{count}} 个",
+    moreDescendants_other: "还有 {{count}} 个",
     pillLabelOne: "1 个 subagent",
     pillLabelMany: "{{count}} 个 subagent",
     pillLabelWorking: "{{count}} 个运行中",
@@ -2331,6 +2336,10 @@ export const zhCN: TranslationResources = {
           inApp: "在 Paseo 中",
           external: "外部浏览器",
         },
+      },
+      confirmTerminalClose: {
+        label: "关闭终端前确认",
+        description: "关闭终端标签页并停止其中的进程前请求确认",
       },
       terminalScrollback: {
         label: "终端回滚",

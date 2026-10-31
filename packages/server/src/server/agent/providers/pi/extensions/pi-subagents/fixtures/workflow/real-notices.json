@@ -1,0 +1,35 @@
+{
+  "provenance": {
+    "package": "pi-subagents",
+    "version": "0.71.0",
+    "sourceCommit": "4af5e85a427b9f87334585ae8d0eb365d4dd2a1e",
+    "piVersion": "1.0.4",
+    "captureDate": "2026-10-31"
+  },
+  "excerpts": [
+    {
+      "nestedCalls": {
+        "calls": [
+          {
+            "id": "call_47d20ec730a4493e83658cee21a7e1d2/1",
+            "name": "subagent",
+            "status": "ok",
+            "argumentsBytes": 12888,
+            "durationMs": 43
+          }
+        ],
+        "complete": false
+      }
+    },
+    {
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **T1-implement**\nWorkflow run: 38e069c4-1f41-46b2-a21a-8f947abe29cd\nChild run: 3e0c2d2d-be37-4ec7-8d5d-25036e79e038\nOutput: __OUTPUT_PATH__\nStatus: workflow still running",
+      "display": false
+    },
+    {
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **T1-review-1**\nWorkflow run: 38e069c4-1f41-46b2-a21a-8f947abe29cd\nChild run: 997f9f1c-285c-4f42-9f54-3b1aaab7e50e\nOutput: __OUTPUT_PATH__\nStatus: workflow still running",
+      "display": false
+    }
+  ]
+}

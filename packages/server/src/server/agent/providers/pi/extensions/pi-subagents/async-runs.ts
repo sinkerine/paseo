@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
-import { homedir, tmpdir, userInfo } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
 import type {
   ProviderSubagentInputEvent,
@@ -11,8 +10,6 @@ import type { PiChildSessionFile } from "../contract.js";
 const AsyncStepSchema = z.object({
   agent: z.string().trim().min(1),
   label: z.string().optional(),
-  workflowKey: z.string().optional(),
-  runId: z.string().optional(),
   status: z
     .enum([
       "pending",
@@ -54,65 +51,11 @@ export type AsyncRunState = "active" | "paused" | "terminal";
 
 export interface AsyncRun {
   dir: string;
-  /** Direct call id, or the nested status.json toolCallId for codemode. */
+  /** The spawning subagent tool call id. */
   owner: string;
   toolCallId: string;
-  workflow: boolean;
   polling: boolean;
   emitted: Map<string, string>;
-}
-
-interface TempScopeIdentity {
-  getuid: (() => number) | undefined;
-  userInfo: () => { username?: string | null };
-  homedir: () => string;
-}
-
-function sanitizeTempScopeSegment(value: string): string {
-  const sanitized = value
-    .trim()
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return sanitized || "unknown";
-}
-
-// Replay must resolve the same user-scoped directory as pi-subagents on every OS.
-function resolveTempScopeId(env: NodeJS.ProcessEnv, identity: TempScopeIdentity): string {
-  if (typeof identity.getuid === "function") return `uid-${identity.getuid()}`;
-  for (const key of ["USERNAME", "USER", "LOGNAME"] as const) {
-    const value = env[key];
-    if (value) return `user-${sanitizeTempScopeSegment(value)}`;
-  }
-  try {
-    const username = identity.userInfo().username;
-    if (username) return `user-${sanitizeTempScopeSegment(username)}`;
-  } catch {
-    // OS user lookup can fail when the account is unavailable.
-  }
-  const configuredHome = env.USERPROFILE ?? env.HOME;
-  if (configuredHome) return `home-${sanitizeTempScopeSegment(configuredHome)}`;
-  try {
-    const home = identity.homedir();
-    if (home) return `home-${sanitizeTempScopeSegment(home)}`;
-  } catch {
-    // Pi uses a shared scope when no user or home directory is available.
-  }
-  return "shared";
-}
-
-export function resolveAsyncDir(
-  runId: string,
-  knownDirs: ReadonlyMap<string, string>,
-  env: NodeJS.ProcessEnv = process.env,
-  identity: TempScopeIdentity = { getuid: process.getuid?.bind(process), userInfo, homedir },
-): string {
-  const known = knownDirs.get(runId);
-  if (known) return known;
-  const configuredRoot = env.PI_SUBAGENTS_TEMP_ROOT?.trim();
-  const root = configuredRoot
-    ? resolve(configuredRoot)
-    : join(tmpdir(), `pi-subagents-${resolveTempScopeId(env, identity)}`);
-  return join(root, "async-subagent-runs", runId);
 }
 
 export function readAsyncStatus(dir: string): AsyncStatus | undefined {
@@ -139,7 +82,7 @@ export function isOwnerAlive(pid: number | undefined): boolean {
 export function runState(status: AsyncStatus): AsyncRunState {
   if (status.state === "paused") return "paused";
   if (status.state !== "queued" && status.state !== "running") return "terminal";
-  // A crashed Pi owner cannot finish a workflow or write its completion notice.
+  // A crashed Pi owner cannot finish an async run or write its completion notice.
   return isOwnerAlive(status.pid) ? "active" : "terminal";
 }
 
@@ -183,7 +126,6 @@ export function projectRun(
   readSessions: Set<string>,
 ): AsyncRunProjection {
   const state = runState(status);
-  const workflow = run.workflow || status.mode === "workflow";
   const rows = new Map<string, SubagentRow>();
   const childSessions: PiChildSessionFile[] = [];
   const owner: SubagentRow = {
@@ -192,18 +134,15 @@ export function projectRun(
     toolCallId: run.toolCallId,
     status: ownerStatus(state, status.state),
   };
-  if (workflow) rows.set(run.owner, { ...owner, title: "workflow" });
   for (const [index, step] of status.steps.entries()) {
     let id = run.owner;
-    if (workflow) id = `${run.owner}:${step.workflowKey ?? step.runId ?? index}`;
-    else if (status.steps.length !== 1) id = `${run.owner}:${index}`;
+    if (status.steps.length !== 1) id = `${run.owner}:${index}`;
     const projectedStatus = stepStatus(state, status.state, step);
     rows.set(id, {
       type: "upsert",
       id,
       title: step.agent,
       description: step.label,
-      parentSubagentId: workflow ? run.owner : undefined,
       toolCallId: run.toolCallId,
       status: projectedStatus,
     });
@@ -216,7 +155,7 @@ export function projectRun(
       }
     }
   }
-  if (!workflow && (state !== "active" || status.steps.length !== 1)) {
+  if (state !== "active" || status.steps.length !== 1) {
     rows.set(run.owner, { ...rows.get(run.owner), ...owner });
   }
   const subagents: ProviderSubagentInputEvent[] = [];

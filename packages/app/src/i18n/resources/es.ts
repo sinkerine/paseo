@@ -1965,6 +1965,11 @@ export const es: TranslationResources = {
       openParent: "Abrir padre",
     },
     title: "Subagentes",
+    expandRow: "Expandir subagente",
+    collapseRow: "Contraer subagente",
+    moreDescendants: "{{count}} más",
+    moreDescendants_one: "{{count}} más",
+    moreDescendants_other: "{{count}} más",
     pillLabelOne: "1 subagente",
     pillLabelMany: "{{count}} subagentes",
     pillLabelWorking: "{{count}} en ejecución",
@@ -2410,6 +2415,11 @@ export const es: TranslationResources = {
           inApp: "EnPaseo",
           external: "Navegador externo",
         },
+      },
+      confirmTerminalClose: {
+        label: "Confirmar antes de cerrar el terminal",
+        description:
+          "Pedir confirmación antes de cerrar una pestaña del terminal y detener sus procesos",
       },
       terminalScrollback: {
         label: "Historial de terminal",

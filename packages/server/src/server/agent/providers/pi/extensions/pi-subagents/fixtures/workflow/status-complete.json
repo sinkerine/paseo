@@ -1,0 +1,358 @@
+{
+  "runId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+  "toolCallId": "scripted-workflow-codemode/1",
+  "sessionId": "__CAPTURE_ROOT__/parent.jsonl",
+  "completionOwnerId": "be1d6319-d39f-4304-9bba-3e821f4271ed",
+  "mode": "workflow",
+  "state": "complete",
+  "startedAt": 1793411495453,
+  "lastUpdate": 1793411498562,
+  "cwd": "__CAPTURE_ROOT__/work",
+  "sessionRoot": "__CAPTURE_ROOT__/parent",
+  "pid": 3512771,
+  "steps": [
+    {
+      "agent": "worker",
+      "sessionName": "worker: PASEO_SCRIPTED_CHILD:T1-implement",
+      "label": "Implement T1",
+      "workflowKey": "T1-implement",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411495479,
+      "phase": "T1",
+      "sessionFile": "__CHILD_SESSION_T1-implement__",
+      "async": true,
+      "runId": "02a3fd43-70b7-4c37-9bd7-6fb90109cbc2",
+      "durationMs": 518
+    },
+    {
+      "agent": "reviewer",
+      "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T1-review-1",
+      "label": "Review T1 round 1",
+      "workflowKey": "T1-review-1",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411495998,
+      "phase": "T1",
+      "sessionFile": "__CHILD_SESSION_T1-review-1__",
+      "async": true,
+      "runId": "8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9",
+      "durationMs": 511
+    },
+    {
+      "agent": "worker",
+      "sessionName": "worker: PASEO_SCRIPTED_CHILD:T2.implement",
+      "label": "Implement T2",
+      "workflowKey": "T2.implement",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411496510,
+      "sessionFile": "__CHILD_SESSION_T2.implement__",
+      "async": true,
+      "runId": "6e44f48d-1d4e-41b6-b86c-bf59f6808657",
+      "durationMs": 518
+    },
+    {
+      "agent": "reviewer",
+      "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T2.review",
+      "label": "Review T2",
+      "workflowKey": "T2.review",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411497030,
+      "sessionFile": "__CHILD_SESSION_T2.review__",
+      "async": true,
+      "runId": "75386e38-5f31-4723-b8ac-2c080405d289",
+      "durationMs": 1018
+    },
+    {
+      "agent": "worker",
+      "sessionName": "worker: PASEO_SCRIPTED_CHILD:cleanup",
+      "label": "Cleanup",
+      "workflowKey": "cleanup",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411498049,
+      "sessionFile": "__CHILD_SESSION_cleanup__",
+      "async": true,
+      "runId": "6c091616-2264-44b0-81f6-24d35d5bdfab",
+      "durationMs": 510
+    }
+  ],
+  "workflow": {
+    "value": {
+      "key": "cleanup",
+      "ok": true,
+      "asyncDir": "__CAPTURE_ROOT__/subagents-tmp/async-subagent-runs/6c091616-2264-44b0-81f6-24d35d5bdfab",
+      "agent": "worker",
+      "runId": "6c091616-2264-44b0-81f6-24d35d5bdfab",
+      "output": "PASEO_SCRIPTED_DONE:cleanup",
+      "resolvedContext": "fresh",
+      "outputArtifactPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md",
+      "resumability": {
+        "state": "resumable"
+      },
+      "continuation": {
+        "runIds": ["6c091616-2264-44b0-81f6-24d35d5bdfab"]
+      },
+      "artifactPaths": [
+        "__CAPTURE_ROOT__/subagents-tmp/async-subagent-runs/6c091616-2264-44b0-81f6-24d35d5bdfab",
+        "__CHILD_SESSION_cleanup__"
+      ],
+      "results": [
+        {
+          "index": 0,
+          "agent": "worker",
+          "sessionName": "worker: PASEO_SCRIPTED_CHILD:cleanup",
+          "task": "PASEO_SCRIPTED_CHILD:cleanup",
+          "exitCode": 0,
+          "usage": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "cost": 0,
+            "turns": 2
+          },
+          "finalOutput": "PASEO_SCRIPTED_DONE:cleanup",
+          "outputState": "present",
+          "sessionFile": "__CHILD_SESSION_cleanup__",
+          "model": "paseo-scripted/workflow",
+          "requestedModel": "paseo-scripted/workflow",
+          "acceptance": {
+            "status": "rejected",
+            "evidenceStatus": "rejected",
+            "explicit": false,
+            "effectiveAcceptance": {
+              "level": "attested",
+              "explicit": false,
+              "inferredReason": ["default lightweight attestation"],
+              "criteria": [
+                {
+                  "id": "criterion-1",
+                  "must": "Return a concise result and residual risks when applicable",
+                  "evidence": ["manual-notes", "residual-risks"],
+                  "severity": "required"
+                }
+              ],
+              "evidence": ["manual-notes", "residual-risks"],
+              "verify": [],
+              "stopRules": []
+            },
+            "inferredReason": ["default lightweight attestation"],
+            "criteria": [
+              {
+                "id": "criterion-1",
+                "must": "Return a concise result and residual risks when applicable",
+                "evidence": ["manual-notes", "residual-risks"],
+                "severity": "required"
+              }
+            ],
+            "runtimeChecks": [
+              {
+                "id": "attestation",
+                "status": "failed",
+                "message": "Structured acceptance report not found."
+              }
+            ],
+            "verifyRuns": [],
+            "childReportParseError": "Structured acceptance report not found."
+          },
+          "artifactPaths": {
+            "inputPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_input.md",
+            "outputPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md",
+            "jsonlPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker.jsonl",
+            "transcriptPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_transcript.jsonl",
+            "metadataPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_meta.json"
+          },
+          "transcriptPath": "__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_transcript.jsonl"
+        }
+      ]
+    },
+    "trace": [
+      {
+        "operation": "run",
+        "key": "T1-implement",
+        "state": "started",
+        "phase": "T1",
+        "label": "Implement T1",
+        "agent": "worker"
+      },
+      {
+        "operation": "run",
+        "key": "T1-implement",
+        "state": "completed",
+        "durationMs": 518,
+        "phase": "T1",
+        "label": "Implement T1",
+        "agent": "worker",
+        "runId": "02a3fd43-70b7-4c37-9bd7-6fb90109cbc2"
+      },
+      {
+        "operation": "run",
+        "key": "T1-review-1",
+        "state": "started",
+        "phase": "T1",
+        "label": "Review T1 round 1",
+        "agent": "reviewer"
+      },
+      {
+        "operation": "run",
+        "key": "T1-review-1",
+        "state": "completed",
+        "durationMs": 511,
+        "phase": "T1",
+        "label": "Review T1 round 1",
+        "agent": "reviewer",
+        "runId": "8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9"
+      },
+      {
+        "operation": "run",
+        "key": "T2.implement",
+        "state": "started",
+        "label": "Implement T2",
+        "agent": "worker",
+        "generatedLaneKey": "T2"
+      },
+      {
+        "operation": "run",
+        "key": "T2.implement",
+        "state": "completed",
+        "durationMs": 518,
+        "label": "Implement T2",
+        "agent": "worker",
+        "generatedLaneKey": "T2",
+        "runId": "6e44f48d-1d4e-41b6-b86c-bf59f6808657"
+      },
+      {
+        "operation": "run",
+        "key": "T2.review",
+        "state": "started",
+        "label": "Review T2",
+        "agent": "reviewer",
+        "generatedLaneKey": "T2"
+      },
+      {
+        "operation": "run",
+        "key": "T2.review",
+        "state": "completed",
+        "durationMs": 1018,
+        "label": "Review T2",
+        "agent": "reviewer",
+        "generatedLaneKey": "T2",
+        "runId": "75386e38-5f31-4723-b8ac-2c080405d289"
+      },
+      {
+        "operation": "run",
+        "key": "cleanup",
+        "state": "started",
+        "label": "Cleanup",
+        "agent": "worker"
+      },
+      {
+        "operation": "run",
+        "key": "cleanup",
+        "state": "completed",
+        "durationMs": 510,
+        "label": "Cleanup",
+        "agent": "worker",
+        "runId": "6c091616-2264-44b0-81f6-24d35d5bdfab"
+      }
+    ],
+    "emits": [],
+    "console": [],
+    "args": {},
+    "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  "workflowChildren": {
+    "version": 1,
+    "parentToolCallId": "scripted-workflow-codemode/1",
+    "workflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+    "inventoryComplete": true,
+    "workflowState": "completed",
+    "children": [
+      {
+        "childId": "T1-implement",
+        "state": "completed",
+        "runId": "02a3fd43-70b7-4c37-9bd7-6fb90109cbc2",
+        "agent": "worker",
+        "sessionName": "worker: PASEO_SCRIPTED_CHILD:T1-implement"
+      },
+      {
+        "childId": "T1-review-1",
+        "state": "completed",
+        "runId": "8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9",
+        "agent": "reviewer",
+        "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T1-review-1"
+      },
+      {
+        "childId": "T2.implement",
+        "state": "completed",
+        "runId": "6e44f48d-1d4e-41b6-b86c-bf59f6808657",
+        "agent": "worker",
+        "sessionName": "worker: PASEO_SCRIPTED_CHILD:T2.implement"
+      },
+      {
+        "childId": "T2.review",
+        "state": "completed",
+        "runId": "75386e38-5f31-4723-b8ac-2c080405d289",
+        "agent": "reviewer",
+        "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T2.review"
+      },
+      {
+        "childId": "cleanup",
+        "state": "completed",
+        "runId": "6c091616-2264-44b0-81f6-24d35d5bdfab",
+        "agent": "worker",
+        "sessionName": "worker: PASEO_SCRIPTED_CHILD:cleanup"
+      }
+    ]
+  },
+  "runFanoutBudget": {
+    "used": 5,
+    "limit": 64,
+    "remaining": 59
+  },
+  "workflowGraph": {
+    "runId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+    "mode": "workflow",
+    "phases": [
+      {
+        "title": "T2",
+        "nodeIds": ["T2.implement", "T2.review"]
+      }
+    ],
+    "nodes": [
+      {
+        "id": "T2.implement",
+        "kind": "step",
+        "agent": "worker",
+        "label": "Implement T2",
+        "status": "completed",
+        "flatIndex": 0,
+        "stepIndex": 0
+      },
+      {
+        "id": "T2.review",
+        "kind": "step",
+        "agent": "reviewer",
+        "label": "Review T2",
+        "status": "completed",
+        "flatIndex": 1,
+        "stepIndex": 1
+      }
+    ]
+  },
+  "endedAt": 1793411498561,
+  "totalTokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0
+  },
+  "totalCost": {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "costUsd": 0
+  },
+  "workflowReceiptPath": "__ASYNC_DIR__/workflow-receipt.json"
+}

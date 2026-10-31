@@ -1936,6 +1936,11 @@ export const ja: TranslationResources = {
       openParent: "親を開く",
     },
     title: "サブエージェント",
+    expandRow: "サブエージェントを展開",
+    collapseRow: "サブエージェントを折りたたむ",
+    moreDescendants: "さらに{{count}}件",
+    moreDescendants_one: "さらに{{count}}件",
+    moreDescendants_other: "さらに{{count}}件",
     pillLabelOne: "サブエージェント 1 件",
     pillLabelMany: "サブエージェント {{count}} 件",
     pillLabelWorking: "{{count}} 件実行中",
@@ -2377,6 +2382,10 @@ export const ja: TranslationResources = {
           inApp: "Paseoで",
           external: "外部ブラウザ",
         },
+      },
+      confirmTerminalClose: {
+        label: "ターミナルを閉じる前に確認",
+        description: "ターミナルのタブを閉じてプロセスを停止する前に確認する",
       },
       terminalScrollback: {
         label: "ターミナルスクロールバック",

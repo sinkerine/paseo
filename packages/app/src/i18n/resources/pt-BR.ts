@@ -1950,6 +1950,11 @@ export const ptBR: TranslationResources = {
       openParent: "Abrir pai",
     },
     title: "Subagentes",
+    expandRow: "Expandir subagente",
+    collapseRow: "Recolher subagente",
+    moreDescendants: "Mais {{count}}",
+    moreDescendants_one: "Mais {{count}}",
+    moreDescendants_other: "Mais {{count}}",
     pillLabelOne: "1 subagente",
     pillLabelMany: "{{count}} subagentes",
     pillLabelWorking: "{{count}} em execução",
@@ -2393,6 +2398,10 @@ export const ptBR: TranslationResources = {
           inApp: "No Paseo",
           external: "Navegador externo",
         },
+      },
+      confirmTerminalClose: {
+        label: "Confirmar antes de fechar o terminal",
+        description: "Pedir confirmação antes de fechar uma aba do terminal e parar seus processos",
       },
       terminalScrollback: {
         label: "Scrollback do terminal",

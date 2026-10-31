@@ -1,8 +1,11 @@
+import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
+import { layoutSubagentTree } from "./tree";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createSubagentsForParentSelector,
   selectProviderSubagentsForParent,
+  selectProviderSubagentDescendants,
   selectSubagentsForParent,
 } from "./select";
 import { createWorkspaceAgentVisibilitySelector } from "@/workspace-tabs/agent-visibility";
@@ -639,5 +642,189 @@ describe("createSubagentsForParentSelector", () => {
       unsubscribe();
       useSessionStore.getState().clearSession(SERVER_ID);
     }
+  });
+});
+
+describe("selectProviderSubagentDescendants", () => {
+  const params = { serverId: SERVER_ID, parentAgentId: "parent-a" };
+
+  function add(
+    id: string,
+    parentSubagentId: string | null = null,
+    overrides: Partial<ProviderSubagentDescriptorPayload> = {},
+    serverId = SERVER_ID,
+  ): void {
+    useProviderSubagentStore.getState().applyUpdate(serverId, {
+      kind: "upsert",
+      subagent: {
+        id,
+        parentSubagentId,
+        parentAgentId: "parent-a",
+        provider: "pi",
+        title: id,
+        description: null,
+        status: "completed",
+        createdAt: "2026-10-30T10:00:00Z",
+        updatedAt: "2026-10-30T10:00:00Z",
+        toolCallId: null,
+        ...overrides,
+      },
+    });
+  }
+
+  function descendants(providerParentSubagentId?: string) {
+    return selectProviderSubagentDescendants(
+      useProviderSubagentStore.getState(),
+      { ...params, providerParentSubagentId },
+      true,
+      true,
+    );
+  }
+
+  it("selects every descendant for the agent owner and only the provider owner's subtree", () => {
+    add("root");
+    add("child", "root");
+    add("grandchild", "child");
+    add("sibling");
+    add("sibling-child", "sibling");
+    add("foreign-agent", null, { parentAgentId: "other-agent" });
+    add("foreign-host", null, {}, "other-host");
+    expect(descendants().map((row) => [row.id, row.parentSubagentId])).toEqual([
+      ["root", null],
+      ["child", "root"],
+      ["grandchild", "child"],
+      ["sibling", null],
+      ["sibling-child", "sibling"],
+    ]);
+    expect(descendants("root").map((row) => row.id)).toEqual(["child", "grandchild"]);
+    expect(descendants("child").map((row) => row.id)).toEqual(["grandchild"]);
+    expect(descendants("grandchild")).toEqual([]);
+  });
+
+  it("sorts rows by creation time and normalizes missing parent metadata", () => {
+    add("later", "earlier", { createdAt: "2026-10-30T10:02:00Z" });
+    add("earlier", null, { parentSubagentId: undefined });
+    expect(descendants().map((row) => [row.id, row.parentSubagentId])).toEqual([
+      ["earlier", null],
+      ["later", "earlier"],
+    ]);
+  });
+
+  it("keeps the existing flat selector behavior when nesting is unavailable", () => {
+    add("root");
+    add("child", "root");
+    add("hidden");
+    useProviderSubagentStore.getState().hideFromTrack(SERVER_ID, "parent-a", ["hidden"]);
+    const state = useProviderSubagentStore.getState();
+    const flatRows = selectProviderSubagentDescendants(state, params, true, false);
+    const directRows = selectProviderSubagentsForParent(state, params, true, false);
+    for (const row of directRows) row.parentSubagentId = null;
+    expect(flatRows).toEqual(directRows);
+    expect(
+      layoutSubagentTree({
+        rows: flatRows,
+        expansion: new Map(),
+        ownerSubagentId: null,
+        maxDepth: 3,
+      }),
+    ).toEqual(flatRows.map((row) => ({ row, depth: 0, hiddenDescendantCount: 0 })));
+    expect(
+      selectProviderSubagentDescendants(state, params, true, false).map((row) => row.id),
+    ).toEqual(["root", "child"]);
+    expect(
+      selectProviderSubagentDescendants(
+        state,
+        { ...params, providerParentSubagentId: "root" },
+        true,
+        false,
+      ),
+    ).toEqual([]);
+    expect(selectProviderSubagentDescendants(state, params, false, true)).toEqual([]);
+    expect(selectProviderSubagentDescendants(state, params, false, false)).toEqual([]);
+  });
+
+  it("hides a finished row's entire subtree without promoting its descendants", () => {
+    add("root");
+    add("hidden", "root");
+    add("leaf", "hidden");
+    add("sibling", "root");
+    useProviderSubagentStore.getState().hideFromTrack(SERVER_ID, "parent-a", ["hidden"]);
+    const rows = descendants();
+    expect(rows.map((row) => row.id)).toEqual(["root", "sibling"]);
+    expect(
+      layoutSubagentTree({
+        rows,
+        expansion: new Map([["root", true]]),
+        ownerSubagentId: null,
+        maxDepth: 3,
+      }).map(({ row, depth }) => [row.id, depth]),
+    ).toEqual([
+      ["root", 0],
+      ["sibling", 1],
+    ]);
+    expect(descendants("hidden")).toEqual([]);
+  });
+
+  it("keeps the complete ancestor path visible when an archived branch has a running descendant", () => {
+    add("root");
+    add("group", "root");
+    add("running", "group", { status: "running" });
+    add("finished", "group");
+    add("hidden-branch", "root");
+    add("hidden-leaf", "hidden-branch");
+    useProviderSubagentStore
+      .getState()
+      .hideFromTrack(SERVER_ID, "parent-a", ["root", "group", "hidden-branch"]);
+    const rows = descendants();
+    expect(rows.map((row) => row.id)).toEqual(["root", "group", "running", "finished"]);
+    expect(
+      layoutSubagentTree({ rows, expansion: new Map(), ownerSubagentId: null, maxDepth: 3 }).map(
+        ({ row, depth, disclosure }) => [row.id, depth, disclosure],
+      ),
+    ).toEqual([
+      ["root", 0, { expanded: true }],
+      ["group", 1, { expanded: true }],
+      ["running", 2, undefined],
+      ["finished", 2, undefined],
+    ]);
+    expect(descendants("group").map((row) => row.id)).toEqual(["running", "finished"]);
+    // Direct-child consumers retain their existing archive and pill semantics.
+    expect(
+      selectProviderSubagentsForParent(useProviderSubagentStore.getState(), params, true, true),
+    ).toEqual([]);
+    add("running", "group");
+    expect(descendants()).toEqual([]);
+  });
+
+  it("retains orphan branches for the agent and descendants of a missing provider owner", () => {
+    add("orphan", "missing");
+    add("leaf", "orphan");
+    expect(descendants().map((row) => row.id)).toEqual(["orphan", "leaf"]);
+    expect(descendants("missing").map((row) => row.id)).toEqual(["orphan", "leaf"]);
+    const rows = descendants();
+    expect(
+      layoutSubagentTree({
+        rows,
+        expansion: new Map([["orphan", true]]),
+        ownerSubagentId: null,
+        maxDepth: 3,
+      }).map(({ row, depth }) => [row.id, depth]),
+    ).toEqual([
+      ["orphan", 0],
+      ["leaf", 1],
+    ]);
+  });
+
+  it("guards ancestor cycles for agent and provider owners", () => {
+    add("a", "b");
+    add("b", "a");
+    add("self", "self");
+    expect(descendants().map((row) => row.id)).toEqual(["a", "b", "self"]);
+    expect(descendants("a").map((row) => row.id)).toEqual(["b"]);
+    expect(descendants("unrelated")).toEqual([]);
+    useProviderSubagentStore.getState().hideFromTrack(SERVER_ID, "parent-a", ["a"]);
+    expect(descendants().map((row) => row.id)).toEqual(["self"]);
+    add("b", "a", { status: "running" });
+    expect(descendants().map((row) => row.id)).toEqual(["a", "b", "self"]);
   });
 });

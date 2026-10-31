@@ -18,7 +18,129 @@ afterEach(() => {
     descriptors: new Map(),
     timelines: new Map(),
     hiddenFromTrack: new Set(),
+    trackExpansion: new Map(),
     trackedParents: new Set(),
+  });
+});
+
+describe("track expansion overrides", () => {
+  const descriptor: ProviderSubagentDescriptorPayload = {
+    id: SUBAGENT_ID,
+    parentAgentId: PARENT_ID,
+    provider: "codex",
+    title: "Workflow",
+    toolCallId: null,
+    description: null,
+    status: "running",
+    createdAt: "2026-10-07T10:00:00.000Z",
+    updatedAt: "2026-10-07T10:00:00.000Z",
+  };
+  const key = providerSubagentKey(SERVER_ID, PARENT_ID, SUBAGENT_ID);
+
+  test("retains true and false overrides across track subscriptions", () => {
+    const store = useProviderSubagentStore.getState();
+    store.replaceList(SERVER_ID, PARENT_ID, [descriptor]);
+    expect(useProviderSubagentStore.getState().trackExpansion.has(key)).toBe(false);
+    const initialExpansion = useProviderSubagentStore.getState().trackExpansion;
+
+    store.toggleTrackExpansion(key, true);
+    const expanded = useProviderSubagentStore.getState().trackExpansion;
+    expect(expanded).toEqual(new Map([[key, true]]));
+    expect(initialExpansion).toEqual(new Map());
+    const stop = useProviderSubagentStore.subscribe(() => undefined);
+    stop();
+    expect(useProviderSubagentStore.getState().trackExpansion.get(key)).toBe(true);
+
+    store.toggleTrackExpansion(key, false);
+    expect(useProviderSubagentStore.getState().trackExpansion).toEqual(new Map([[key, false]]));
+    expect(expanded).toEqual(new Map([[key, true]]));
+    const stopReopened = useProviderSubagentStore.subscribe(() => undefined);
+    expect(useProviderSubagentStore.getState().trackExpansion.get(key)).toBe(false);
+    stopReopened();
+  });
+
+  test("preserves overrides through descriptor updates and authoritative list refreshes", () => {
+    const store = useProviderSubagentStore.getState();
+    store.replaceList(SERVER_ID, PARENT_ID, [descriptor]);
+    store.toggleTrackExpansion(key, false);
+    store.applyUpdate(SERVER_ID, {
+      kind: "upsert",
+      subagent: { ...descriptor, status: "completed", title: "Finished workflow" },
+    });
+    expect(useProviderSubagentStore.getState().trackExpansion.get(key)).toBe(false);
+    store.replaceList(SERVER_ID, PARENT_ID, [descriptor]);
+    expect(useProviderSubagentStore.getState().trackExpansion.get(key)).toBe(false);
+
+    store.toggleTrackExpansion(key, true);
+    store.applyUpdate(SERVER_ID, {
+      kind: "upsert",
+      subagent: { ...descriptor, title: "Updated workflow" },
+    });
+    store.replaceList(SERVER_ID, PARENT_ID, [{ ...descriptor, status: "completed" }]);
+    expect(useProviderSubagentStore.getState().trackExpansion).toEqual(new Map([[key, true]]));
+  });
+
+  test("clears only the removed descriptor's override across hosts and parents", () => {
+    const store = useProviderSubagentStore.getState();
+    const otherHostKey = providerSubagentKey("server-2", PARENT_ID, SUBAGENT_ID);
+    const otherParentKey = providerSubagentKey(SERVER_ID, "parent-10", SUBAGENT_ID);
+    store.replaceList(SERVER_ID, PARENT_ID, [descriptor]);
+    store.replaceList("server-2", PARENT_ID, [descriptor]);
+    store.replaceList(SERVER_ID, "parent-10", [{ ...descriptor, parentAgentId: "parent-10" }]);
+    store.toggleTrackExpansion(key, true);
+    store.toggleTrackExpansion(otherHostKey, false);
+    store.toggleTrackExpansion(otherParentKey, true);
+    const previousExpansion = useProviderSubagentStore.getState().trackExpansion;
+
+    store.applyUpdate(SERVER_ID, {
+      kind: "remove",
+      parentAgentId: PARENT_ID,
+      subagentId: SUBAGENT_ID,
+    });
+    store.applyUpdate(SERVER_ID, { kind: "upsert", subagent: descriptor });
+
+    expect(useProviderSubagentStore.getState().trackExpansion).toEqual(
+      new Map([
+        [otherHostKey, false],
+        [otherParentKey, true],
+      ]),
+    );
+    expect(previousExpansion.get(key)).toBe(true);
+  });
+
+  test("cleans absent descriptors from authoritative lists while retaining other overrides", () => {
+    const store = useProviderSubagentStore.getState();
+    const retained = { ...descriptor, id: "retained-child" };
+    const retainedKey = providerSubagentKey(SERVER_ID, PARENT_ID, retained.id);
+    const otherHostKey = providerSubagentKey("server-2", PARENT_ID, SUBAGENT_ID);
+    const otherParentKey = providerSubagentKey(SERVER_ID, "parent-10", SUBAGENT_ID);
+    store.replaceList(SERVER_ID, PARENT_ID, [descriptor, retained]);
+    store.replaceList("server-2", PARENT_ID, [descriptor]);
+    store.replaceList(SERVER_ID, "parent-10", [{ ...descriptor, parentAgentId: "parent-10" }]);
+    store.toggleTrackExpansion(key, false);
+    store.toggleTrackExpansion(retainedKey, true);
+    store.toggleTrackExpansion(otherHostKey, true);
+    store.toggleTrackExpansion(otherParentKey, false);
+    const previousExpansion = useProviderSubagentStore.getState().trackExpansion;
+
+    store.replaceList(SERVER_ID, PARENT_ID, [retained]);
+    store.replaceList(SERVER_ID, PARENT_ID, [descriptor, retained]);
+    expect(useProviderSubagentStore.getState().trackExpansion).toEqual(
+      new Map([
+        [retainedKey, true],
+        [otherHostKey, true],
+        [otherParentKey, false],
+      ]),
+    );
+    expect(previousExpansion.get(key)).toBe(false);
+
+    store.replaceList(SERVER_ID, PARENT_ID, []);
+    expect(useProviderSubagentStore.getState().trackExpansion).toEqual(
+      new Map([
+        [otherHostKey, true],
+        [otherParentKey, false],
+      ]),
+    );
   });
 });
 

@@ -1334,6 +1334,7 @@ function WorkspaceScreenContent({
       openTab({ workspaceKey, target, intent: "background", placement }),
     [openTab],
   );
+  const confirmTerminalClose = useSettings((settings) => settings.confirmTerminalClose);
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
   const pullRequestOpenLocation = useSettings((settings) => settings.pullRequestOpenLocation);
   const selectWorkspaceTabInPane = useWorkspaceLayoutStore((state) => state.selectTabInPane);
@@ -1915,15 +1916,17 @@ function WorkspaceScreenContent({
     async (input: { tabId: string; terminalId: string }) => {
       const { tabId, terminalId } = input;
       await closeTab(tabId, async () => {
-        const confirmed = await confirmDialog({
-          title: t("workspace.tabs.confirmations.closeTerminalTitle"),
-          message: t("workspace.tabs.confirmations.closeTerminalMessage"),
-          confirmLabel: t("workspace.tabs.confirmations.close"),
-          cancelLabel: t("workspace.tabs.confirmations.cancel"),
-          destructive: true,
-        });
-        if (!confirmed) {
-          return;
+        if (confirmTerminalClose) {
+          const confirmed = await confirmDialog({
+            title: t("workspace.tabs.confirmations.closeTerminalTitle"),
+            message: t("workspace.tabs.confirmations.closeTerminalMessage"),
+            confirmLabel: t("workspace.tabs.confirmations.close"),
+            cancelLabel: t("workspace.tabs.confirmations.cancel"),
+            destructive: true,
+          });
+          if (!confirmed) {
+            return;
+          }
         }
 
         removeTerminalFromCache(terminalId);
@@ -1941,6 +1944,7 @@ function WorkspaceScreenContent({
     [
       closeTab,
       closeWorkspaceTabWithCleanup,
+      confirmTerminalClose,
       invalidateTerminals,
       killTerminalAsync,
       persistenceKey,

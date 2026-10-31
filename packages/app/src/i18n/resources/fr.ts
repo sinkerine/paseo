@@ -1963,6 +1963,11 @@ export const fr: TranslationResources = {
       openParent: "Ouvrir le parent",
     },
     title: "Sous-agents",
+    expandRow: "Développer le sous-agent",
+    collapseRow: "Réduire le sous-agent",
+    moreDescendants: "{{count}} de plus",
+    moreDescendants_one: "{{count}} de plus",
+    moreDescendants_other: "{{count}} de plus",
     pillLabelOne: "1 sous-agent",
     pillLabelMany: "{{count}} sous-agents",
     pillLabelWorking: "{{count}} en cours",
@@ -2409,6 +2414,11 @@ export const fr: TranslationResources = {
           inApp: "Dans Paseo",
           external: "Navigateur externe",
         },
+      },
+      confirmTerminalClose: {
+        label: "Confirmer avant de fermer le terminal",
+        description:
+          "Demander confirmation avant de fermer un onglet de terminal et d’arrêter ses processus",
       },
       terminalScrollback: {
         label: "Historique du terminal",

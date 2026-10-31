@@ -20,6 +20,12 @@ import { ParentAgentCallout } from "@/subagents/parent";
 import { type SubagentRow, useSubagentsForParent } from "@/subagents/select";
 import { useSubagentOpensInSheet } from "@/subagents/opens-in-sheet";
 import { SubagentsTrack } from "@/subagents/track";
+import type { ProviderSubagentRow } from "@/subagents/select";
+import type { SubagentTreeRow } from "@/subagents/tree";
+import {
+  resolveSubagentTrackDirectRows,
+  useSubagentTreeForParent,
+} from "@/subagents/use-subagent-tree";
 import {
   providerSubagentKey,
   providerSubagentLifecycleStatus,
@@ -50,20 +56,26 @@ function resolveChildTrackClearance(childCount: number, isCompact: boolean) {
 function ProviderSubagentChildTrack({
   serverId,
   rows,
+  treeRows,
+  onToggleExpansion,
   onOpenProviderSubagent,
   opensInSheet,
 }: {
   serverId: string;
   rows: ReturnType<typeof useSubagentsForParent>;
+  treeRows: SubagentTreeRow[];
+  onToggleExpansion: (row: ProviderSubagentRow, expanded: boolean) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   opensInSheet: (row: SubagentRow) => boolean;
 }) {
-  if (rows.length === 0) return null;
+  if (treeRows.length === 0) return null;
   return (
     <ComposerTrackBar>
       <SubagentsTrack
         serverId={serverId}
         rows={rows}
+        treeRows={treeRows}
+        onToggleExpansion={onToggleExpansion}
         onOpenSubagent={NOOP_SUBAGENT}
         onOpenProviderSubagent={onOpenProviderSubagent}
         opensInSheet={opensInSheet}
@@ -138,12 +150,33 @@ function ProviderSubagentPanel() {
   const supported = serverInfo?.features?.projectedSubagentTimeline === true;
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const isCompact = useIsCompactFormFactor();
-  const childRows = useSubagentsForParent({
+  const directChildRows = useSubagentsForParent({
     serverId,
     parentAgentId: target.parentAgentId,
     providerParentSubagentId: target.subagentId,
   });
-  const childTrackClearance = resolveChildTrackClearance(childRows.length, isCompact);
+  const childTreeRows = useSubagentTreeForParent({
+    serverId,
+    parentAgentId: target.parentAgentId,
+    providerParentSubagentId: target.subagentId,
+  });
+  const childRows = useMemo(
+    () =>
+      resolveSubagentTrackDirectRows({
+        rows: directChildRows,
+        treeRows: childTreeRows,
+        ownerSubagentId: target.subagentId,
+      }),
+    [childTreeRows, directChildRows, target.subagentId],
+  );
+  const toggleExpansion = useProviderSubagentStore((state) => state.toggleTrackExpansion);
+  const handleToggleExpansion = useCallback(
+    (row: ProviderSubagentRow, expanded: boolean) => {
+      toggleExpansion(providerSubagentKey(serverId, row.parentAgentId, row.id), expanded);
+    },
+    [serverId, toggleExpansion],
+  );
+  const childTrackClearance = resolveChildTrackClearance(childTreeRows.length, isCompact);
   const opensInSheet = useSubagentOpensInSheet(
     buildWorkspaceTabPersistenceKey({ serverId, workspaceId }),
   );
@@ -273,6 +306,8 @@ function ProviderSubagentPanel() {
         <ProviderSubagentChildTrack
           serverId={serverId}
           rows={childRows}
+          treeRows={childTreeRows}
+          onToggleExpansion={handleToggleExpansion}
           onOpenProviderSubagent={openProviderChild}
           opensInSheet={opensInSheet}
         />

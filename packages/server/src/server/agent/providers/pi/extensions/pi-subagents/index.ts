@@ -1,18 +1,15 @@
 import { z } from "zod";
 import { extractTextFromToolResult } from "../../tool-call-mapper.js";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
-
-import { projectRun, readAsyncStatus, resolveAsyncDir, type AsyncRun } from "./async-runs.js";
-import { PI_SUBAGENTS_ASYNC_STARTED_MARKER, piSubagentsRuntimeBridge } from "./runtime-bridge.js";
+import { projectRun, readAsyncStatus, type AsyncRun } from "./async-runs.js";
+import { customMessageText, noticeStatus } from "./notice.js";
+import { createPiWorkflowTracker, WorkflowLaunchDetails } from "./workflow.js";
 
 const Args = z
   .object({
     agent: z.string().trim().min(1).optional(),
     task: z.string().trim().min(1).optional(),
     async: z.boolean().optional(),
-    workflowScript: z.string().optional(),
-    workflowScriptPath: z.string().optional(),
-    workflow: z.string().optional(),
     action: z.unknown().optional(),
   })
   .passthrough();
@@ -38,73 +35,25 @@ const Details = z
     completions: z.array(Completion).optional(),
   })
   .passthrough();
-const CodemodeDetails = z.object({
-  calls: z.array(z.object({ name: z.string(), status: z.string() })),
-});
-const Started = z.object({ id: z.string().min(1), asyncDir: z.string().min(1) });
-
-/** The `subagent-notify` header; a grouped notice reports every run as completed. */
-function noticeStatus(header: string) {
-  if (/^Background tasks completed \(\d+\):/.test(header)) return "completed";
-  const outcome = header.match(
-    /^(?:Background task|Detached foreground task) (completed|failed|paused|stopped): \*\*/,
-  )?.[1];
-  if (outcome === "stopped" || outcome === "paused") return "canceled";
-  return outcome as "completed" | "failed" | undefined;
-}
-
 export const piSubagents: PiExtension = {
   id: "pi-subagents",
-  runtimeBridge: piSubagentsRuntimeBridge,
   createSession: () => {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
-    const knownDirs = new Map<string, string>();
+    const workflows = createPiWorkflowTracker({ readSessions });
+    /** Keyed by async directory, which both status.json and the completion notice carry. */
     const asyncRuns = new Map<string, AsyncRun>();
-    const registerRun = (dir: string, owner: string, toolCallId: string, workflow: boolean) => {
-      const existing = asyncRuns.get(dir);
-      if (existing) {
-        if (existing.toolCallId !== toolCallId) {
-          existing.toolCallId = toolCallId;
-          existing.emitted.clear();
-        }
-        return existing;
+    const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
+      if (details.asyncDir && call.status !== "failed") {
+        if (!asyncRuns.has(details.asyncDir))
+          asyncRuns.set(details.asyncDir, {
+            dir: details.asyncDir,
+            owner: call.callId,
+            toolCallId: call.callId,
+            polling: true,
+            emitted: new Map(),
+          });
       }
-      const run: AsyncRun = {
-        dir,
-        owner,
-        toolCallId,
-        workflow,
-        polling: true,
-        emitted: new Map(),
-      };
-      asyncRuns.set(dir, run);
-      return run;
-    };
-    const mapCodemode = (call: PiExtensionToolCall) => {
-      if (call.status === "running") return undefined;
-      const details = CodemodeDetails.safeParse(
-        typeof call.result === "object" ? call.result?.details : null,
-      );
-      if (
-        !details.success ||
-        !details.data.calls.some((nested) => nested.name === "subagent" && nested.status === "ok")
-      )
-        return undefined;
-      const text = extractTextFromToolResult(call.result) ?? "";
-      const subagents: NonNullable<PiExtensionToolMapping["subagents"]> = [];
-      const childSessions: NonNullable<PiExtensionToolMapping["childSessions"]> = [];
-      for (const match of text.matchAll(/\bAsync(?: workflow|:[^\n[]*)? \[([0-9a-f-]{36})\]/g)) {
-        const dir = resolveAsyncDir(match[1], knownDirs);
-        const status = readAsyncStatus(dir);
-        // Text alone cannot prove which Pi parent owns this run.
-        if (!status?.toolCallId?.startsWith(`${call.callId}/`)) continue;
-        const run = registerRun(dir, status.toolCallId, call.callId, status.mode === "workflow");
-        const mapped = projectRun(run, status, readSessions);
-        subagents.push(...mapped.subagents);
-        childSessions.push(...mapped.childSessions);
-      }
-      return subagents.length || childSessions.length ? { subagents, childSessions } : undefined;
     };
     const collectRows = (
       owner: string,
@@ -151,54 +100,33 @@ export const piSubagents: PiExtension = {
       }
       return subagents.length ? { subagents, childSessions } : undefined;
     };
-    const mapAsyncSpawn = (
-      call: PiExtensionToolCall,
-      details: z.infer<typeof Details>,
-      workflow: boolean,
-    ): PiExtensionToolMapping => {
-      const isWorkflow = workflow || details.mode === "workflow";
-      const status = details.asyncDir ? readAsyncStatus(details.asyncDir) : undefined;
-      if (call.status === "completed" && isWorkflow && status?.toolCallId !== call.callId)
-        return { subagents: [{ type: "remove", id: call.callId }] };
-      if (details.asyncDir && call.status !== "failed") {
-        if (status?.toolCallId && status.toolCallId !== call.callId) return { subagents: [] };
-        const run = registerRun(details.asyncDir, call.callId, call.callId, isWorkflow);
-        if (status) return projectRun(run, status, readSessions);
-      }
-      return {
-        subagents: [
-          {
-            type: "upsert",
-            id: call.callId,
-            toolCallId: call.callId,
-            status: call.status === "failed" ? "failed" : "running",
-          },
-        ],
-      };
-    };
     const spawnArgs = (raw: unknown) => {
-      const parsed = Args.safeParse(raw);
-      if (!parsed.success || parsed.data.action !== undefined) return undefined;
-      const args = parsed.data;
-      const workflow = Boolean(args.workflowScript || args.workflowScriptPath || args.workflow);
-      if (workflow) return { args, workflow, title: "workflow" };
-      if (args.agent && args.task) return { args, workflow, title: args.agent };
-      return undefined;
+      const args = Args.safeParse(raw);
+      if (!args.success || args.data.action !== undefined || !args.data.agent || !args.data.task)
+        return undefined;
+      return args.data;
+    };
+    const projectAsyncSpawn = (details: z.infer<typeof Details>) => {
+      const run = details.asyncDir ? asyncRuns.get(details.asyncDir) : undefined;
+      if (!run) return undefined;
+      const status = readAsyncStatus(run.dir);
+      if (!status || status.mode === "workflow") return undefined;
+      if (status.toolCallId && status.toolCallId !== run.owner) return undefined;
+      return projectRun(run, status, readSessions);
     };
     const mapSpawn = (call: PiExtensionToolCall) => {
-      const parsed = spawnArgs(call.args);
-      if (!parsed) return undefined;
-      const { args, workflow, title } = parsed;
+      const args = spawnArgs(call.args);
+      if (!args) return undefined;
       const detail = {
         type: "sub_agent" as const,
-        subAgentType: title,
-        description: args.task ?? args.workflow,
+        subAgentType: args.agent,
+        description: args.task,
         log: extractTextFromToolResult(call.result)?.trim() ?? "",
       };
       const base = {
         type: "upsert" as const,
         id: call.callId,
-        title,
+        title: args.agent,
         description: args.task,
         toolCallId: call.callId,
       };
@@ -213,51 +141,47 @@ export const piSubagents: PiExtension = {
           : { detail };
       if (details.data.runId) callsByRun.set(details.data.runId, call.callId);
       if (details.data.results.length === 0 && (details.data.asyncId || args.async)) {
-        const mapped = mapAsyncSpawn(call, details.data, workflow);
-        const subagents = mapped.subagents?.map((row) =>
-          row.type === "upsert" ? { ...base, ...row } : row,
-        );
-        return { detail, ...mapped, subagents };
+        rememberAsyncRun(details.data, call);
+        const projected = projectAsyncSpawn(details.data);
+        if (projected) return { detail, ...projected };
+        return {
+          detail,
+          subagents: [
+            {
+              ...base,
+              status: call.status === "failed" ? ("failed" as const) : ("running" as const),
+            },
+          ],
+        };
       }
       if (details.data.results.length === 0 && call.status === "failed")
         return { detail, subagents: [{ ...base, status: "failed" as const }] };
-      const mapped = collectRows(
-        call.callId,
-        details.data.results,
-        args.task,
-        call.status === "failed",
-      );
-      if (workflow)
-        mapped.subagents.push({
-          ...base,
-          status: call.status === "failed" ? "failed" : "completed",
-        });
-      return { detail, ...mapped };
+      return {
+        detail,
+        ...collectRows(call.callId, details.data.results, args.task, call.status === "failed"),
+      };
     };
     return {
       mapToolCall(call) {
-        if (call.toolName === "codemode") return mapCodemode(call);
         if (call.toolName === "bg_wait") return mapWait(call);
-        if (call.toolName === "subagent") return mapSpawn(call);
-        return undefined;
-      },
-      mapRuntimeNotification(message) {
-        const prefix = `${PI_SUBAGENTS_ASYNC_STARTED_MARKER} `;
-        if (!message.startsWith(prefix)) return undefined;
-        try {
-          const parsed = Started.safeParse(JSON.parse(message.slice(prefix.length)));
-          if (parsed.success) knownDirs.set(parsed.data.id, parsed.data.asyncDir);
-        } catch {
-          // Notifications are external input; malformed bridge messages are still claimed.
+        if (call.toolName !== "subagent") return undefined;
+        if (call.status !== "running") {
+          const details = WorkflowLaunchDetails.safeParse(
+            typeof call.result === "object" ? call.result?.details : null,
+          );
+          if (details.success && call.status !== "failed")
+            return workflows.launch(details.data, call.callId);
         }
-        return { subagents: [] };
+        return mapSpawn(call);
       },
+      // The notice is the only completion Pi persists, so replay settles async runs from it.
       mapCustomMessage(message) {
+        if (message.customType === "subagent-incremental-child-notify")
+          return workflows.mapNotice(message);
         if (message.customType !== "subagent-notify") return undefined;
-        const text =
-          typeof message.content === "string"
-            ? message.content
-            : extractTextFromToolResult({ content: message.content });
+        const workflow = workflows.mapNotice(message);
+        if (workflow) return workflow;
+        const text = customMessageText(message);
         const lines = text?.split("\n") ?? [];
         const status = noticeStatus(lines[0] ?? "");
         if (!status) return undefined;
@@ -288,11 +212,19 @@ export const piSubagents: PiExtension = {
         for (const run of asyncRuns.values()) {
           if (!run.polling) continue;
           const status = readAsyncStatus(run.dir);
-          if (!status || (status.toolCallId && status.toolCallId !== run.owner)) continue;
+          if (
+            !status ||
+            status.mode === "workflow" ||
+            (status.toolCallId && status.toolCallId !== run.owner)
+          )
+            continue;
           const mapped = projectRun(run, status, readSessions);
           subagents.push(...mapped.subagents);
           childSessions.push(...mapped.childSessions);
         }
+        const workflow = workflows.poll();
+        subagents.push(...(workflow?.subagents ?? []));
+        childSessions.push(...(workflow?.childSessions ?? []));
         return subagents.length || childSessions.length ? { subagents, childSessions } : undefined;
       },
     };

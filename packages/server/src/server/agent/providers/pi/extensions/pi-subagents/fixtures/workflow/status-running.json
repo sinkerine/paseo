@@ -1,0 +1,212 @@
+{
+  "runId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+  "toolCallId": "scripted-workflow-codemode/1",
+  "sessionId": "__CAPTURE_ROOT__/parent.jsonl",
+  "completionOwnerId": "be1d6319-d39f-4304-9bba-3e821f4271ed",
+  "mode": "workflow",
+  "state": "running",
+  "startedAt": 1793411495453,
+  "lastUpdate": 1793411497042,
+  "cwd": "__CAPTURE_ROOT__/work",
+  "sessionRoot": "__CAPTURE_ROOT__/parent",
+  "pid": 3512771,
+  "steps": [
+    {
+      "agent": "worker",
+      "sessionName": "worker: PASEO_SCRIPTED_CHILD:T1-implement",
+      "label": "Implement T1",
+      "workflowKey": "T1-implement",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411495479,
+      "phase": "T1",
+      "sessionFile": "__CHILD_SESSION_T1-implement__",
+      "async": true,
+      "runId": "02a3fd43-70b7-4c37-9bd7-6fb90109cbc2",
+      "durationMs": 518
+    },
+    {
+      "agent": "reviewer",
+      "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T1-review-1",
+      "label": "Review T1 round 1",
+      "workflowKey": "T1-review-1",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411495998,
+      "phase": "T1",
+      "sessionFile": "__CHILD_SESSION_T1-review-1__",
+      "async": true,
+      "runId": "8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9",
+      "durationMs": 511
+    },
+    {
+      "agent": "worker",
+      "sessionName": "worker: PASEO_SCRIPTED_CHILD:T2.implement",
+      "label": "Implement T2",
+      "workflowKey": "T2.implement",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "completed",
+      "startedAt": 1793411496510,
+      "sessionFile": "__CHILD_SESSION_T2.implement__",
+      "async": true,
+      "runId": "6e44f48d-1d4e-41b6-b86c-bf59f6808657",
+      "durationMs": 518
+    },
+    {
+      "agent": "reviewer",
+      "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T2.review",
+      "label": "Review T2",
+      "workflowKey": "T2.review",
+      "parentWorkflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+      "status": "running",
+      "startedAt": 1793411497030,
+      "sessionFile": "__CHILD_SESSION_T2.review__",
+      "async": true,
+      "runId": "75386e38-5f31-4723-b8ac-2c080405d289"
+    }
+  ],
+  "workflow": {
+    "trace": [
+      {
+        "operation": "run",
+        "key": "T1-implement",
+        "state": "started",
+        "phase": "T1",
+        "label": "Implement T1",
+        "agent": "worker"
+      },
+      {
+        "operation": "run",
+        "key": "T1-implement",
+        "state": "completed",
+        "durationMs": 518,
+        "phase": "T1",
+        "label": "Implement T1",
+        "agent": "worker",
+        "runId": "02a3fd43-70b7-4c37-9bd7-6fb90109cbc2"
+      },
+      {
+        "operation": "run",
+        "key": "T1-review-1",
+        "state": "started",
+        "phase": "T1",
+        "label": "Review T1 round 1",
+        "agent": "reviewer"
+      },
+      {
+        "operation": "run",
+        "key": "T1-review-1",
+        "state": "completed",
+        "durationMs": 511,
+        "phase": "T1",
+        "label": "Review T1 round 1",
+        "agent": "reviewer",
+        "runId": "8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9"
+      },
+      {
+        "operation": "run",
+        "key": "T2.implement",
+        "state": "started",
+        "label": "Implement T2",
+        "agent": "worker",
+        "generatedLaneKey": "T2"
+      },
+      {
+        "operation": "run",
+        "key": "T2.implement",
+        "state": "completed",
+        "durationMs": 518,
+        "label": "Implement T2",
+        "agent": "worker",
+        "generatedLaneKey": "T2",
+        "runId": "6e44f48d-1d4e-41b6-b86c-bf59f6808657"
+      },
+      {
+        "operation": "run",
+        "key": "T2.review",
+        "state": "started",
+        "label": "Review T2",
+        "agent": "reviewer",
+        "generatedLaneKey": "T2"
+      }
+    ],
+    "emits": [],
+    "console": [],
+    "args": {},
+    "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  "workflowChildren": {
+    "version": 1,
+    "parentToolCallId": "scripted-workflow-codemode/1",
+    "workflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+    "inventoryComplete": false,
+    "workflowState": "running",
+    "children": [
+      {
+        "childId": "T1-implement",
+        "state": "completed",
+        "runId": "02a3fd43-70b7-4c37-9bd7-6fb90109cbc2",
+        "agent": "worker",
+        "sessionName": "worker: PASEO_SCRIPTED_CHILD:T1-implement"
+      },
+      {
+        "childId": "T1-review-1",
+        "state": "completed",
+        "runId": "8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9",
+        "agent": "reviewer",
+        "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T1-review-1"
+      },
+      {
+        "childId": "T2.implement",
+        "state": "completed",
+        "runId": "6e44f48d-1d4e-41b6-b86c-bf59f6808657",
+        "agent": "worker",
+        "sessionName": "worker: PASEO_SCRIPTED_CHILD:T2.implement"
+      },
+      {
+        "childId": "T2.review",
+        "state": "running",
+        "runId": "75386e38-5f31-4723-b8ac-2c080405d289",
+        "agent": "reviewer",
+        "sessionName": "reviewer: PASEO_SCRIPTED_CHILD:T2.review"
+      }
+    ]
+  },
+  "runFanoutBudget": {
+    "used": 4,
+    "limit": 64,
+    "remaining": 60
+  },
+  "currentStep": 3,
+  "workflowGraph": {
+    "runId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+    "mode": "workflow",
+    "phases": [
+      {
+        "title": "T2",
+        "nodeIds": ["T2.implement", "T2.review"]
+      }
+    ],
+    "nodes": [
+      {
+        "id": "T2.implement",
+        "kind": "step",
+        "agent": "worker",
+        "label": "Implement T2",
+        "status": "completed",
+        "flatIndex": 0,
+        "stepIndex": 0
+      },
+      {
+        "id": "T2.review",
+        "kind": "step",
+        "agent": "reviewer",
+        "label": "Review T2",
+        "status": "running",
+        "flatIndex": 1,
+        "stepIndex": 1
+      }
+    ],
+    "currentNodeId": "T2.review"
+  }
+}

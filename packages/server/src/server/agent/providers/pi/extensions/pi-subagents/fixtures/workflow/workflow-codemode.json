@@ -1,0 +1,394 @@
+{
+  "provenance": {
+    "package": "pi-subagents",
+    "version": "0.71.0",
+    "sourceCommit": "4af5e85a427b9f87334585ae8d0eb365d4dd2a1e",
+    "piVersion": "1.0.4",
+    "captureDate": "2026-10-31"
+  },
+  "events": [
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "scripted-workflow-codemode",
+      "toolName": "codemode",
+      "args": {
+        "code": "return await tools.subagent({\"workflowScript\":\"\\nawait runs.run(\\\"T1-implement\\\", { agent: \\\"worker\\\", label: \\\"Implement T1\\\", phase: \\\"T1\\\", task: \\\"PASEO_SCRIPTED_CHILD:T1-implement\\\" });\\nawait runs.run(\\\"T1-review-1\\\", { agent: \\\"reviewer\\\", label: \\\"Review T1 round 1\\\", phase: \\\"T1\\\", task: \\\"PASEO_SCRIPTED_CHILD:T1-review-1\\\" });\\nawait runs.lanes([{ key: \\\"T2\\\", stages: [\\n  { key: \\\"implement\\\", agent: \\\"worker\\\", label: \\\"Implement T2\\\", task: \\\"PASEO_SCRIPTED_CHILD:T2.implement\\\" },\\n  { key: \\\"review\\\", agent: \\\"reviewer\\\", label: \\\"Review T2\\\", task: \\\"PASEO_SCRIPTED_CHILD:T2.review\\\" }\\n] }]);\\nreturn runs.run(\\\"cleanup\\\", { agent: \\\"worker\\\", label: \\\"Cleanup\\\", task: \\\"PASEO_SCRIPTED_CHILD:cleanup\\\" });\\n\",\"async\":true});"
+      }
+    },
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "scripted-workflow-codemode/1",
+      "toolName": "subagent",
+      "args": {
+        "workflowScript": "\nawait runs.run(\"T1-implement\", { agent: \"worker\", label: \"Implement T1\", phase: \"T1\", task: \"PASEO_SCRIPTED_CHILD:T1-implement\" });\nawait runs.run(\"T1-review-1\", { agent: \"reviewer\", label: \"Review T1 round 1\", phase: \"T1\", task: \"PASEO_SCRIPTED_CHILD:T1-review-1\" });\nawait runs.lanes([{ key: \"T2\", stages: [\n  { key: \"implement\", agent: \"worker\", label: \"Implement T2\", task: \"PASEO_SCRIPTED_CHILD:T2.implement\" },\n  { key: \"review\", agent: \"reviewer\", label: \"Review T2\", task: \"PASEO_SCRIPTED_CHILD:T2.review\" }\n] }]);\nreturn runs.run(\"cleanup\", { agent: \"worker\", label: \"Cleanup\", task: \"PASEO_SCRIPTED_CHILD:cleanup\" });\n",
+        "async": true
+      },
+      "parentToolCallId": "scripted-workflow-codemode"
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "scripted-workflow-codemode/1",
+      "toolName": "subagent",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Run fan-out: 0/64 used, 64 remaining\nAsync workflow [59a8fc66-dd1a-49cc-afc2-da8e82b90b9f]\n\nThe async run is detached and running in the background.\nYou are in an interactive session. Return control to the user now; Pi will wake you through the native completion notification when this subagent completes or needs attention. Do not run sleep/polling loops to wait for this async subagent; it does not need a wait call.\nUse bg_wait only for provider, detached, or other background work that lacks a native completion notification.\nIf the current turn must receive results from work without a native notification before it ends, call blocking bg_wait(); ordinary async subagent runs do not need a wait call because their completion is delivered natively.\nOtherwise, continue any independent work or return control to the user. Use subagent({ action: \"status\", id: \"...\" }) for a one-shot status/result or to inspect a blocked/stale run, never as a wait loop.\nMission: 06ce9dca-9943-4787-a6de-f00b1f0a3f21 (active)"
+          }
+        ],
+        "details": {
+          "mode": "workflow",
+          "runId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+          "toolCallId": "scripted-workflow-codemode/1",
+          "asyncId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+          "asyncDir": "__ASYNC_DIR__",
+          "results": [],
+          "workflow": {
+            "trace": [],
+            "emits": [],
+            "console": [],
+            "args": {},
+            "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          "workflowChildren": {
+            "version": 1,
+            "parentToolCallId": "scripted-workflow-codemode/1",
+            "workflowRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+            "inventoryComplete": false,
+            "workflowState": "running",
+            "children": []
+          },
+          "chatProgress": {
+            "mode": "off",
+            "repoRelation": "same",
+            "repoLabel": "paseo"
+          },
+          "activeAsyncCapacity": {
+            "used": 0,
+            "limit": 0
+          },
+          "runFanoutBudget": {
+            "used": 0,
+            "limit": 64,
+            "remaining": 64
+          },
+          "missionId": "06ce9dca-9943-4787-a6de-f00b1f0a3f21",
+          "missionPath": "__CAPTURE_ROOT__/pi-agent/missions/projects/d4349716e669e9bb7985f3963fb01c69999199490d2a024c235817ba9a722b51/06ce9dca-9943-4787-a6de-f00b1f0a3f21.json",
+          "mission": {
+            "schemaVersion": 1,
+            "id": "06ce9dca-9943-4787-a6de-f00b1f0a3f21",
+            "title": "[prompt redacted]",
+            "objective": "[prompt redacted]",
+            "status": "active",
+            "createdAt": "2026-10-31T01:51:35.452Z",
+            "updatedAt": "2026-10-31T01:51:35.456Z",
+            "runs": [
+              {
+                "runId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+                "mode": "workflow",
+                "asyncDir": "__ASYNC_DIR__",
+                "status": "active",
+                "startedAt": "2026-10-31T01:51:35.456Z"
+              }
+            ],
+            "workflowChildren": [],
+            "decisions": [],
+            "artifacts": [
+              {
+                "kind": "status",
+                "path": "__ASYNC_DIR__/status.json"
+              },
+              {
+                "kind": "other",
+                "path": "__ASYNC_DIR__/events.jsonl",
+                "description": "Lifecycle events"
+              }
+            ],
+            "receipts": [],
+            "cwd": "__CAPTURE_ROOT__/work",
+            "ownerSessionId": "__CAPTURE_ROOT__/parent.jsonl"
+          }
+        }
+      },
+      "isError": false,
+      "parentToolCallId": "scripted-workflow-codemode"
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "scripted-workflow-codemode",
+      "toolName": "codemode",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Run fan-out: 0/64 used, 64 remaining\nAsync workflow [59a8fc66-dd1a-49cc-afc2-da8e82b90b9f]\n\nThe async run is detached and running in the background.\nYou are in an interactive session. Return control to the user now; Pi will wake you through the native completion notification when this subagent completes or needs attention. Do not run sleep/polling loops to wait for this async subagent; it does not need a wait call.\nUse bg_wait only for provider, detached, or other background work that lacks a native completion notification.\nIf the current turn must receive results from work without a native notification before it ends, call blocking bg_wait(); ordinary async subagent runs do not need a wait call because their completion is delivered natively.\nOtherwise, continue any independent work or return control to the user. Use subagent({ action: \"status\", id: \"...\" }) for a one-shot status/result or to inspect a blocked/stale run, never as a wait loop.\nMission: 06ce9dca-9943-4787-a6de-f00b1f0a3f21 (active)"
+          }
+        ],
+        "details": {
+          "calls": [
+            {
+              "id": "scripted-workflow-codemode/1",
+              "name": "subagent",
+              "args": "{\"workflowScript\":\"\\nawait runs.run(\\\"T1-implement\\\", { agent: \\\"worker\\\", label: \\\"Implement T1\\\", phase: \\\"T1\\\", task: \\\"PASEO_SCRIPTED_CHILD:T1-implement\\\" });\\nawait runs.run(\\\"T1-review-1\\\", {...",
+              "status": "ok",
+              "durationMs": 35.60654400000004
+            }
+          ]
+        }
+      },
+      "isError": false
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-incremental-child-notify",
+        "content": "Workflow child completed: **T1-implement**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 02a3fd43-70b7-4c37-9bd7-6fb90109cbc2\nOutput: __CAPTURE_ROOT__/subagent-artifacts/02a3fd43-70b7-4c37-9bd7-6fb90109cbc2_worker_output.md\nStatus: workflow still running",
+        "display": false,
+        "timestamp": 1793411495997
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-incremental-child-notify",
+        "content": "Workflow child completed: **T1-review-1**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9\nOutput: __CAPTURE_ROOT__/subagent-artifacts/8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9_reviewer_output.md\nStatus: workflow still running",
+        "display": false,
+        "timestamp": 1793411496509
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-incremental-child-notify",
+        "content": "Workflow child completed: **T2.implement**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 6e44f48d-1d4e-41b6-b86c-bf59f6808657\nOutput: __CAPTURE_ROOT__/subagent-artifacts/6e44f48d-1d4e-41b6-b86c-bf59f6808657_worker_output.md\nStatus: workflow still running",
+        "display": false,
+        "timestamp": 1793411497029
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-incremental-child-notify",
+        "content": "Workflow child completed: **T2.review**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 75386e38-5f31-4723-b8ac-2c080405d289\nOutput: __CAPTURE_ROOT__/subagent-artifacts/75386e38-5f31-4723-b8ac-2c080405d289_reviewer_output.md\nStatus: workflow still running",
+        "display": false,
+        "timestamp": 1793411498049
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-incremental-child-notify",
+        "content": "Workflow child completed: **cleanup**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 6c091616-2264-44b0-81f6-24d35d5bdfab\nOutput: __CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md\nStatus: workflow still running",
+        "display": false,
+        "timestamp": 1793411498559
+      }
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-notify",
+        "content": "Background task completed: **workflow**\nWorkflow receipt: __ASYNC_DIR__/workflow-receipt.json\n\nWorkflow completed with 5 child run(s). Return: {\n  \"key\": \"cleanup\",\n  \"ok\": true,\n  \"asyncDir\": \"__CAPTURE_ROOT__/subagents-tmp/async-subagent-runs/6c091616-2264-44b0-81f6-24d35d5bdfab\",\n  \"agent\": \"worker\",\n  \"runId\": \"6c091616-2264-44b0-81f6-24d35d5bdfab\",\n  \"output\": \"PASEO_SCRIPTED_DONE:cleanup\",\n  \"resolvedContext\": \"fresh\",\n  \"outputArtifactPath\": \"__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md\",\n  \"resumability\": {\n    \"state\": \"resumable\"\n  },\n  \"continuation\": {\n    \"runIds\": [\n      \"6c091616-2264-44b0-81f6-24d35d5bdfab\"\n    ]\n  },\n  \"artifactPaths\": [\n    \"__CAPTURE_ROOT__/subagents-tmp/async-subagent-runs/6c091616-2264-44b0-81f6-24d35d5bdfab\",\n    \"__CHILD_SESSION_cleanup__\"\n  ],\n  \"results\": [\n    {\n      \"index\": 0,\n      \"agent\": \"worker\",\n      \"sessionName\": \"worker: PASEO_SCRIPTED_CH Trace: 10 event(s).\n\nChild outputs:\n- key=T1-implement run=02a3fd43-70b7-4c37-9bd7-6fb90109cbc2 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/02a3fd43-70b7-4c37-9bd7-6fb90109cbc2_worker_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T1-implement\n- key=T1-review-1 run=8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9_reviewer_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T1-review-1\n- key=T2.implement run=6e44f48d-1d4e-41b6-b86c-bf59f6808657 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/6e44f48d-1d4e-41b6-b86c-bf59f6808657_worker_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T2.implement\n- key=T2.review run=75386e38-5f31-4723-b8ac-2c080405d289 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/75386e38-5f31-4723-b8ac-2c080405d289_reviewer_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T2.review\n- key=cleanup run=6c091616-2264-44b0-81f6-24d35d5bdfab status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:cleanup\n\nRetention-managed async directory: __ASYNC_DIR__\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild runs: T1-implement=02a3fd43-70b7-4c37-9bd7-6fb90109cbc2 (completed), T1-review-1=8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9 (completed), T2.implement=6e44f48d-1d4e-41b6-b86c-bf59f6808657 (completed), T2.review=75386e38-5f31-4723-b8ac-2c080405d289 (completed), cleanup=6c091616-2264-44b0-81f6-24d35d5bdfab (completed)",
+        "display": false,
+        "timestamp": 1793411498718
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "RUN_WORKFLOW"
+        }
+      ],
+      "timestamp": 1793411495379
+    },
+    {
+      "role": "assistant",
+      "api": "paseo-scripted",
+      "provider": "paseo-scripted",
+      "model": "workflow",
+      "content": [
+        {
+          "type": "toolCall",
+          "id": "scripted-workflow-codemode",
+          "name": "codemode",
+          "arguments": {
+            "code": "return await tools.subagent({\"workflowScript\":\"\\nawait runs.run(\\\"T1-implement\\\", { agent: \\\"worker\\\", label: \\\"Implement T1\\\", phase: \\\"T1\\\", task: \\\"PASEO_SCRIPTED_CHILD:T1-implement\\\" });\\nawait runs.run(\\\"T1-review-1\\\", { agent: \\\"reviewer\\\", label: \\\"Review T1 round 1\\\", phase: \\\"T1\\\", task: \\\"PASEO_SCRIPTED_CHILD:T1-review-1\\\" });\\nawait runs.lanes([{ key: \\\"T2\\\", stages: [\\n  { key: \\\"implement\\\", agent: \\\"worker\\\", label: \\\"Implement T2\\\", task: \\\"PASEO_SCRIPTED_CHILD:T2.implement\\\" },\\n  { key: \\\"review\\\", agent: \\\"reviewer\\\", label: \\\"Review T2\\\", task: \\\"PASEO_SCRIPTED_CHILD:T2.review\\\" }\\n] }]);\\nreturn runs.run(\\\"cleanup\\\", { agent: \\\"worker\\\", label: \\\"Cleanup\\\", task: \\\"PASEO_SCRIPTED_CHILD:cleanup\\\" });\\n\",\"async\":true});"
+          }
+        }
+      ],
+      "stopReason": "toolUse",
+      "timestamp": 1793411495383,
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "thinkingLevel": "off"
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "scripted-workflow-codemode",
+      "toolName": "codemode",
+      "content": [
+        {
+          "type": "text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+        },
+        {
+          "type": "text",
+          "text": "Run fan-out: 0/64 used, 64 remaining\nAsync workflow [59a8fc66-dd1a-49cc-afc2-da8e82b90b9f]\n\nThe async run is detached and running in the background.\nYou are in an interactive session. Return control to the user now; Pi will wake you through the native completion notification when this subagent completes or needs attention. Do not run sleep/polling loops to wait for this async subagent; it does not need a wait call.\nUse bg_wait only for provider, detached, or other background work that lacks a native completion notification.\nIf the current turn must receive results from work without a native notification before it ends, call blocking bg_wait(); ordinary async subagent runs do not need a wait call because their completion is delivered natively.\nOtherwise, continue any independent work or return control to the user. Use subagent({ action: \"status\", id: \"...\" }) for a one-shot status/result or to inspect a blocked/stale run, never as a wait loop.\nMission: 06ce9dca-9943-4787-a6de-f00b1f0a3f21 (active)"
+        }
+      ],
+      "details": {
+        "calls": [
+          {
+            "id": "scripted-workflow-codemode/1",
+            "name": "subagent",
+            "args": "{\"workflowScript\":\"\\nawait runs.run(\\\"T1-implement\\\", { agent: \\\"worker\\\", label: \\\"Implement T1\\\", phase: \\\"T1\\\", task: \\\"PASEO_SCRIPTED_CHILD:T1-implement\\\" });\\nawait runs.run(\\\"T1-review-1\\\", {...",
+            "status": "ok",
+            "durationMs": 35.60654400000004
+          }
+        ]
+      },
+      "isError": false,
+      "timestamp": 1793411495462,
+      "nestedCalls": {
+        "calls": [
+          {
+            "id": "scripted-workflow-codemode/1",
+            "name": "subagent",
+            "status": "ok",
+            "arguments": {
+              "workflowScript": "\nawait runs.run(\"T1-implement\", { agent: \"worker\", label: \"Implement T1\", phase: \"T1\", task: \"PASEO_SCRIPTED_CHILD:T1-implement\" });\nawait runs.run(\"T1-review-1\", { agent: \"reviewer\", label: \"Review T1 round 1\", phase: \"T1\", task: \"PASEO_SCRIPTED_CHILD:T1-review-1\" });\nawait runs.lanes([{ key: \"T2\", stages: [\n  { key: \"implement\", agent: \"worker\", label: \"Implement T2\", task: \"PASEO_SCRIPTED_CHILD:T2.implement\" },\n  { key: \"review\", agent: \"reviewer\", label: \"Review T2\", task: \"PASEO_SCRIPTED_CHILD:T2.review\" }\n] }]);\nreturn runs.run(\"cleanup\", { agent: \"worker\", label: \"Cleanup\", task: \"PASEO_SCRIPTED_CHILD:cleanup\" });\n",
+              "async": true
+            },
+            "durationMs": 35
+          }
+        ],
+        "complete": true
+      }
+    },
+    {
+      "role": "assistant",
+      "api": "paseo-scripted",
+      "provider": "paseo-scripted",
+      "model": "workflow",
+      "content": [
+        {
+          "type": "text",
+          "text": "PASEO_SCRIPTED_PARENT_IDLE"
+        }
+      ],
+      "stopReason": "stop",
+      "timestamp": 1793411495464,
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "thinkingLevel": "off"
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **T1-implement**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 02a3fd43-70b7-4c37-9bd7-6fb90109cbc2\nOutput: __CAPTURE_ROOT__/subagent-artifacts/02a3fd43-70b7-4c37-9bd7-6fb90109cbc2_worker_output.md\nStatus: workflow still running",
+      "display": false,
+      "timestamp": 1793411495997
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **T1-review-1**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9\nOutput: __CAPTURE_ROOT__/subagent-artifacts/8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9_reviewer_output.md\nStatus: workflow still running",
+      "display": false,
+      "timestamp": 1793411496509
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **T2.implement**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 6e44f48d-1d4e-41b6-b86c-bf59f6808657\nOutput: __CAPTURE_ROOT__/subagent-artifacts/6e44f48d-1d4e-41b6-b86c-bf59f6808657_worker_output.md\nStatus: workflow still running",
+      "display": false,
+      "timestamp": 1793411497029
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **T2.review**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 75386e38-5f31-4723-b8ac-2c080405d289\nOutput: __CAPTURE_ROOT__/subagent-artifacts/75386e38-5f31-4723-b8ac-2c080405d289_reviewer_output.md\nStatus: workflow still running",
+      "display": false,
+      "timestamp": 1793411498049
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-incremental-child-notify",
+      "content": "Workflow child completed: **cleanup**\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild run: 6c091616-2264-44b0-81f6-24d35d5bdfab\nOutput: __CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md\nStatus: workflow still running",
+      "display": false,
+      "timestamp": 1793411498559
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-notify",
+      "content": "Background task completed: **workflow**\nWorkflow receipt: __ASYNC_DIR__/workflow-receipt.json\n\nWorkflow completed with 5 child run(s). Return: {\n  \"key\": \"cleanup\",\n  \"ok\": true,\n  \"asyncDir\": \"__CAPTURE_ROOT__/subagents-tmp/async-subagent-runs/6c091616-2264-44b0-81f6-24d35d5bdfab\",\n  \"agent\": \"worker\",\n  \"runId\": \"6c091616-2264-44b0-81f6-24d35d5bdfab\",\n  \"output\": \"PASEO_SCRIPTED_DONE:cleanup\",\n  \"resolvedContext\": \"fresh\",\n  \"outputArtifactPath\": \"__CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md\",\n  \"resumability\": {\n    \"state\": \"resumable\"\n  },\n  \"continuation\": {\n    \"runIds\": [\n      \"6c091616-2264-44b0-81f6-24d35d5bdfab\"\n    ]\n  },\n  \"artifactPaths\": [\n    \"__CAPTURE_ROOT__/subagents-tmp/async-subagent-runs/6c091616-2264-44b0-81f6-24d35d5bdfab\",\n    \"__CHILD_SESSION_cleanup__\"\n  ],\n  \"results\": [\n    {\n      \"index\": 0,\n      \"agent\": \"worker\",\n      \"sessionName\": \"worker: PASEO_SCRIPTED_CH Trace: 10 event(s).\n\nChild outputs:\n- key=T1-implement run=02a3fd43-70b7-4c37-9bd7-6fb90109cbc2 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/02a3fd43-70b7-4c37-9bd7-6fb90109cbc2_worker_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T1-implement\n- key=T1-review-1 run=8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9_reviewer_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T1-review-1\n- key=T2.implement run=6e44f48d-1d4e-41b6-b86c-bf59f6808657 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/6e44f48d-1d4e-41b6-b86c-bf59f6808657_worker_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T2.implement\n- key=T2.review run=75386e38-5f31-4723-b8ac-2c080405d289 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/75386e38-5f31-4723-b8ac-2c080405d289_reviewer_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:T2.review\n- key=cleanup run=6c091616-2264-44b0-81f6-24d35d5bdfab status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): __CAPTURE_ROOT__/subagent-artifacts/6c091616-2264-44b0-81f6-24d35d5bdfab_worker_output.md\n  Preview:\n    | PASEO_SCRIPTED_DONE:cleanup\n\nRetention-managed async directory: __ASYNC_DIR__\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nChild runs: T1-implement=02a3fd43-70b7-4c37-9bd7-6fb90109cbc2 (completed), T1-review-1=8f6722c6-c3aa-45c3-b781-8fc3fe3b68c9 (completed), T2.implement=6e44f48d-1d4e-41b6-b86c-bf59f6808657 (completed), T2.review=75386e38-5f31-4723-b8ac-2c080405d289 (completed), cleanup=6c091616-2264-44b0-81f6-24d35d5bdfab (completed)",
+      "display": false,
+      "timestamp": 1793411498721
+    },
+    {
+      "role": "assistant",
+      "api": "paseo-scripted",
+      "provider": "paseo-scripted",
+      "model": "workflow",
+      "content": [
+        {
+          "type": "text",
+          "text": "PASEO_SCRIPTED_PARENT_IDLE"
+        }
+      ],
+      "stopReason": "stop",
+      "timestamp": 1793411498722,
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "thinkingLevel": "off"
+    }
+  ]
+}
