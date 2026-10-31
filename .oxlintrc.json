@@ -124,8 +124,10 @@
                 "rmSync",
                 "writeFileSync"
               ],
-              // Provider child process: Pi loads this extension outside the daemon; it reads child-agent status there.
+              // TODO: synchronous Pi extension map/poll reads status in the daemon; migrate to bounded async ingestion alongside the contract.
               "server/agent/providers/pi/extensions/pi-subagents/index.ts": ["readFileSync"],
+              // TODO: synchronous Pi extension map/poll reads status in the daemon; migrate to bounded async ingestion alongside the contract.
+              "server/agent/providers/pi/extensions/pi-subagents/async-runs.ts": ["readFileSync"],
               // Startup/shutdown only: remove stale Unix listening sockets before bind and during disposal.
               "server/bootstrap.ts": ["existsSync", "unlinkSync"],
               // Startup configuration resolution: detect the bundled app distribution before the daemon listens.
