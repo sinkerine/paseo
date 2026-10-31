@@ -135,64 +135,83 @@ describe("Pi extension host", () => {
   });
 
   test("rejected child hydration emits no events", async () => {
-    const host = new PiExtensionHost(
-      [
-        {
-          id: "child",
-          createSession: () => ({
-            mapToolCall: () => ({ childSessions: [{ id: "child-1", file: "unused" }] }),
-          }),
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-rejected-hydration-"));
+    try {
+      const file = join(dir, "child.jsonl");
+      await appendFile(file, "x");
+      let readerCalls = 0;
+      const host = new PiExtensionHost(
+        [
+          {
+            id: "child",
+            createSession: () => ({
+              mapToolCall: () => ({ childSessions: [{ id: "child-1", file }] }),
+            }),
+          },
+        ],
+        undefined,
+        2 * 1024 * 1024,
+        async () => {
+          readerCalls += 1;
+          throw new Error("read failed");
         },
-      ],
-      undefined,
-      2 * 1024 * 1024,
-      async () => {
-        throw new Error("read failed");
-      },
-    );
-    const output = host.mapToolCall({
-      callId: "x",
-      toolName: "other",
-      args: {},
-      status: "completed",
-      result: null,
-    });
-    expect(await output?.hydration).toEqual([]);
+      );
+      const output = host.mapToolCall({
+        callId: "x",
+        toolName: "other",
+        args: {},
+        status: "completed",
+        result: null,
+      });
+      expect(await output?.hydration).toEqual([]);
+      expect(readerCalls).toBe(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
-  test("limits total child reads during replay", async () => {
-    const reads: string[] = [];
-    const host = new PiExtensionHost(
-      [
-        {
-          id: "child",
-          createSession: () => ({
-            mapToolCall: () => ({
-              childSessions: Array.from({ length: 10 }, (_, index) => ({
-                id: String(index),
-                file: String(index),
-              })),
-            }),
-          }),
-        },
-      ],
-      undefined,
-      16 * 1024 * 1024,
-      async (id) => {
-        reads.push(id);
-        return [];
-      },
-    );
-    const output = host.mapToolCall({
-      callId: "x",
-      toolName: "other",
-      args: {},
-      status: "completed",
-      result: null,
-    });
-    await output?.hydration;
-    expect(reads).toHaveLength(8);
+  test("charges replay reads by transcript size, not the per-file cap", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-replay-budget-"));
+    try {
+      const files = Array.from({ length: 10 }, (_, index) => join(dir, `${index}.jsonl`));
+      for (const file of files) await appendFile(file, "x".repeat(400));
+      const replay = async (budget: number) => {
+        const reads: number[] = [];
+        const host = new PiExtensionHost(
+          [
+            {
+              id: "child",
+              createSession: () => ({
+                mapToolCall: () => ({
+                  childSessions: files.map((file, index) => ({ id: String(index), file })),
+                }),
+              }),
+            },
+          ],
+          undefined,
+          budget,
+          async (_id, _file, bytes) => {
+            reads.push(bytes ?? 0);
+            return [];
+          },
+        );
+        await host.mapToolCall({
+          callId: "x",
+          toolName: "other",
+          args: {},
+          status: "completed",
+          result: null,
+        })?.hydration;
+        return reads.sort((a, b) => b - a);
+      };
+
+      expect(await replay(16 * 1024 * 1024)).toEqual(Array(10).fill(400));
+      expect(await replay(1000)).toEqual([400, 400, 200]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
+
   test("claims a tool, declines an unrelated one, and maps history like live events", () => {
     const host = createPiExtensionHost();
     const args = { agent: "scout", task: "Inspect files" };

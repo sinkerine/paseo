@@ -465,6 +465,77 @@ describe("pi-subagents adapter", () => {
 });
 
 describe("pi-subagents workflows", () => {
+  test("recovers a stopped workflow from a later mission snapshot live and on replay", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-pi-mission-"));
+    try {
+      const artifacts = await seedWorkflowArtifacts(root);
+      const status = JSON.parse(await workflowFixtureText("status-complete.json", artifacts));
+      await writeFile(
+        join(artifacts.dir, "status.json"),
+        JSON.stringify({ ...status, state: "stopped" }),
+      );
+      const notice: PiAgentMessage = {
+        role: "custom",
+        customType: "subagent-incremental-child-notify",
+        content: `Workflow child completed: **T1-implement**\nWorkflow run: ${workflowRunId}`,
+      };
+      const details = {
+        mode: "workflow",
+        runId: "later-workflow",
+        asyncDir: join(root, "later-workflow"),
+        results: [],
+        mission: {
+          runs: [
+            { mode: "single", runId: "single", asyncDir: join(root, "single") },
+            { mode: "workflow", runId: "decoy-run", asyncDir: join(root, "decoy-run") },
+            { mode: "workflow", runId: workflowRunId, asyncDir: artifacts.dir, status: "stopped" },
+          ],
+        },
+      };
+      const liveStore = new ProviderSubagentStore();
+      const host = createPiExtensionHost();
+      await applyHostOutput(liveStore, host.mapCustomMessage(notice));
+      await applyHostOutput(
+        liveStore,
+        host.mapToolCall({
+          callId: "later",
+          toolName: "subagent",
+          args: { workflowScript: "opaque", async: true },
+          status: "completed",
+          result: { details },
+        }),
+      );
+      const replayStore = new ProviderSubagentStore();
+      for await (const ev of streamPiHistory("pi", [
+        notice,
+        {
+          role: "toolResult",
+          toolCallId: "later",
+          toolName: "subagent",
+          content: [],
+          details,
+          isError: false,
+        },
+      ]))
+        applySubagentEvent(replayStore, ev);
+      expect(workflowStoreState(replayStore)).toEqual(workflowStoreState(liveStore));
+      expect(liveStore.get("parent", workflowId)).toMatchObject({
+        status: "canceled",
+        subtitle: "2 of 2 groups done",
+      });
+      expect(liveStore.list("parent")).toHaveLength(9);
+      for (const { key, agent, group } of workflowChildren) {
+        expect(liveStore.get("parent", `${workflowId}/${key}`)).toMatchObject({
+          subtitle: agent,
+          parentSubagentId: group ? `${workflowId}/group:${group}` : workflowId,
+        });
+        expect(workflowTimeline(liveStore, `${workflowId}/${key}`)).toHaveLength(3);
+        expect(workflowTimeline(replayStore, `${workflowId}/${key}`)).toHaveLength(3);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   test("maps the captured codemode workflow to the same real store tree and timelines live and on replay", async () => {
     const root = await mkdtemp(join(tmpdir(), "paseo-pi-workflow-"));
     const pi = new FakePi();

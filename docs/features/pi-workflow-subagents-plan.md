@@ -143,7 +143,12 @@ Target panel (agent track, wide layout):
 - **AC7 (scope).** The adapter reads only `<dir>/status.json`, and only for:
   - (a) an `asyncDir` reported by a `subagent` result in this session;
   - (b) the async dir named by a terminal `subagent-notify` in this session whose basename equals
-    its `Workflow run` id.
+    its `Workflow run` id;
+  - (c) an entry in `details.mission.runs[]` of a successful `subagent` result in this session,
+    with `mode: "workflow"`, non-empty `runId` and `asyncDir`, and `basename(asyncDir) === runId`.
+    Mission entries only recover missing handles for workflows already established by launches
+    or notices. They never discover unrelated workflows, replace known handles, or change settled
+    workflows. A matching `status.json` supplies lifecycle evidence; mission status is not used.
 
   It rejects a `status.json` whose `runId` or `mode` does not match, and reads transcripts only
   from `steps[].sessionFile` of a matching step (`parentWorkflowRunId === runId`). It never lists
@@ -236,12 +241,18 @@ custom message (live message_end) → host.mapCustomMessage → index → tracke
 host.followChildren follows each childSessions file and gives it a final read on a final status
 ```
 
-Server, replay (`streamPiHistory` over `get_messages`): `mapToolCall` never sees a workflow
-result. `tracker.mapNotice` rebuilds the tree from the incremental and terminal notices.
+Server, replay (`streamPiHistory` over `get_messages`): nested codemode results are absent.
+`tracker.mapNotice` rebuilds the tree from incremental and terminal notices. Later direct
+`subagent` results can carry `details.mission.runs[]`, naming the exact async directory of an
+already-known workflow whose terminal notice never arrived (for example after extension reload).
+The tracker validates and reads that handle immediately, then polls if still active. This path is
+shared by live mapping and replay; a mission snapshot never imports unrelated workflows.
 
 - Incremental notices place runs directly under the workflow.
 - The terminal notice's `status.json` read re-parents them into groups and supplies subtitles and
-  transcripts. The host reads those once, within the existing 16 MiB replay budget.
+  transcripts. A mission-recovered `status.json` supplies the same enrichment without a terminal
+  notice. The host reads transcripts once, charging actual file sizes within the shared 16 MiB
+  replay budget and the 2 MiB per-file cap.
 - The live and replay end states match because both apply the same grouping function to the same
   `status.json`.
 
@@ -356,6 +367,7 @@ export interface PiWorkflowTrackerOptions {
 
 export interface PiWorkflowTracker {
   launch(details: z.infer<typeof WorkflowLaunchDetails>): PiExtensionCustomMapping;
+  recoverMission(mission: unknown): PiExtensionCustomMapping | undefined;
   mapNotice(message: PiCustomMessage): PiExtensionCustomMapping | undefined;
   poll(): PiExtensionCustomMapping | undefined;
 }
@@ -374,7 +386,9 @@ Server, `index.ts` changes, and nothing else:
 - `mapToolCall`: for `toolName === "subagent"` with a non-running status, check
   `WorkflowLaunchDetails.safeParse(result.details)` before the `Args` gate. On success with a
   non-failed call, return `{ ...tracker.launch(details) }` with no `detail`. All other inputs fall
-  through to today's `mapSpawn`.
+  through to today's `mapSpawn`. After mapping a successful `subagent` result with validated
+  `details.mode`, also merge `tracker.recoverMission(details.mission)` into the output. This applies
+  to direct workflow launches, management results, and direct single-call results alike.
 - `mapCustomMessage`: when `customType === "subagent-incremental-child-notify"`, return
   `tracker.mapNotice`. When `customType === "subagent-notify"`, try `tracker.mapNotice` first, then
   the existing direct-call handler.

@@ -584,6 +584,75 @@ describe("Pi workflow tracker", () => {
   });
 });
 
+describe("workflow mission recovery", () => {
+  test.each([
+    null,
+    {},
+    { runs: "broken" },
+    { runs: [null, {}, { mode: "single", runId, asyncDir: `/tmp/${runId}` }] },
+    { runs: [{ mode: "workflow", runId }] },
+    { runs: [{ mode: "workflow", runId: " ", asyncDir: "/tmp/other" }] },
+    { runs: [{ mode: "workflow", runId, asyncDir: "/tmp/other" }] },
+  ])("ignores malformed mission evidence %j", (mission) => {
+    const fixture = setup();
+    fixture.tracker.mapNotice(incremental());
+    expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
+    expect(fixture.tracker.poll()).toBeUndefined();
+    expect(fixture.readSessions.size).toBe(0);
+  });
+
+  test.each([{ runId: "foreign" }, { mode: "single" }, { steps: "broken" }])(
+    "rejects mission artifacts with %j without registering their handle",
+    (changes) => {
+      const fixture = setup();
+      fixture.tracker.mapNotice(incremental());
+      fixture.writeStatus({ state: "stopped", ...changes });
+      const mission = { runs: [{ mode: "workflow", runId, asyncDir: fixture.asyncDir }] };
+      expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
+      expect(fixture.tracker.poll()).toBeUndefined();
+      fixture.writeStatus({
+        state: "stopped",
+        steps: [step({ status: "stopped", sessionFile: "/child" })],
+      });
+      const recovered = fixture.tracker.recoverMission(mission);
+      expect(event(recovered, rootId)).toMatchObject({ status: "canceled" });
+      expect(recovered?.childSessions).toEqual([{ id: childId, file: "/child" }]);
+      expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
+    },
+  );
+
+  test("ignores unknown workflows, known handles and settled workflows", () => {
+    const fixture = setup();
+    fixture.writeStatus({ state: "running", pid: process.pid, steps: [step()] });
+    const mission = {
+      runs: [{ mode: "workflow", runId, asyncDir: fixture.asyncDir, status: "stopped" }],
+    };
+    expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
+    fixture.launch();
+    expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
+    const replay = createPiWorkflowTracker({ readSessions: new Set() });
+    replay.mapNotice(terminal(join(fixture.root, "missing", runId)));
+    expect(replay.recoverMission(mission)).toBeUndefined();
+    expect(replay.poll()).toBeUndefined();
+  });
+
+  test("uses artifact lifecycle rather than mission status and polls recovered active workflows", () => {
+    const fixture = setup();
+    fixture.tracker.mapNotice(incremental());
+    fixture.writeStatus({ state: "running", pid: process.pid, steps: [step()] });
+    const mission = {
+      runs: [{ mode: "workflow", runId, asyncDir: fixture.asyncDir, status: "stopped" }],
+    };
+    expect(event(fixture.tracker.recoverMission(mission), rootId)).toMatchObject({
+      status: "running",
+    });
+    fixture.writeStatus({ state: "stopped", steps: [step({ status: "stopped" })] });
+    expect(event(fixture.tracker.poll(), rootId)).toMatchObject({ status: "canceled" });
+    expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
+    expect(fixture.tracker.poll()).toBeUndefined();
+  });
+});
+
 describe("workflow owner liveness", () => {
   async function deadPid() {
     const { spawn } = await import("node:child_process");

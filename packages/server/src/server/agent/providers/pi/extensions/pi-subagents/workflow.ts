@@ -1,7 +1,7 @@
 // The synchronous Pi adapter contract reads one named status file per tracked run per tick.
 // eslint-disable-next-line paseo/no-sync-io
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "zod";
 import type { ProviderSubagentStatus } from "../../../../provider-subagents/store.js";
 import type { PiChildSessionFile, PiExtensionCustomMapping } from "../contract.js";
@@ -20,6 +20,8 @@ export const WorkflowLaunchDetails = z
     asyncDir: z.string().trim().min(1),
   })
   .passthrough();
+
+const Mission = z.object({ runs: z.array(z.unknown()) });
 
 const WorkflowStep = z
   .object({
@@ -103,6 +105,7 @@ export interface PiWorkflowTrackerOptions {
 }
 export interface PiWorkflowTracker {
   launch(details: z.infer<typeof WorkflowLaunchDetails>, callId?: string): PiExtensionCustomMapping;
+  recoverMission(mission: unknown): PiExtensionCustomMapping | undefined;
   mapNotice(message: PiCustomMessage): PiExtensionCustomMapping | undefined;
   poll(): PiExtensionCustomMapping | undefined;
 }
@@ -115,6 +118,7 @@ interface RunCreationOrder {
   artifactOrder: number;
 }
 interface TrackedWorkflow {
+  status?: ProviderSubagentStatus;
   asyncDir?: string;
   callId?: string;
   ownerDead: boolean;
@@ -264,6 +268,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
     observation: WorkflowObservation,
     workflowStatus?: ProviderSubagentStatus,
   ): PiExtensionCustomMapping {
+    if (workflowStatus !== undefined) run.status = workflowStatus;
     const subagents: PiExtensionCustomMapping["subagents"] = [];
     const members = new Map<string, string[]>();
     for (const [key, group] of run.groupByKey) {
@@ -335,6 +340,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
       run.asyncDir = details.asyncDir;
       run.callId = callId;
       run.polling = true;
+      if (isUnsettled(run.status)) run.status = "running";
       if (
         status &&
         (statusPolicy.workflow.get(status.state) !== "running" || !isOwnerAlive(status.pid))
@@ -358,6 +364,35 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
           },
         ],
       };
+    },
+    recoverMission(mission) {
+      const parsed = Mission.safeParse(mission);
+      if (!parsed.success) return undefined;
+      const subagents: PiExtensionCustomMapping["subagents"] = [];
+      const childSessions: PiChildSessionFile[] = [];
+      for (const entry of parsed.data.runs) {
+        const details = WorkflowLaunchDetails.safeParse(entry);
+        if (!details.success) continue;
+        const { runId, asyncDir } = details.data;
+        const run = workflows.get(runId);
+        // Mission snapshots include unrelated runs; only recover a missing handle for known work.
+        if (!run || run.asyncDir || !isUnsettled(run.status) || basename(asyncDir) !== runId)
+          continue;
+        const status = readStatus(runId, asyncDir);
+        if (!status) continue;
+        run.asyncDir = asyncDir;
+        const observation = applyStatus(runId, run, status);
+        applyOwnerLiveness(run, status, observation.childStatuses);
+        const mapping = render(
+          runId,
+          run,
+          observation,
+          run.ownerDead ? "canceled" : statusPolicy.workflow.get(status.state),
+        );
+        subagents.push(...mapping.subagents);
+        childSessions.push(...(mapping.childSessions ?? []));
+      }
+      return subagents.length ? { subagents, childSessions } : undefined;
     },
     mapNotice(message) {
       const text = customMessageText(message);

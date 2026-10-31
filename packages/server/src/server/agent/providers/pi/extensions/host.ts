@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import type { Logger } from "pino";
 import type {
   AgentPermissionRequest,
@@ -207,7 +208,12 @@ export class PiExtensionHost {
   ): Promise<AgentStreamEvent[]> {
     const groups = await Promise.all(
       (mapping.childSessions ?? []).map(async ({ id, file }) => {
-        const bytes = Math.min(this.remainingHydrationBytes, 2 * 1024 * 1024);
+        // Charge the transcript's size, not the per-file cap, or eight small children exhaust 16 MiB.
+        const size = await stat(file).then(
+          (stats) => stats.size,
+          () => 0,
+        );
+        const bytes = Math.min(this.remainingHydrationBytes, 2 * 1024 * 1024, size);
         if (bytes <= 0) return [];
         this.remainingHydrationBytes -= bytes;
         return (await this.readChildSession(id, file, bytes)).map(

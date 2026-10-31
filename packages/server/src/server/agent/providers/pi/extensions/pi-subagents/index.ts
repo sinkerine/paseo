@@ -35,6 +35,10 @@ const Details = z
     completions: z.array(Completion).optional(),
   })
   .passthrough();
+const MissionResult = z.object({
+  details: z.object({ mode: z.string(), mission: z.unknown() }),
+});
+
 export const piSubagents: PiExtension = {
   id: "pi-subagents",
   createSession: () => {
@@ -161,18 +165,32 @@ export const piSubagents: PiExtension = {
         ...collectRows(call.callId, details.data.results, args.task, call.status === "failed"),
       };
     };
+    const mapCall = (call: PiExtensionToolCall): PiExtensionToolMapping | undefined => {
+      if (call.toolName === "bg_wait") return mapWait(call);
+      if (call.toolName !== "subagent") return undefined;
+      if (call.status !== "running") {
+        const details = WorkflowLaunchDetails.safeParse(
+          typeof call.result === "object" ? call.result?.details : null,
+        );
+        if (details.success && call.status !== "failed")
+          return workflows.launch(details.data, call.callId);
+      }
+      return mapSpawn(call);
+    };
     return {
       mapToolCall(call) {
-        if (call.toolName === "bg_wait") return mapWait(call);
-        if (call.toolName !== "subagent") return undefined;
-        if (call.status !== "running") {
-          const details = WorkflowLaunchDetails.safeParse(
-            typeof call.result === "object" ? call.result?.details : null,
-          );
-          if (details.success && call.status !== "failed")
-            return workflows.launch(details.data, call.callId);
-        }
-        return mapSpawn(call);
+        const mapped = mapCall(call);
+        if (call.toolName !== "subagent" || call.status !== "completed") return mapped;
+        const result = MissionResult.safeParse(call.result);
+        const recovered = result.success
+          ? workflows.recoverMission(result.data.details.mission)
+          : undefined;
+        if (!recovered) return mapped;
+        return {
+          ...mapped,
+          subagents: [...(mapped?.subagents ?? []), ...recovered.subagents],
+          childSessions: [...(mapped?.childSessions ?? []), ...(recovered.childSessions ?? [])],
+        };
       },
       // The notice is the only completion Pi persists, so replay settles async runs from it.
       mapCustomMessage(message) {
