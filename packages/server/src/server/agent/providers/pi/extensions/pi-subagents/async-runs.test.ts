@@ -46,6 +46,7 @@ const stepStatuses: AsyncStep["status"][] = [
   "queued",
   "running",
   "completed",
+  "complete",
   "detached",
   "failed",
   "error",
@@ -65,6 +66,7 @@ const expectedByRun = {
 };
 const finishedSteps: Partial<Record<NonNullable<AsyncStep["status"]>, string>> = {
   completed: "completed",
+  complete: "completed",
   detached: "completed",
   failed: "failed",
   error: "failed",

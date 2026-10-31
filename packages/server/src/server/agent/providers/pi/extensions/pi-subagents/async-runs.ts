@@ -19,6 +19,7 @@ const AsyncStepSchema = z.object({
       "queued",
       "running",
       "completed",
+      "complete",
       "failed",
       "error",
       "paused",
@@ -155,7 +156,8 @@ export function stepStatus(
   runStatus: string,
   step: AsyncStep,
 ): ProviderSubagentStatus {
-  if (step.status === "completed" || step.status === "detached") return "completed";
+  if (step.status === "complete" || step.status === "completed" || step.status === "detached")
+    return "completed";
   if (step.status === "failed" || step.status === "error" || step.status === "rejected")
     return "failed";
   if (step.status === "stopped" || step.status === "paused") return "canceled";
