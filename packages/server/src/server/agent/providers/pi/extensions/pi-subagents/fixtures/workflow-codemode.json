@@ -1,0 +1,577 @@
+{
+  "provenance": {
+    "package": "pi-subagents",
+    "version": "0.71.0",
+    "sourceCommit": "4af5e85a427b9f87334585ae8d0eb365d4dd2a1e",
+    "piVersion": "1.0.4",
+    "captureDate": "2026-10-31"
+  },
+  "events": [
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412",
+      "toolName": "codemode",
+      "args": {
+        "code": "const result = await tools.subagent({async: true, workflowScript: \"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo second-done\\\" }); return [first.output, second.output];\", context: \"fresh\"}); console.log(result);"
+      }
+    },
+    {
+      "type": "tool_execution_start",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+      "toolName": "subagent",
+      "args": {
+        "async": true,
+        "workflowScript": "const first = await runs.run(\"first\", { agent: \"capture-worker\", task: \"Run bash: sleep 8 && echo first-done\" }); const second = await runs.run(\"second\", { agent: \"capture-worker\", task: \"Run bash: sleep 8 && echo second-done\" }); return [first.output, second.output];",
+        "context": "fresh"
+      },
+      "parentToolCallId": "call_64d9336f019e45739bf0f94bbeb39412"
+    },
+    {
+      "type": "tool_execution_update",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412",
+      "toolName": "codemode",
+      "args": {
+        "code": "const result = await tools.subagent({async: true, workflowScript: \"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo second-done\\\" }); return [first.output, second.output];\", context: \"fresh\"}); console.log(result);"
+      },
+      "partialResult": {
+        "content": [],
+        "details": {
+          "calls": [
+            {
+              "id": "call_64d9336f019e45739bf0f94bbeb39412/?",
+              "name": "subagent",
+              "args": "{\"async\":true,\"workflowScript\":\"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { a...",
+              "status": "running"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "extension_ui_request",
+      "id": "ba245130-e77b-46d1-b2b2-7ca505b04096",
+      "method": "notify",
+      "message": "PASEO_PI_SUBAGENTS_ASYNC_STARTED {\"id\":\"cf8fd704-0d38-47e5-842f-7e93531d6e07\",\"asyncDir\":\"<CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07\"}",
+      "notifyType": "info"
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+      "toolName": "subagent",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Run fan-out: 0/64 used, 64 remaining\nAsync workflow [cf8fd704-0d38-47e5-842f-7e93531d6e07]\n\nThe async run is detached and running in the background.\nYou are in an interactive session. Return control to the user now; Pi will wake you through the native completion notification when this subagent completes or needs attention. Do not run sleep/polling loops to wait for this async subagent; it does not need a wait call.\nUse bg_wait only for provider, detached, or other background work that lacks a native completion notification.\nIf the current turn must receive results from work without a native notification before it ends, call blocking bg_wait(); ordinary async subagent runs do not need a wait call because their completion is delivered natively.\nOtherwise, continue any independent work or return control to the user. Use subagent({ action: \"status\", id: \"...\" }) for a one-shot status/result or to inspect a blocked/stale run, never as a wait loop.\nMission: 0d4b6446-cd87-4ee6-b9a4-eea551b1a04d (active)"
+          }
+        ],
+        "details": {
+          "mode": "workflow",
+          "runId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+          "asyncId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "asyncDir": "<CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "results": [],
+          "workflow": {
+            "trace": [],
+            "emits": [],
+            "console": [],
+            "args": {},
+            "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          },
+          "workflowChildren": {
+            "version": 1,
+            "parentToolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+            "workflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+            "inventoryComplete": false,
+            "workflowState": "running",
+            "children": []
+          },
+          "chatProgress": {
+            "mode": "off",
+            "repoRelation": "same",
+            "repoLabel": "salty-sloth"
+          },
+          "activeAsyncCapacity": {
+            "used": 0,
+            "limit": 0
+          },
+          "runFanoutBudget": {
+            "used": 0,
+            "limit": 64,
+            "remaining": 64
+          },
+          "missionId": "0d4b6446-cd87-4ee6-b9a4-eea551b1a04d",
+          "missionPath": "<CAPTURE_ROOT>/agent/missions/projects/29236489cda7a958b8d2d7f2a07da287956c9c629a28cbff67a81e643823cdad/0d4b6446-cd87-4ee6-b9a4-eea551b1a04d.json",
+          "mission": {
+            "schemaVersion": 1,
+            "id": "0d4b6446-cd87-4ee6-b9a4-eea551b1a04d",
+            "title": "[prompt redacted]",
+            "objective": "[prompt redacted]",
+            "status": "active",
+            "createdAt": "2026-10-31T02:45:16.412Z",
+            "updatedAt": "2026-10-31T02:45:16.417Z",
+            "runs": [
+              {
+                "runId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+                "mode": "workflow",
+                "asyncDir": "<CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07",
+                "status": "active",
+                "startedAt": "2026-10-31T02:45:16.416Z"
+              }
+            ],
+            "workflowChildren": [],
+            "decisions": [],
+            "artifacts": [
+              {
+                "kind": "status",
+                "path": "<CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07/status.json"
+              },
+              {
+                "kind": "other",
+                "path": "<CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07/events.jsonl",
+                "description": "Lifecycle events"
+              }
+            ],
+            "receipts": [],
+            "cwd": "<CAPTURE_ROOT>/workspace",
+            "ownerSessionId": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f.jsonl"
+          }
+        }
+      },
+      "isError": false,
+      "parentToolCallId": "call_64d9336f019e45739bf0f94bbeb39412"
+    },
+    {
+      "type": "tool_execution_update",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412",
+      "toolName": "codemode",
+      "args": {
+        "code": "const result = await tools.subagent({async: true, workflowScript: \"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo second-done\\\" }); return [first.output, second.output];\", context: \"fresh\"}); console.log(result);"
+      },
+      "partialResult": {
+        "content": [],
+        "details": {
+          "calls": [
+            {
+              "id": "call_64d9336f019e45739bf0f94bbeb39412/1",
+              "name": "subagent",
+              "args": "{\"async\":true,\"workflowScript\":\"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { a...",
+              "status": "ok",
+              "durationMs": 28.846944999999323
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "tool_execution_end",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412",
+      "toolName": "codemode",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+          },
+          {
+            "type": "text",
+            "text": "Run fan-out: 0/64 used, 64 remaining\nAsync workflow [cf8fd704-0d38-47e5-842f-7e93531d6e07]\n\nThe async run is detached and running in the background.\nYou are in an interactive session. Return control to the user now; Pi will wake you through the native completion notification when this subagent completes or needs attention. Do not run sleep/polling loops to wait for this async subagent; it does not need a wait call.\nUse bg_wait only for provider, detached, or other background work that lacks a native completion notification.\nIf the current turn must receive results from work without a native notification before it ends, call blocking bg_wait(); ordinary async subagent runs do not need a wait call because their completion is delivered natively.\nOtherwise, continue any independent work or return control to the user. Use subagent({ action: \"status\", id: \"...\" }) for a one-shot status/result or to inspect a blocked/stale run, never as a wait loop.\nMission: 0d4b6446-cd87-4ee6-b9a4-eea551b1a04d (active)"
+          }
+        ],
+        "details": {
+          "calls": [
+            {
+              "id": "call_64d9336f019e45739bf0f94bbeb39412/1",
+              "name": "subagent",
+              "args": "{\"async\":true,\"workflowScript\":\"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { a...",
+              "status": "ok",
+              "durationMs": 28.846944999999323
+            }
+          ]
+        }
+      },
+      "isError": false
+    },
+    {
+      "type": "message_end",
+      "message": {
+        "role": "custom",
+        "customType": "subagent-notify",
+        "content": "Background task completed: **workflow**\nWorkflow receipt: <CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07/workflow-receipt.json\n\nWorkflow completed with 2 child run(s). Return: [\n  \"first-done\",\n  \"second-done\"\n] Trace: 4 event(s).\n\nChild outputs:\n- key=first run=7f5368f5-cb96-4808-ac3e-10be758bb140 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): <CAPTURE_ROOT>/codemode/sessions/subagent-artifacts/7f5368f5-cb96-4808-ac3e-10be758bb140_capture-worker_output.md\n  Preview:\n    | first-done\n- key=second run=8aa7dd80-383d-4cc2-8b0c-015cad00ac05 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): <CAPTURE_ROOT>/codemode/sessions/subagent-artifacts/8aa7dd80-383d-4cc2-8b0c-015cad00ac05_capture-worker_output.md\n  Preview:\n    | second-done\n\nRetention-managed async directory: <CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07\nWorkflow run: cf8fd704-0d38-47e5-842f-7e93531d6e07\nChild runs: first=7f5368f5-cb96-4808-ac3e-10be758bb140 (completed), second=8aa7dd80-383d-4cc2-8b0c-015cad00ac05 (completed)",
+        "display": false,
+        "timestamp": 1793414740676
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "toolCall",
+          "id": "call_64d9336f019e45739bf0f94bbeb39412",
+          "name": "codemode",
+          "arguments": {
+            "code": "const result = await tools.subagent({async: true, workflowScript: \"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo second-done\\\" }); return [first.output, second.output];\", context: \"fresh\"}); console.log(result);"
+          }
+        }
+      ],
+      "api": "openai-completions",
+      "provider": "magpie",
+      "model": "group/gpt",
+      "usage": {
+        "input": 8310,
+        "output": 130,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "reasoning": 0,
+        "totalTokens": 8440,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "toolUse",
+      "timestamp": 1793414714610,
+      "responseId": "chatcmpl-resp_08756d62fbcf66f5016ae5563b1128819a8c36a17b5e2aa00a",
+      "responseModel": "gpt-6-luna",
+      "rawStopReason": "tool_calls",
+      "thinkingLevel": "off"
+    },
+    {
+      "role": "toolResult",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412",
+      "toolName": "codemode",
+      "content": [
+        {
+          "type": "text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+        },
+        {
+          "type": "text",
+          "text": "Run fan-out: 0/64 used, 64 remaining\nAsync workflow [cf8fd704-0d38-47e5-842f-7e93531d6e07]\n\nThe async run is detached and running in the background.\nYou are in an interactive session. Return control to the user now; Pi will wake you through the native completion notification when this subagent completes or needs attention. Do not run sleep/polling loops to wait for this async subagent; it does not need a wait call.\nUse bg_wait only for provider, detached, or other background work that lacks a native completion notification.\nIf the current turn must receive results from work without a native notification before it ends, call blocking bg_wait(); ordinary async subagent runs do not need a wait call because their completion is delivered natively.\nOtherwise, continue any independent work or return control to the user. Use subagent({ action: \"status\", id: \"...\" }) for a one-shot status/result or to inspect a blocked/stale run, never as a wait loop.\nMission: 0d4b6446-cd87-4ee6-b9a4-eea551b1a04d (active)"
+        }
+      ],
+      "details": {
+        "calls": [
+          {
+            "id": "call_64d9336f019e45739bf0f94bbeb39412/1",
+            "name": "subagent",
+            "args": "{\"async\":true,\"workflowScript\":\"const first = await runs.run(\\\"first\\\", { agent: \\\"capture-worker\\\", task: \\\"Run bash: sleep 8 && echo first-done\\\" }); const second = await runs.run(\\\"second\\\", { a...",
+            "status": "ok",
+            "durationMs": 28.846944999999323
+          }
+        ]
+      },
+      "isError": false,
+      "timestamp": 1793414716423,
+      "nestedCalls": {
+        "calls": [
+          {
+            "id": "call_64d9336f019e45739bf0f94bbeb39412/1",
+            "name": "subagent",
+            "status": "ok",
+            "arguments": {
+              "async": true,
+              "workflowScript": "const first = await runs.run(\"first\", { agent: \"capture-worker\", task: \"Run bash: sleep 8 && echo first-done\" }); const second = await runs.run(\"second\", { agent: \"capture-worker\", task: \"Run bash: sleep 8 && echo second-done\" }); return [first.output, second.output];",
+              "context": "fresh"
+            },
+            "durationMs": 29
+          }
+        ],
+        "complete": true
+      }
+    },
+    {
+      "role": "custom",
+      "customType": "subagent-notify",
+      "content": "Background task completed: **workflow**\nWorkflow receipt: <CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07/workflow-receipt.json\n\nWorkflow completed with 2 child run(s). Return: [\n  \"first-done\",\n  \"second-done\"\n] Trace: 4 event(s).\n\nChild outputs:\n- key=first run=7f5368f5-cb96-4808-ac3e-10be758bb140 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): <CAPTURE_ROOT>/codemode/sessions/subagent-artifacts/7f5368f5-cb96-4808-ac3e-10be758bb140_capture-worker_output.md\n  Preview:\n    | first-done\n- key=second run=8aa7dd80-383d-4cc2-8b0c-015cad00ac05 status=completed\n  Saved output: unavailable\n  Output artifact (retention-managed): <CAPTURE_ROOT>/codemode/sessions/subagent-artifacts/8aa7dd80-383d-4cc2-8b0c-015cad00ac05_capture-worker_output.md\n  Preview:\n    | second-done\n\nRetention-managed async directory: <CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07\nWorkflow run: cf8fd704-0d38-47e5-842f-7e93531d6e07\nChild runs: first=7f5368f5-cb96-4808-ac3e-10be758bb140 (completed), second=8aa7dd80-383d-4cc2-8b0c-015cad00ac05 (completed)",
+      "display": false,
+      "timestamp": 1793414740676
+    }
+  ],
+  "statusSnapshots": {
+    "running": {
+      "runId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+      "sessionId": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f.jsonl",
+      "completionOwnerId": "07719da5-9934-4044-9fe4-676967d752f8",
+      "mode": "workflow",
+      "state": "running",
+      "startedAt": 1793414716413,
+      "lastUpdate": 1793414716449,
+      "cwd": "<CAPTURE_ROOT>/workspace",
+      "sessionRoot": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f",
+      "pid": 3617076,
+      "steps": [
+        {
+          "agent": "capture-worker",
+          "sessionName": "capture-worker: Run bash: sleep 8 && echo first-done",
+          "label": "first",
+          "workflowKey": "first",
+          "parentWorkflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "status": "running",
+          "startedAt": 1793414716441,
+          "sessionFile": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f/18eb3bb7-511f-41d1-9a68-e9a9f1a0285e/run-0/session.jsonl",
+          "async": true,
+          "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140"
+        }
+      ],
+      "workflow": {
+        "trace": [
+          {
+            "operation": "run",
+            "key": "first",
+            "state": "started",
+            "agent": "capture-worker"
+          }
+        ],
+        "emits": [],
+        "console": [],
+        "args": {},
+        "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "workflowChildren": {
+        "version": 1,
+        "parentToolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+        "workflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+        "inventoryComplete": false,
+        "workflowState": "running",
+        "children": [
+          {
+            "childId": "first",
+            "state": "running",
+            "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140",
+            "agent": "capture-worker",
+            "sessionName": "capture-worker: Run bash: sleep 8 && echo first-done"
+          }
+        ]
+      },
+      "runFanoutBudget": {
+        "used": 1,
+        "limit": 64,
+        "remaining": 63
+      },
+      "currentStep": 0
+    },
+    "mid": {
+      "runId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+      "sessionId": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f.jsonl",
+      "completionOwnerId": "07719da5-9934-4044-9fe4-676967d752f8",
+      "mode": "workflow",
+      "state": "running",
+      "startedAt": 1793414716413,
+      "lastUpdate": 1793414728481,
+      "cwd": "<CAPTURE_ROOT>/workspace",
+      "sessionRoot": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f",
+      "pid": 3617076,
+      "steps": [
+        {
+          "agent": "capture-worker",
+          "sessionName": "capture-worker: Run bash: sleep 8 && echo first-done",
+          "label": "first",
+          "workflowKey": "first",
+          "parentWorkflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "status": "completed",
+          "startedAt": 1793414716441,
+          "sessionFile": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f/18eb3bb7-511f-41d1-9a68-e9a9f1a0285e/run-0/session.jsonl",
+          "async": true,
+          "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140",
+          "durationMs": 12034
+        },
+        {
+          "agent": "capture-worker",
+          "sessionName": "capture-worker: Run bash: sleep 8 && echo second-done",
+          "label": "second",
+          "workflowKey": "second",
+          "parentWorkflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "status": "running",
+          "startedAt": 1793414728477,
+          "sessionFile": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f/68db1ebf-0199-48f4-ad66-42bac259f850/run-0/session.jsonl",
+          "async": true,
+          "runId": "8aa7dd80-383d-4cc2-8b0c-015cad00ac05"
+        }
+      ],
+      "workflow": {
+        "trace": [
+          {
+            "operation": "run",
+            "key": "first",
+            "state": "started",
+            "agent": "capture-worker"
+          },
+          {
+            "operation": "run",
+            "key": "first",
+            "state": "completed",
+            "durationMs": 12034,
+            "agent": "capture-worker",
+            "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140"
+          },
+          {
+            "operation": "run",
+            "key": "second",
+            "state": "started",
+            "agent": "capture-worker"
+          }
+        ],
+        "emits": [],
+        "console": [],
+        "args": {},
+        "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "workflowChildren": {
+        "version": 1,
+        "parentToolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+        "workflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+        "inventoryComplete": false,
+        "workflowState": "running",
+        "children": [
+          {
+            "childId": "first",
+            "state": "completed",
+            "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140",
+            "agent": "capture-worker",
+            "sessionName": "capture-worker: Run bash: sleep 8 && echo first-done"
+          },
+          {
+            "childId": "second",
+            "state": "running",
+            "runId": "8aa7dd80-383d-4cc2-8b0c-015cad00ac05",
+            "agent": "capture-worker",
+            "sessionName": "capture-worker: Run bash: sleep 8 && echo second-done"
+          }
+        ]
+      },
+      "runFanoutBudget": {
+        "used": 2,
+        "limit": 64,
+        "remaining": 62
+      },
+      "currentStep": 1
+    },
+    "complete": {
+      "runId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+      "toolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+      "sessionId": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f.jsonl",
+      "completionOwnerId": "07719da5-9934-4044-9fe4-676967d752f8",
+      "mode": "workflow",
+      "state": "complete",
+      "startedAt": 1793414716413,
+      "lastUpdate": 1793414740519,
+      "cwd": "<CAPTURE_ROOT>/workspace",
+      "sessionRoot": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f",
+      "pid": 3617076,
+      "steps": [
+        {
+          "agent": "capture-worker",
+          "sessionName": "capture-worker: Run bash: sleep 8 && echo first-done",
+          "label": "first",
+          "workflowKey": "first",
+          "parentWorkflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "status": "completed",
+          "startedAt": 1793414716441,
+          "sessionFile": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f/18eb3bb7-511f-41d1-9a68-e9a9f1a0285e/run-0/session.jsonl",
+          "async": true,
+          "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140",
+          "durationMs": 12034
+        },
+        {
+          "agent": "capture-worker",
+          "sessionName": "capture-worker: Run bash: sleep 8 && echo second-done",
+          "label": "second",
+          "workflowKey": "second",
+          "parentWorkflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+          "status": "completed",
+          "startedAt": 1793414728477,
+          "sessionFile": "<CAPTURE_ROOT>/codemode/sessions/2026-10-31T02-45-09-821Z_01a18fd8-c23c-766d-9bd9-5ee44b41ac8f/68db1ebf-0199-48f4-ad66-42bac259f850/run-0/session.jsonl",
+          "async": true,
+          "runId": "8aa7dd80-383d-4cc2-8b0c-015cad00ac05",
+          "durationMs": 12030
+        }
+      ],
+      "workflow": {
+        "value": ["first-done", "second-done"],
+        "trace": [
+          {
+            "operation": "run",
+            "key": "first",
+            "state": "started",
+            "agent": "capture-worker"
+          },
+          {
+            "operation": "run",
+            "key": "first",
+            "state": "completed",
+            "durationMs": 12034,
+            "agent": "capture-worker",
+            "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140"
+          },
+          {
+            "operation": "run",
+            "key": "second",
+            "state": "started",
+            "agent": "capture-worker"
+          },
+          {
+            "operation": "run",
+            "key": "second",
+            "state": "completed",
+            "durationMs": 12030,
+            "agent": "capture-worker",
+            "runId": "8aa7dd80-383d-4cc2-8b0c-015cad00ac05"
+          }
+        ],
+        "emits": [],
+        "console": [],
+        "args": {},
+        "argsDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "workflowChildren": {
+        "version": 1,
+        "parentToolCallId": "call_64d9336f019e45739bf0f94bbeb39412/1",
+        "workflowRunId": "cf8fd704-0d38-47e5-842f-7e93531d6e07",
+        "inventoryComplete": true,
+        "workflowState": "completed",
+        "children": [
+          {
+            "childId": "first",
+            "state": "completed",
+            "runId": "7f5368f5-cb96-4808-ac3e-10be758bb140",
+            "agent": "capture-worker",
+            "sessionName": "capture-worker: Run bash: sleep 8 && echo first-done"
+          },
+          {
+            "childId": "second",
+            "state": "completed",
+            "runId": "8aa7dd80-383d-4cc2-8b0c-015cad00ac05",
+            "agent": "capture-worker",
+            "sessionName": "capture-worker: Run bash: sleep 8 && echo second-done"
+          }
+        ]
+      },
+      "runFanoutBudget": {
+        "used": 2,
+        "limit": 64,
+        "remaining": 62
+      },
+      "endedAt": 1793414740509,
+      "totalTokens": {
+        "input": 476,
+        "output": 415,
+        "total": 891
+      },
+      "totalCost": {
+        "inputTokens": 476,
+        "outputTokens": 415,
+        "costUsd": 0
+      },
+      "workflowReceiptPath": "<CAPTURE_ROOT>/codemode/tmp/async-subagent-runs/cf8fd704-0d38-47e5-842f-7e93531d6e07/workflow-receipt.json"
+    }
+  }
+}
