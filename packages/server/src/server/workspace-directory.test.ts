@@ -256,6 +256,7 @@ class WorkspaceStatus {
 
 interface AgentState {
   id: string;
+  provider?: AgentSnapshotPayload["provider"];
   status: AgentSnapshotPayload["status"];
   lastUserMessageAt?: string | null;
   archivedAt?: string | null;
@@ -268,9 +269,10 @@ function createAgent(
   input: AgentState & { cwd: string; labels?: Record<string, string>; workspaceId?: string },
 ) {
   const pendingPermissionCount = input.pendingPermissionCount ?? 0;
+  const provider = input.provider ?? "codex";
   return {
     id: input.id,
-    provider: "codex",
+    provider,
     cwd: input.cwd,
     ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
     model: null,
@@ -292,13 +294,13 @@ function createAgent(
     availableModes: [],
     pendingPermissions: Array.from({ length: pendingPermissionCount }, (_, index) => ({
       id: `permission-${input.id}-${index}`,
-      provider: "codex",
+      provider,
       name: "tool",
       kind: "tool" as const,
     })),
     persistence: null,
     runtimeInfo: {
-      provider: "codex",
+      provider,
       sessionId: null,
     },
     title: null,
@@ -427,21 +429,30 @@ describe("WorkspaceDirectory", () => {
     });
   });
 
-  test("running provider subagent contributes running to its parent workspace", async () => {
-    const workspace = new WorkspaceStatus();
+  test.each(["completed", "failed", "canceled"] as const)(
+    "idle Pi parent's workspace stays running until its provider subagent is %s",
+    async (settledStatus) => {
+      const workspace = new WorkspaceStatus();
 
-    workspace.hasRootAgent({ id: "parent-agent", status: "idle" });
-    workspace.hasProviderSubagent({
-      parentAgentId: "parent-agent",
-      status: "running",
-      updatedAt: "2026-03-01T12:01:00.000Z",
-    });
+      workspace.hasRootAgent({ id: "parent-agent", provider: "pi", status: "idle" });
+      const subagent: ProviderSubagentWorkspaceActivity = {
+        parentAgentId: "parent-agent",
+        status: "running",
+        updatedAt: "2026-03-01T12:01:00.000Z",
+      };
+      workspace.hasProviderSubagent(subagent);
 
-    await expect(workspace.workspaceDescriptor()).resolves.toMatchObject({
-      status: "running",
-      statusEnteredAt: "2026-03-01T12:01:00.000Z",
-    });
-  });
+      await expect(workspace.workspaceDescriptor()).resolves.toMatchObject({
+        status: "running",
+        statusEnteredAt: "2026-03-01T12:01:00.000Z",
+      });
+
+      subagent.status = settledStatus;
+      subagent.updatedAt = "2026-03-01T12:02:00.000Z";
+
+      await expect(workspace.workspaceStatus()).resolves.toBe("done");
+    },
+  );
 
   test("running cross-workspace subagent contributes to its own workspace", async () => {
     const workspace = new WorkspaceStatus();
