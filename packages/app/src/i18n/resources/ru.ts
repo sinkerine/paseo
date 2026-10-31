@@ -2397,6 +2397,11 @@ export const ru: TranslationResources = {
           external: "Внешний браузер",
         },
       },
+      confirmTerminalClose: {
+        label: "Подтверждать закрытие терминала",
+        description:
+          "Запрашивать подтверждение перед закрытием вкладки терминала и остановкой её процессов",
+      },
       terminalScrollback: {
         label: "Буфер прокрутки терминала",
         description: "Количество строк, сохраняемых во встроенном буфере терминала",

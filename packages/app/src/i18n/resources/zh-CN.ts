@@ -2332,6 +2332,10 @@ export const zhCN: TranslationResources = {
           external: "外部浏览器",
         },
       },
+      confirmTerminalClose: {
+        label: "关闭终端前确认",
+        description: "关闭终端标签页并停止其中的进程前请求确认",
+      },
       terminalScrollback: {
         label: "终端回滚",
         description: "内置终端缓冲区保留的行数",

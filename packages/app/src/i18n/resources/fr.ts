@@ -2410,6 +2410,11 @@ export const fr: TranslationResources = {
           external: "Navigateur externe",
         },
       },
+      confirmTerminalClose: {
+        label: "Confirmer avant de fermer le terminal",
+        description:
+          "Demander confirmation avant de fermer un onglet de terminal et d’arrêter ses processus",
+      },
       terminalScrollback: {
         label: "Historique du terminal",
         description: "Lignes conservées dans le tampon du terminal intégré",

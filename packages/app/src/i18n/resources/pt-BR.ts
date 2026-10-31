@@ -2394,6 +2394,10 @@ export const ptBR: TranslationResources = {
           external: "Navegador externo",
         },
       },
+      confirmTerminalClose: {
+        label: "Confirmar antes de fechar o terminal",
+        description: "Pedir confirmação antes de fechar uma aba do terminal e parar seus processos",
+      },
       terminalScrollback: {
         label: "Scrollback do terminal",
         description: "Linhas mantidas no buffer do terminal integrado",

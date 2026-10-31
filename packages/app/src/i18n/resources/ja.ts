@@ -2378,6 +2378,10 @@ export const ja: TranslationResources = {
           external: "外部ブラウザ",
         },
       },
+      confirmTerminalClose: {
+        label: "ターミナルを閉じる前に確認",
+        description: "ターミナルのタブを閉じてプロセスを停止する前に確認する",
+      },
       terminalScrollback: {
         label: "ターミナルスクロールバック",
         description: "組み込みターミナルバッファに保持する行数",

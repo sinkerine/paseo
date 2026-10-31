@@ -2371,6 +2371,10 @@ export const ko: TranslationResources = {
           external: "외부 브라우저",
         },
       },
+      confirmTerminalClose: {
+        label: "터미널을 닫기 전에 확인",
+        description: "터미널 탭을 닫고 프로세스를 중지하기 전에 확인합니다",
+      },
       terminalScrollback: {
         label: "터미널 스크롤백",
         description: "내장 터미널 버퍼에 보관되는 줄 수",

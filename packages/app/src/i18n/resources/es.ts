@@ -2411,6 +2411,11 @@ export const es: TranslationResources = {
           external: "Navegador externo",
         },
       },
+      confirmTerminalClose: {
+        label: "Confirmar antes de cerrar el terminal",
+        description:
+          "Pedir confirmación antes de cerrar una pestaña del terminal y detener sus procesos",
+      },
       terminalScrollback: {
         label: "Historial de terminal",
         description: "Líneas mantenidas en el búfer de terminal incorporado",

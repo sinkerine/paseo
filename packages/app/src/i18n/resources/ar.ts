@@ -2394,6 +2394,10 @@ export const ar: TranslationResources = {
           external: "متصفح خارجي",
         },
       },
+      confirmTerminalClose: {
+        label: "التأكيد قبل إغلاق الطرفية",
+        description: "طلب التأكيد قبل إغلاق علامة تبويب الطرفية وإيقاف عملياتها",
+      },
       terminalScrollback: {
         label: "التمرير Terminal",
         description: "يتم الاحتفاظ بالخطوط في المخزن المؤقت الطرفي المدمج",

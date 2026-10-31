@@ -2483,6 +2483,11 @@ export const en = {
           external: "External browser",
         },
       },
+      confirmTerminalClose: {
+        label: "Confirm before closing terminal",
+        description:
+          "Ask for confirmation before closing a terminal tab and stopping its processes",
+      },
       terminalScrollback: {
         label: "Terminal scrollback",
         description: "Lines kept in the built-in terminal buffer",
