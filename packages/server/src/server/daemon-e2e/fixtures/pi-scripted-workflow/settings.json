@@ -1,0 +1,6 @@
+{
+  "packages": ["__PI_SUBAGENTS_PACKAGE__", "__SCRIPTED_WORKFLOW_PACKAGE__"],
+  "defaultTools": ["+codemode"],
+  "defaultProvider": "paseo-scripted",
+  "defaultModel": "workflow"
+}

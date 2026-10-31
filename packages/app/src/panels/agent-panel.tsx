@@ -99,6 +99,10 @@ import type { PendingPermission } from "@/types/shared";
 import type { StreamItem, TodoEntry } from "@/types/stream";
 import type { ViewedTimelineStatus, ViewedTimelineUiBridge } from "@/timeline/viewed-timeline-sync";
 import { useArchiveFinishedSubagents, useSubagentsForParent } from "@/subagents";
+import {
+  resolveSubagentTrackDirectRows,
+  useSubagentTreeForParent,
+} from "@/subagents/use-subagent-tree";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { applyLegacyDaemonWorkspaceOwnership } from "@/workspace/legacy-daemon-workspaces";
@@ -1100,7 +1104,17 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   // The dock lays out fullscreen for the same session the composer edits in.
   const composerEditingSession = useComposerEditingSession("chat");
   const isComposerFullscreen = useComposerFullscreen(composerEditingSession);
-  const subagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
+  const directSubagentRows = useSubagentsForParent({ serverId, parentAgentId: agentId });
+  const subagentTreeRows = useSubagentTreeForParent({ serverId, parentAgentId: agentId });
+  const subagentRows = useMemo(
+    () =>
+      resolveSubagentTrackDirectRows({
+        rows: directSubagentRows,
+        treeRows: subagentTreeRows,
+        ownerSubagentId: null,
+      }),
+    [directSubagentRows, subagentTreeRows],
+  );
   const tasks = useSessionStore((state): TodoEntry[] | undefined =>
     state.sessions[serverId]?.agentTasks.get(agentId),
   );
@@ -1114,13 +1128,15 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const parentAgentId = useParentAgentId(serverId, agentId);
   // With a composer the parent is a pill above it; without one, the box takes the composer's place.
   const parentPillAgentId = showsComposer ? parentAgentId : null;
-  const hasVisibleAgentTracks = hasAgentTracks({
-    parentAgentId: parentPillAgentId,
-    subagentRows,
-    tasks,
-    archiveFinishedStatus: archiveFinishedSubagents.status,
-    hasPluginComposerPills,
-  });
+  const hasVisibleAgentTracks =
+    subagentTreeRows.length > 0 ||
+    hasAgentTracks({
+      parentAgentId: parentPillAgentId,
+      subagentRows,
+      tasks,
+      archiveFinishedStatus: archiveFinishedSubagents.status,
+      hasPluginComposerPills,
+    });
   const rawAgentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1216,6 +1232,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
           agentId={agentId}
           parentAgentId={parentPillAgentId}
           subagentRows={subagentRows}
+          subagentTreeRows={subagentTreeRows}
           tasks={tasks}
           archiveFinishedStatus={archiveFinishedSubagents.status}
           onArchiveFinished={archiveFinishedSubagents.archiveFinished}

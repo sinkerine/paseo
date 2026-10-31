@@ -1,5 +1,6 @@
 export type { SubagentRow } from "./select";
 export { selectSubagentsForParent, useSubagentsForParent } from "./select";
+export { useSubagentTreeForParent } from "./use-subagent-tree";
 export { useArchiveSubagent } from "./use-archive-subagent";
 export { useDetachSubagent } from "./use-detach-subagent";
 export { resolveCloseAgentTabPolicy, type CloseAgentTabPolicy } from "./close-tab-policy";

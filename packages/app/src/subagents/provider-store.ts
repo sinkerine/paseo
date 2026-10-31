@@ -28,6 +28,8 @@ interface ProviderSubagentState {
   descriptors: Map<string, ProviderSubagentDescriptorPayload>;
   timelines: Map<string, ProviderSubagentTimelineState>;
   hiddenFromTrack: Set<string>;
+  trackExpansion: Map<string, boolean>;
+  toggleTrackExpansion(key: string, expanded: boolean): void;
   /** Parents whose list this client asked for, so a resubscribed update feed can catch them up. */
   trackedParents: Set<string>;
   trackParent(serverId: string, parentAgentId: string): void;
@@ -172,6 +174,10 @@ export const useProviderSubagentStore = create<ProviderSubagentState>((set) => (
   descriptors: new Map(),
   timelines: new Map(),
   hiddenFromTrack: new Set(),
+  trackExpansion: new Map(),
+  toggleTrackExpansion(key, expanded) {
+    set((state) => ({ trackExpansion: new Map(state.trackExpansion).set(key, expanded) }));
+  },
   trackedParents: new Set(),
   trackParent(serverId, parentAgentId) {
     set((state) => {
@@ -205,6 +211,11 @@ export const useProviderSubagentStore = create<ProviderSubagentState>((set) => (
         }
       }
       const retainedKeys = new Set(descriptors.keys());
+      const trackExpansion = new Map(
+        [...state.trackExpansion].filter(
+          ([key]) => !key.startsWith(prefix) || retainedKeys.has(key),
+        ),
+      );
       const timelines = new Map(
         [...state.timelines].filter(([key]) => !key.startsWith(prefix) || retainedKeys.has(key)),
       );
@@ -216,7 +227,7 @@ export const useProviderSubagentStore = create<ProviderSubagentState>((set) => (
           timelines.set(key, settleTimeline(current, subagent));
         }
       }
-      return { descriptors, timelines, hiddenFromTrack };
+      return { descriptors, timelines, hiddenFromTrack, trackExpansion };
     });
   },
   applyUpdate(serverId, payload) {
@@ -248,7 +259,9 @@ export const useProviderSubagentStore = create<ProviderSubagentState>((set) => (
         descriptors.delete(key);
         const timelines = new Map(state.timelines);
         timelines.delete(key);
-        return { descriptors, timelines };
+        const trackExpansion = new Map(state.trackExpansion);
+        trackExpansion.delete(key);
+        return { descriptors, timelines, trackExpansion };
       }
       const key = providerSubagentKey(serverId, payload.parentAgentId, payload.subagentId);
       const existing = state.timelines.get(key);

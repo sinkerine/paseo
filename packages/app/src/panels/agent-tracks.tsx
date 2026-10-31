@@ -18,6 +18,9 @@ import {
 } from "@/subagents";
 import { ParentAgentPill } from "@/subagents/parent";
 import { SubagentsTrack } from "@/subagents/track";
+import type { ProviderSubagentRow } from "@/subagents/select";
+import type { SubagentTreeRow } from "@/subagents/tree";
+import { providerSubagentKey, useProviderSubagentStore } from "@/subagents/provider-store";
 import type { TodoEntry } from "@/types/stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
 import { buildWorkspaceTabPersistenceKey, type WorkspaceTabTarget } from "@/workspace-tabs/model";
@@ -37,6 +40,7 @@ export const AgentTracks = memo(function AgentTracks({
   agentId,
   parentAgentId,
   subagentRows,
+  subagentTreeRows,
   tasks,
   archiveFinishedStatus,
   onArchiveFinished,
@@ -47,6 +51,7 @@ export const AgentTracks = memo(function AgentTracks({
   agentId: string;
   parentAgentId: string | null;
   subagentRows: SubagentRow[];
+  subagentTreeRows: SubagentTreeRow[];
   tasks: TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
   onArchiveFinished: () => void;
@@ -100,6 +105,13 @@ export const AgentTracks = memo(function AgentTracks({
     },
     [openSubagentTarget],
   );
+  const toggleExpansion = useProviderSubagentStore((state) => state.toggleTrackExpansion);
+  const handleToggleExpansion = useCallback(
+    (row: ProviderSubagentRow, expanded: boolean) => {
+      toggleExpansion(providerSubagentKey(serverId, row.parentAgentId, row.id), expanded);
+    },
+    [serverId, toggleExpansion],
+  );
   const opensInSheet = useSubagentOpensInSheet(workspaceKey);
   const handleOpenChanges = useCallback(() => {
     if (!workspaceKey) {
@@ -114,6 +126,7 @@ export const AgentTracks = memo(function AgentTracks({
 
   if (
     !hasWorkspaceDiffStat &&
+    subagentTreeRows.length === 0 &&
     !hasAgentTracks({
       parentAgentId,
       subagentRows,
@@ -132,6 +145,8 @@ export const AgentTracks = memo(function AgentTracks({
       <SubagentsTrack
         serverId={serverId}
         rows={subagentRows}
+        treeRows={subagentTreeRows}
+        onToggleExpansion={handleToggleExpansion}
         onOpenSubagent={handleOpenSubagent}
         onOpenProviderSubagent={handleOpenProviderSubagent}
         opensInSheet={opensInSheet}

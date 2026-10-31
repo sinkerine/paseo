@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractTextFromToolResult } from "../../tool-call-mapper.js";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
+import { customMessageText, noticeStatus } from "./notice.js";
+import { createPiWorkflowTracker, WorkflowLaunchDetails } from "./workflow.js";
 
 const Args = z
   .object({
@@ -56,21 +58,12 @@ function asyncChildStatus(runState: string, stepStatus?: string) {
   return "completed";
 }
 
-/** The `subagent-notify` header; a grouped notice reports every run as completed. */
-function noticeStatus(header: string) {
-  if (/^Background tasks completed \(\d+\):/.test(header)) return "completed";
-  const outcome = header.match(
-    /^(?:Background task|Detached foreground task) (completed|failed|stopped): \*\*/,
-  )?.[1];
-  if (outcome === "stopped") return "canceled";
-  return outcome as "completed" | "failed" | undefined;
-}
-
 export const piSubagents: PiExtension = {
   id: "pi-subagents",
   createSession: () => {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
+    const workflows = createPiWorkflowTracker({ readSessions });
     /** Keyed by async directory, which both status.json and the completion notice carry. */
     const asyncRuns = new Map<string, { owner: string; polling: boolean }>();
     const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
@@ -172,16 +165,23 @@ export const piSubagents: PiExtension = {
     return {
       mapToolCall(call) {
         if (call.toolName === "bg_wait") return mapWait(call);
-        if (call.toolName === "subagent") return mapSpawn(call);
-        return undefined;
+        if (call.toolName !== "subagent") return undefined;
+        if (call.status !== "running") {
+          const details = WorkflowLaunchDetails.safeParse(
+            typeof call.result === "object" ? call.result?.details : null,
+          );
+          if (details.success && call.status !== "failed") return workflows.launch(details.data);
+        }
+        return mapSpawn(call);
       },
       // The notice is the only completion Pi persists, so replay settles async runs from it.
       mapCustomMessage(message) {
+        if (message.customType === "subagent-incremental-child-notify")
+          return workflows.mapNotice(message);
         if (message.customType !== "subagent-notify") return undefined;
-        const text =
-          typeof message.content === "string"
-            ? message.content
-            : extractTextFromToolResult({ content: message.content });
+        const workflow = workflows.mapNotice(message);
+        if (workflow) return workflow;
+        const text = customMessageText(message);
         const lines = text?.split("\n") ?? [];
         const status = noticeStatus(lines[0] ?? "");
         if (!status) return undefined;
@@ -240,6 +240,9 @@ export const piSubagents: PiExtension = {
             run.polling = false;
           }
         }
+        const workflow = workflows.poll();
+        subagents.push(...(workflow?.subagents ?? []));
+        childSessions.push(...(workflow?.childSessions ?? []));
         return subagents.length || childSessions.length ? { subagents, childSessions } : undefined;
       },
     };

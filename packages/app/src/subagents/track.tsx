@@ -3,9 +3,10 @@ import { useHosts } from "@/runtime/host-runtime";
 import { useCallback, useMemo, type ReactElement, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { Archive, Unlink } from "lucide-react-native";
+import { Archive, ChevronRight, Unlink } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useProviderIcon } from "@/components/provider-icons";
+import { TREE_INDENT_PER_LEVEL } from "@/components/tree-primitives";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
 import { mutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 import { ToolbarButton, paneContentToolbarIconSize } from "@/components/ui/pane-content-toolbar";
@@ -18,7 +19,8 @@ import {
 import type { Theme } from "@/styles/theme";
 import { useAgentFactsLine } from "@/panels/agent-facts-line";
 import { getPanelManifest } from "@/panels/panel-manifest";
-import type { SubagentRow } from "./select";
+import type { ProviderSubagentRow, SubagentRow } from "./select";
+import type { SubagentTreeRow } from "./tree";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
 import {
   buildSubagentPillPresentation,
@@ -28,6 +30,7 @@ import {
 
 const ThemedArchive = withUnistyles(Archive);
 const ThemedUnlink = withUnistyles(Unlink);
+const ThemedChevronRight = withUnistyles(ChevronRight);
 
 const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foreground });
 const foregroundMutedColorMapping = (theme: Theme) => ({
@@ -37,6 +40,8 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 export interface SubagentsTrackProps {
   serverId: string;
   rows: SubagentRow[];
+  treeRows: SubagentTreeRow[];
+  onToggleExpansion: (row: ProviderSubagentRow, expanded: boolean) => void;
   onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   /**
@@ -69,6 +74,8 @@ function useRowPresentation(row: SubagentRow, serverId: string): WorkspaceTabPre
 export function SubagentsTrack({
   serverId,
   rows,
+  treeRows,
+  onToggleExpansion,
   onOpenSubagent,
   onOpenProviderSubagent,
   opensInSheet,
@@ -81,19 +88,22 @@ export function SubagentsTrack({
 
   const isArchivingFinished = archiveFinishedStatus.kind === "archiving";
   const isArchiveFinishedFailed = archiveFinishedStatus.kind === "failed";
-  if (rows.length === 0 && !isArchivingFinished && !isArchiveFinishedFailed) {
+  if (treeRows.length === 0 && !isArchivingFinished && !isArchiveFinishedFailed) {
     return null;
   }
 
   const pill = buildSubagentPillPresentation(t, rows);
+  // Malformed trees can contain only promoted orphans, with no direct children to count.
+  const segments = rows.length > 0 ? pill.segments : [{ bucket: null, text: t("subagents.title") }];
+  const accessibilityLabel = rows.length > 0 ? pill.accessibilityLabel : t("subagents.title");
   const finishedCount = countFinishedSubagents(rows);
   const showArchiveFinished = finishedCount > 0 || isArchivingFinished || isArchiveFinishedFailed;
 
   return (
     <ComposerTrackPill
       testID="subagents-track-header"
-      segments={pill.segments}
-      accessibilityLabel={pill.accessibilityLabel}
+      segments={segments}
+      accessibilityLabel={accessibilityLabel}
       panelTitle={t("subagents.title")}
     >
       {showArchiveFinished && onArchiveFinished ? (
@@ -105,14 +115,19 @@ export function SubagentsTrack({
           />
         </ComposerTrackActions>
       ) : null}
-      {rows.map((row) => (
+      {treeRows.map((treeRow) => (
         <SubagentsTrackRow
-          key={row.kind === "paseo" ? `${row.address.serverId}:${row.id}` : row.id}
-          row={row}
+          key={
+            treeRow.row.kind === "paseo"
+              ? `${treeRow.row.address.serverId}:${treeRow.row.id}`
+              : treeRow.row.id
+          }
+          treeRow={treeRow}
+          onToggleExpansion={onToggleExpansion}
           serverId={serverId}
           onOpenSubagent={onOpenSubagent}
           onOpenProviderSubagent={onOpenProviderSubagent}
-          opensInSheet={opensInSheet(row)}
+          opensInSheet={opensInSheet(treeRow.row)}
           onArchiveSubagent={onArchiveSubagent}
           onDetachSubagent={onDetachSubagent}
         />
@@ -181,7 +196,8 @@ function ArchiveFinishedRow({
 
 interface SubagentsTrackRowProps {
   serverId: string;
-  row: SubagentRow;
+  treeRow: SubagentTreeRow;
+  onToggleExpansion: (row: ProviderSubagentRow, expanded: boolean) => void;
   onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   opensInSheet: boolean;
@@ -191,7 +207,8 @@ interface SubagentsTrackRowProps {
 
 function SubagentsTrackRow({
   serverId,
-  row,
+  treeRow,
+  onToggleExpansion,
   onOpenSubagent,
   onOpenProviderSubagent,
   opensInSheet,
@@ -199,6 +216,7 @@ function SubagentsTrackRow({
   onDetachSubagent,
 }: SubagentsTrackRowProps): ReactElement {
   const { t } = useTranslation();
+  const { row, depth, disclosure, hiddenDescendantCount } = treeRow;
   const isCompact = useIsCompactFormFactor();
   const rowServerId = row.kind === "paseo" ? row.address.serverId : serverId;
   const hostLabel = useHosts().find((host) => host.serverId === rowServerId)?.label ?? rowServerId;
@@ -218,7 +236,33 @@ function SubagentsTrackRow({
   const handleDetachPress = useCallback(() => {
     if (row.kind === "paseo") onDetachSubagent?.(row.address);
   }, [onDetachSubagent, row]);
+  const handleToggleExpansion = useCallback(() => {
+    if (row.kind === "provider" && disclosure) {
+      onToggleExpansion(row, !disclosure.expanded);
+    }
+  }, [disclosure, onToggleExpansion, row]);
   const actionsAlwaysVisible = isNative || isCompact;
+  const disclosureLabel = disclosure?.expanded
+    ? t("subagents.collapseRow")
+    : t("subagents.expandRow");
+  const renderDisclosure = useCallback(() => {
+    if (!disclosure) return null;
+    return (
+      <ToolbarButton
+        label={disclosureLabel}
+        tooltipSide="top"
+        compact={isCompact}
+        onPress={handleToggleExpansion}
+        testID={`subagents-track-disclosure-${row.id}`}
+      >
+        <ThemedChevronRight
+          size={paneContentToolbarIconSize(isCompact)}
+          uniProps={mutedIconColorMapping}
+          style={disclosure.expanded ? styles.chevronExpanded : styles.chevronCollapsed}
+        />
+      </ToolbarButton>
+    );
+  }, [disclosure, disclosureLabel, handleToggleExpansion, isCompact, row.id]);
 
   const renderRow = useCallback(
     ({ active }: { active: boolean }) => (
@@ -236,6 +280,15 @@ function SubagentsTrackRow({
           ) : (
             <SubagentFacts rowId={row.id} text={presentation.subtitle} />
           )}
+          {hiddenDescendantCount > 0 ? (
+            <Text
+              style={styles.rowFacts}
+              numberOfLines={1}
+              testID={`subagents-track-more-${row.id}`}
+            >
+              {t("subagents.moreDescendants", { count: hiddenDescendantCount })}
+            </Text>
+          ) : null}
         </View>
         {row.kind === "paseo" ? (
           <SubagentRowActions
@@ -254,6 +307,8 @@ function SubagentsTrackRow({
       displayLabel,
       handleArchivePress,
       handleDetachPress,
+      hiddenDescendantCount,
+      t,
       isCompact,
       onDetachSubagent,
       presentation,
@@ -270,6 +325,8 @@ function SubagentsTrackRow({
       accessibilityLabel={displayLabel}
       testID={`subagents-track-row-${row.id}`}
       closeOnSelect={!opensInSheet}
+      leadingInset={depth * TREE_INDENT_PER_LEVEL}
+      trailing={disclosure ? renderDisclosure : undefined}
       onPress={handlePress}
     >
       {renderRow}
@@ -418,6 +475,12 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1],
     opacity: 0,
+  },
+  chevronExpanded: {
+    transform: [{ rotate: "90deg" }],
+  },
+  chevronCollapsed: {
+    transform: [{ rotate: "0deg" }],
   },
   tooltipText: {
     fontSize: theme.fontSize.sm,

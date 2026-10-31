@@ -199,6 +199,10 @@ export interface ComposerTrackRowProps {
    * lands inside the panel is not.
    */
   closeOnSelect?: boolean;
+  /** Additional leading rail for nested track rows. */
+  leadingInset?: number;
+  /** An independent action beside the row's navigation press target. */
+  trailing?: ReactNode | ((state: { active: boolean }) => ReactNode);
   disabled?: boolean;
   accessibilityLabel?: string;
   testID?: string;
@@ -220,6 +224,8 @@ export function ComposerTrackRow({
   children,
   onPress,
   closeOnSelect = true,
+  leadingInset = 0,
+  trailing,
   disabled = false,
   accessibilityLabel,
   testID,
@@ -250,6 +256,47 @@ export function ComposerTrackRow({
     ({ pressed }: { pressed: boolean }) => renderRow(hovered || pressed),
     [hovered, renderRow],
   );
+
+  const renderBody = useCallback(
+    ({ pressed }: { pressed: boolean }) => {
+      const active = hovered || pressed;
+      return typeof children === "function" ? children({ active }) : children;
+    },
+    [children, hovered],
+  );
+
+  const bodyStyle = useCallback(
+    ({ pressed }: { pressed: boolean }) => [
+      styles.rowBody(leadingInset),
+      pressed ? styles.rowBodyPressed : undefined,
+    ],
+    [leadingInset],
+  );
+  const hasSeparateRail = leadingInset > 0 || trailing !== undefined;
+  if (onPress && hasSeparateRail) {
+    return (
+      <View onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
+        <View style={[hovered ? styles.rowActive : styles.row, styles.splitRow]}>
+          <Pressable
+            accessibilityRole="menuitem"
+            dataSet={itemDataSet}
+            accessibilityLabel={accessibilityLabel}
+            testID={testID}
+            disabled={disabled}
+            onPress={handleSelect}
+            style={bodyStyle}
+          >
+            {renderBody}
+          </Pressable>
+          {trailing !== undefined ? (
+            <View style={styles.rowAction}>
+              {typeof trailing === "function" ? trailing({ active: hovered }) : trailing}
+            </View>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
 
   if (!onPress) {
     return <View accessibilityLabel={accessibilityLabel}>{renderRow(false)}</View>;
@@ -361,6 +408,31 @@ const styles = StyleSheet.create((theme) => {
     },
     row: trackRow,
     rowActive: { ...trackRow, backgroundColor: theme.colors.surface2 },
+    splitRow: {
+      gap: 0,
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+    },
+    rowBody: (leadingInset: number) => ({
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "stretch",
+      gap: theme.spacing[2],
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: "auto",
+      minWidth: 0,
+      paddingLeft: theme.spacing[2] + leadingInset,
+      paddingRight: theme.spacing[2],
+      paddingVertical: { xs: theme.spacing[2], md: theme.spacing[1] },
+    }),
+    rowBodyPressed: {
+      backgroundColor: theme.colors.surface2,
+      borderRadius: theme.borderRadius.md,
+    },
+    rowAction: {
+      paddingRight: theme.spacing[2],
+    },
     // Segments sit twice as far apart as a mark sits from its own text, so a count reads as
     // belonging to the mark on its left rather than to the words on its right.
     segments: {

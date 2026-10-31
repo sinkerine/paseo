@@ -27,6 +27,7 @@ export interface ProviderSubagentRow {
   kind: "provider";
   id: string;
   parentAgentId: string;
+  parentSubagentId: string | null;
   provider: ProviderSubagentDescriptorPayload["provider"];
   // `title` is the subagent type ("Explore", "general-purpose") and repeats across a fan-out;
   // `description` is the task it was given. Both are carried so presentation can choose which
@@ -155,6 +156,7 @@ export function selectProviderSubagentsForParent(
       kind: "provider",
       id: subagent.id,
       parentAgentId: subagent.parentAgentId,
+      parentSubagentId: subagent.parentSubagentId ?? null,
       provider: subagent.provider,
       title: subagent.title,
       description: subagent.description,
@@ -166,6 +168,78 @@ export function selectProviderSubagentsForParent(
   }
   rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   return rows;
+}
+
+export function selectProviderSubagentDescendants(
+  state: ProviderSubagentStoreSnapshot,
+  params: SelectSubagentsParams,
+  supported: boolean,
+  nestingSupported: boolean,
+): ProviderSubagentRow[] {
+  if (!nestingSupported) {
+    const rows = selectProviderSubagentsForParent(state, params, supported, nestingSupported);
+    for (const row of rows) row.parentSubagentId = null;
+    return rows;
+  }
+  if (!supported) return EMPTY_PROVIDER_SUBAGENT_ROWS;
+
+  const prefix = `${params.serverId}\0${params.parentAgentId}\0`;
+  const descriptors = new Map<string, ProviderSubagentDescriptorPayload>();
+  for (const [key, descriptor] of state.descriptors) {
+    if (key.startsWith(prefix)) descriptors.set(descriptor.id, descriptor);
+  }
+
+  const keptVisible = new Set<string>();
+  for (const descriptor of descriptors.values()) {
+    if (descriptor.status !== "running") continue;
+    const ancestors = providerAncestors(descriptor, descriptors);
+    for (const ancestor of ancestors) keptVisible.add(ancestor.id);
+  }
+
+  const rows: ProviderSubagentRow[] = [];
+  for (const descriptor of descriptors.values()) {
+    if (descriptor.id === params.providerParentSubagentId) continue;
+    const ancestors = providerAncestors(descriptor, descriptors);
+    const belongsToOwner =
+      !params.providerParentSubagentId ||
+      ancestors.some((ancestor) => ancestor.parentSubagentId === params.providerParentSubagentId);
+    if (!belongsToOwner) continue;
+    const hidden = ancestors.some(
+      (ancestor) =>
+        state.hiddenFromTrack.has(`${prefix}${ancestor.id}`) && !keptVisible.has(ancestor.id),
+    );
+    if (hidden) continue;
+    rows.push({
+      kind: "provider",
+      id: descriptor.id,
+      parentAgentId: descriptor.parentAgentId,
+      parentSubagentId: descriptor.parentSubagentId ?? null,
+      provider: descriptor.provider,
+      title: descriptor.title,
+      description: descriptor.description,
+      subtitle: descriptor.subtitle ?? null,
+      status: descriptor.status,
+      requiresAttention: descriptor.status === "failed",
+      createdAt: new Date(descriptor.createdAt),
+    });
+  }
+  rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+  return rows;
+}
+
+function providerAncestors(
+  descriptor: ProviderSubagentDescriptorPayload,
+  descriptors: ReadonlyMap<string, ProviderSubagentDescriptorPayload>,
+): ProviderSubagentDescriptorPayload[] {
+  const ancestors: ProviderSubagentDescriptorPayload[] = [];
+  const visited = new Set<string>();
+  let current: ProviderSubagentDescriptorPayload | undefined = descriptor;
+  while (current && !visited.has(current.id)) {
+    ancestors.push(current);
+    visited.add(current.id);
+    current = descriptors.get(current.parentSubagentId ?? "");
+  }
+  return ancestors;
 }
 
 export function useSubagentsForParent(params: SelectSubagentsParams): SubagentRow[] {
