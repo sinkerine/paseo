@@ -1,0 +1,1807 @@
+[
+  {
+    "label": "direct-idle-running.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "direct-mid.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "running",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "direct-complete.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "done"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "codemode-running.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "reload-before.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "running",
+        "activeTurn": {
+          "turnId": "7179d8e5-1379-4a2a-a456-7c6ba8657931",
+          "startedAt": "2026-10-31T03:35:24.710Z"
+        },
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_75b2e80392644c878a2318292a2af548",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": "Run bash: sleep 20 && echo single-done",
+        "status": "completed",
+        "toolCallId": "call_75b2e80392644c878a2318292a2af548"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36:0",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_ec9f9df0d4d04c94a1134065b69a78f9",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_ec9f9df0d4d04c94a1134065b69a78f9"
+      },
+      {
+        "id": "call_ec9f9df0d4d04c94a1134065b69a78f9:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_ec9f9df0d4d04c94a1134065b69a78f9",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_ec9f9df0d4d04c94a1134065b69a78f9"
+      },
+      {
+        "id": "call_7ae5d70b337f49a1a5f5ef9e9f296d98",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98"
+      },
+      {
+        "id": "call_7ae5d70b337f49a1a5f5ef9e9f296d98:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "reload-after.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "closed",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "attention"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_75b2e80392644c878a2318292a2af548",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": "Run bash: sleep 20 && echo single-done",
+        "status": "completed",
+        "toolCallId": "call_75b2e80392644c878a2318292a2af548"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36:0",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_ec9f9df0d4d04c94a1134065b69a78f9",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_ec9f9df0d4d04c94a1134065b69a78f9"
+      },
+      {
+        "id": "call_ec9f9df0d4d04c94a1134065b69a78f9:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_ec9f9df0d4d04c94a1134065b69a78f9",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_ec9f9df0d4d04c94a1134065b69a78f9"
+      },
+      {
+        "id": "call_7ae5d70b337f49a1a5f5ef9e9f296d98",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98"
+      },
+      {
+        "id": "call_7ae5d70b337f49a1a5f5ef9e9f296d98:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "final-state.json",
+    "agents": [
+      {
+        "id": "727088f2-51da-4b06-84b1-90caad238b78",
+        "title": "QA workflow",
+        "status": "idle",
+        "activeTurn": null,
+        "workspaceId": "wks_3db817d38f11b797"
+      },
+      {
+        "id": "d1b9b219-e9b1-495a-9c45-7157cd53151a",
+        "title": "QA isolation",
+        "status": "closed",
+        "activeTurn": null,
+        "workspaceId": "wks_d8180e41a87ec73c"
+      }
+    ],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "done"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ],
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_75b2e80392644c878a2318292a2af548",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": "Run bash: sleep 20 && echo single-done",
+        "status": "completed",
+        "toolCallId": "call_75b2e80392644c878a2318292a2af548"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36:0",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_ec9f9df0d4d04c94a1134065b69a78f9",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_ec9f9df0d4d04c94a1134065b69a78f9"
+      },
+      {
+        "id": "call_ec9f9df0d4d04c94a1134065b69a78f9:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_ec9f9df0d4d04c94a1134065b69a78f9",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_ec9f9df0d4d04c94a1134065b69a78f9"
+      },
+      {
+        "id": "call_7ae5d70b337f49a1a5f5ef9e9f296d98",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98"
+      },
+      {
+        "id": "call_7ae5d70b337f49a1a5f5ef9e9f296d98:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_7ae5d70b337f49a1a5f5ef9e9f296d98"
+      }
+    ],
+    "isolation": []
+  },
+  {
+    "label": "codemode-complete",
+    "at": "2026-10-31T03:34:04.196Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  },
+  {
+    "label": "stop-running",
+    "at": "2026-10-31T03:34:08.580Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  },
+  {
+    "label": "stop-settled",
+    "at": "2026-10-31T03:34:11.912Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  },
+  {
+    "label": "failure-settled",
+    "at": "2026-10-31T03:34:20.277Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  },
+  {
+    "label": "single-running",
+    "at": "2026-10-31T03:34:23.638Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_75b2e80392644c878a2318292a2af548",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": "Run bash: sleep 20 && echo single-done",
+        "status": "running",
+        "toolCallId": "call_75b2e80392644c878a2318292a2af548"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  },
+  {
+    "label": "single-complete",
+    "at": "2026-10-31T03:34:47.694Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_75b2e80392644c878a2318292a2af548",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": "Run bash: sleep 20 && echo single-done",
+        "status": "completed",
+        "toolCallId": "call_75b2e80392644c878a2318292a2af548"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  },
+  {
+    "label": "parallel-complete",
+    "at": "2026-10-31T03:34:55.045Z",
+    "rows": [
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_3707835542314e44a73ff4eafb4a6c23:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_3707835542314e44a73ff4eafb4a6c23",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_3707835542314e44a73ff4eafb4a6c23"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_43d2fa8f015a41f08f794ff508e51981/1:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_43d2fa8f015a41f08f794ff508e51981/1",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "completed",
+        "toolCallId": "call_43d2fa8f015a41f08f794ff508e51981"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_09e0f672cd364098a2398b3748f0e8cd:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_09e0f672cd364098a2398b3748f0e8cd",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "canceled",
+        "toolCallId": "call_09e0f672cd364098a2398b3748f0e8cd"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:first",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "capture-worker",
+        "description": "first",
+        "status": "completed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_452b2ef725f94e5dbe2a7815242b9e94:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_452b2ef725f94e5dbe2a7815242b9e94",
+        "title": "capture-worker",
+        "description": "second",
+        "status": "running",
+        "toolCallId": "call_452b2ef725f94e5dbe2a7815242b9e94"
+      },
+      {
+        "id": "call_d794961cbf9e4c3d84d7b42b785d7d87:second",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": "call_d794961cbf9e4c3d84d7b42b785d7d87",
+        "title": "qa-nonexistent-agent-91827",
+        "description": "second",
+        "status": "failed",
+        "toolCallId": "call_d794961cbf9e4c3d84d7b42b785d7d87"
+      },
+      {
+        "id": "call_75b2e80392644c878a2318292a2af548",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": "Run bash: sleep 20 && echo single-done",
+        "status": "completed",
+        "toolCallId": "call_75b2e80392644c878a2318292a2af548"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "workflow",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      },
+      {
+        "id": "call_cf9b6bb2a95e44cbbf5a7882f0014a36:0",
+        "parentAgentId": "727088f2-51da-4b06-84b1-90caad238b78",
+        "parentSubagentId": null,
+        "title": "capture-worker",
+        "description": null,
+        "status": "completed",
+        "toolCallId": "call_cf9b6bb2a95e44cbbf5a7882f0014a36"
+      }
+    ],
+    "isolation": [],
+    "workspaces": [
+      {
+        "id": "wks_3db817d38f11b797",
+        "name": "workflow-sandbox",
+        "status": "running"
+      },
+      {
+        "id": "wks_d8180e41a87ec73c",
+        "name": "isolation-sandbox",
+        "status": "done"
+      }
+    ]
+  }
+]
