@@ -1,0 +1,35 @@
+{
+  "action": "restarted",
+  "target": "home /home/sinkerine/.paseo/worktrees/28vpgp2p/salty-sloth/.dev/pi-workflow-e2e/paseo-home",
+  "supervisorPid": 3782149,
+  "previousWorkerPid": 3782193,
+  "workerPid": 3822990,
+  "acknowledged": true
+}
+
+{
+  "agentId": "727088f2-51da-4b06-84b1-90caad238b78",
+  "status": "reloaded",
+  "timelineSize": 34
+}
+
+PASS dev daemon restart/reopen no running rows [
+  [ 'call_3707835542314e44a73ff4eafb4a6c23', 'completed' ],
+  [ 'call_3707835542314e44a73ff4eafb4a6c23:first', 'completed' ],
+  [ 'call_3707835542314e44a73ff4eafb4a6c23:second', 'completed' ],
+  [ 'call_452b2ef725f94e5dbe2a7815242b9e94', 'completed' ],
+  [ 'call_452b2ef725f94e5dbe2a7815242b9e94:first', 'completed' ],
+  [ 'call_452b2ef725f94e5dbe2a7815242b9e94:second', 'completed' ],
+  [ 'call_09e0f672cd364098a2398b3748f0e8cd', 'canceled' ],
+  [ 'call_09e0f672cd364098a2398b3748f0e8cd:first', 'canceled' ],
+  [ 'call_d794961cbf9e4c3d84d7b42b785d7d87', 'failed' ],
+  [ 'call_d794961cbf9e4c3d84d7b42b785d7d87:first', 'completed' ],
+  [ 'call_d794961cbf9e4c3d84d7b42b785d7d87:second', 'failed' ],
+  [ 'call_75b2e80392644c878a2318292a2af548', 'completed' ],
+  [ 'call_cf9b6bb2a95e44cbbf5a7882f0014a36', 'completed' ],
+  [ 'call_cf9b6bb2a95e44cbbf5a7882f0014a36:0', 'completed' ],
+  [ 'call_ec9f9df0d4d04c94a1134065b69a78f9', 'canceled' ],
+  [ 'call_ec9f9df0d4d04c94a1134065b69a78f9:first', 'canceled' ],
+  [ 'call_7ae5d70b337f49a1a5f5ef9e9f296d98', 'canceled' ],
+  [ 'call_7ae5d70b337f49a1a5f5ef9e9f296d98:first', 'canceled' ]
+]

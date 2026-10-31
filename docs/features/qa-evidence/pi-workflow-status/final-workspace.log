@@ -1,0 +1,9 @@
+
+ RUN  v4.1.6 /home/sinkerine/.paseo/worktrees/28vpgp2p/salty-sloth/packages/server
+
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  20:31:59
+   Duration  410ms (transform 176ms, setup 29ms, import 291ms, tests 17ms, environment 0ms)
+
