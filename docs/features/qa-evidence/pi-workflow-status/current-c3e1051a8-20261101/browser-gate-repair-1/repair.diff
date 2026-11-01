@@ -1,0 +1,16 @@
+diff --git a/packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts b/packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts
+index b44019c00..1a2de970e 100644
+--- a/packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts
++++ b/packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts
+@@ -31,6 +31,11 @@ const test = base.extend<{}, { piWorkflow: PiWorkflowRuntime }>({
+   e2eDaemonEnvironment: async ({ piWorkflow }, provide) => provide(piWorkflow.environment),
+ });
+ 
++test.beforeEach(async ({ piWorkflow }) => {
++  // The worker shares a gate that the preceding test opens during cleanup.
++  await rm(piWorkflow.gate, { force: true });
++});
++
+ function trackRow(page: Page, id: string): Locator {
+   return page.getByTestId(`subagents-track-row-${id}`);
+ }

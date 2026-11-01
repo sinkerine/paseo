@@ -232,13 +232,16 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
     const childSessions: PiChildSessionFile[] = [];
     const childStatuses = new Map<string, ProviderSubagentStatus | undefined>();
     run.pendingLanes.clear();
-    const pendingNodes = new Set(
-      status.workflowGraph?.nodes
-        .filter((node) => node.status === "pending" || node.status === "running")
-        .map((node) => node.id),
-    );
-    for (const phase of status.workflowGraph?.phases ?? []) {
-      if (phase.nodeIds.some((id) => pendingNodes.has(id))) run.pendingLanes.add(phase.title);
+    // Terminal dispatch freezes the graph; only child evidence can keep its groups running.
+    if (isUnsettled(statusPolicy.workflow.get(status.state))) {
+      const pendingNodes = new Set(
+        status.workflowGraph?.nodes
+          .filter((node) => node.status === "pending" || node.status === "running")
+          .map((node) => node.id),
+      );
+      for (const phase of status.workflowGraph?.phases ?? []) {
+        if (phase.nodeIds.some((id) => pendingNodes.has(id))) run.pendingLanes.add(phase.title);
+      }
     }
     for (const step of status.steps) {
       if (!step.workflowKey || step.parentWorkflowRunId !== runId) continue;

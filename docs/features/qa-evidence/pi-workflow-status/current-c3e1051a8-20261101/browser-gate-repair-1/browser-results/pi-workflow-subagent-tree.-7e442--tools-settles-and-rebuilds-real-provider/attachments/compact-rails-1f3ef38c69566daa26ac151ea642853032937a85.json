@@ -1,0 +1,50 @@
+{
+  "indent": 12,
+  "rails": [
+    {
+      "id": "pi-subagents-workflow:6b0dcc70-21fb-4d79-ac26-b08baf6cc9c9",
+      "body": {
+        "x": 4,
+        "y": 594,
+        "width": 446,
+        "height": 52
+      },
+      "icon": {
+        "x": 12,
+        "y": 613,
+        "width": 14,
+        "height": 14
+      }
+    },
+    {
+      "id": "pi-subagents-workflow:6b0dcc70-21fb-4d79-ac26-b08baf6cc9c9/group:T2",
+      "body": {
+        "x": 4,
+        "y": 698,
+        "width": 446,
+        "height": 52
+      },
+      "icon": {
+        "x": 24,
+        "y": 717,
+        "width": 14,
+        "height": 14
+      }
+    },
+    {
+      "id": "pi-subagents-workflow:6b0dcc70-21fb-4d79-ac26-b08baf6cc9c9/T2.review",
+      "body": {
+        "x": 4,
+        "y": 802,
+        "width": 486,
+        "height": 52
+      },
+      "icon": {
+        "x": 36,
+        "y": 821,
+        "width": 14,
+        "height": 14
+      }
+    }
+  ]
+}

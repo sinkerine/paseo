@@ -31,6 +31,11 @@ const test = base.extend<{}, { piWorkflow: PiWorkflowRuntime }>({
   e2eDaemonEnvironment: async ({ piWorkflow }, provide) => provide(piWorkflow.environment),
 });
 
+test.beforeEach(async ({ piWorkflow }) => {
+  // The worker shares a gate that the preceding test opens during cleanup.
+  await rm(piWorkflow.gate, { force: true });
+});
+
 function trackRow(page: Page, id: string): Locator {
   return page.getByTestId(`subagents-track-row-${id}`);
 }

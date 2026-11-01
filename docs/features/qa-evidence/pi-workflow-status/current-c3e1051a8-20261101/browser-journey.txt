@@ -1,0 +1,92 @@
+
+> @getpaseo/app@0.13.2 test:e2e:real
+> cross-env E2E_FORK_PASEO_HOME_FROM=../../.dev/paseo-home playwright test --project=real-provider e2e/browser/pi-workflow-subagent-tree.real.spec.ts --workers=1 --output=/home/sinkerine/dev/paseo/docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-results
+
+[metro] Skipping web setup: EXPO_NO_WEB_SETUP is enabled.
+[metro] Using src/app as the root directory for Expo Router.
+[metro] Waiting on http://localhost:42935
+[metro] Logs for your project will appear below.
+[metro] Web Bundled 1564ms packages/app/index.ts (5729 modules)
+[e2e] Metro warmed on port 42935
+
+Running 2 tests using 1 worker
+
+[e2e] Worker 0 daemon started on port 46665, home: /tmp/paseo-e2e-worker-0-tUODkP
+[e2e] Worker 0 daemon stopped
+  ✘  1 [real-provider] › e2e/browser/pi-workflow-subagent-tree.real.spec.ts:116:1 › running workflow panes show shared child trees on wide and compact layouts (7ms)
+[e2e] Worker 1 daemon started on port 45169, home: /tmp/paseo-e2e-worker-1-dFC4ow
+[e2e] Worker 1 daemon stopped
+  ✘  2 [real-provider] › e2e/browser/pi-workflow-subagent-tree.real.spec.ts:177:1 › scripted Pi workflow tree discloses independently, streams child tools, settles and rebuilds (8ms)
+[e2e] Metro stopped
+
+
+  1) [real-provider] › e2e/browser/pi-workflow-subagent-tree.real.spec.ts:116:1 › running workflow panes show shared child trees on wide and compact layouts 
+
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-RoIIo4 --remote-debugging-pipe --no-startup-window
+    <launched> pid=1037031
+    [pid=1037031][err] /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libglib-2.0.so.0: cannot open shared object file: No such file or directory
+    Call log:
+    [2m  - <launching> /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-RoIIo4 --remote-debugging-pipe --no-startup-window[22m
+    [2m  - <launched> pid=1037031[22m
+    [2m  - [pid=1037031][err] /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libglib-2.0.so.0: cannot open shared object file: No such file or directory[22m
+    [2m  - [pid=1037031] <gracefully close start>[22m
+    [2m  - [pid=1037031] <kill>[22m
+    [2m  - [pid=1037031] <will force kill>[22m
+    [2m  - [pid=1037031] exception while trying to kill process: Error: kill ESRCH[22m
+    [2m  - [pid=1037031] <process did exit: exitCode=127, signal=null>[22m
+    [2m  - [pid=1037031] starting temporary directories cleanup[22m
+    [2m  - [pid=1037031] finished temporary directories cleanup[22m
+    [2m  - [pid=1037031] <gracefully close end>[22m
+
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-results/pi-workflow-subagent-tree.-75d17-on-wide-and-compact-layouts-real-provider/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-results/pi-workflow-subagent-tree.-75d17-on-wide-and-compact-layouts-real-provider/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [real-provider] › e2e/browser/pi-workflow-subagent-tree.real.spec.ts:177:1 › scripted Pi workflow tree discloses independently, streams child tools, settles and rebuilds 
+
+    Error: browserType.launch: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-cSaQR8 --remote-debugging-pipe --no-startup-window
+    <launched> pid=1037360
+    [pid=1037360][err] /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libglib-2.0.so.0: cannot open shared object file: No such file or directory
+    Call log:
+    [2m  - <launching> /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-cSaQR8 --remote-debugging-pipe --no-startup-window[22m
+    [2m  - <launched> pid=1037360[22m
+    [2m  - [pid=1037360][err] /home/sinkerine/.cache/ms-playwright/chromium_headless_shell-1208/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libglib-2.0.so.0: cannot open shared object file: No such file or directory[22m
+    [2m  - [pid=1037360] <gracefully close start>[22m
+    [2m  - [pid=1037360] <kill>[22m
+    [2m  - [pid=1037360] <will force kill>[22m
+    [2m  - [pid=1037360] exception while trying to kill process: Error: kill ESRCH[22m
+    [2m  - [pid=1037360] <process did exit: exitCode=127, signal=null>[22m
+    [2m  - [pid=1037360] starting temporary directories cleanup[22m
+    [2m  - [pid=1037360] finished temporary directories cleanup[22m
+    [2m  - [pid=1037360] <gracefully close end>[22m
+
+
+    attachment #1: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-results/pi-workflow-subagent-tree.-7e442--tools-settles-and-rebuilds-real-provider/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-results/pi-workflow-subagent-tree.-7e442--tools-settles-and-rebuilds-real-provider/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [real-provider] › e2e/browser/pi-workflow-subagent-tree.real.spec.ts:116:1 › running workflow panes show shared child trees on wide and compact layouts 
+    [real-provider] › e2e/browser/pi-workflow-subagent-tree.real.spec.ts:177:1 › scripted Pi workflow tree discloses independently, streams child tools, settles and rebuilds 
+npm error Lifecycle script `test:e2e:real` failed with error:
+npm error code 1
+npm error path /home/sinkerine/dev/paseo/packages/app
+npm error workspace @getpaseo/app@0.13.2
+npm error location /home/sinkerine/dev/paseo/packages/app
+npm error command failed
+npm error command sh -c cross-env E2E_FORK_PASEO_HOME_FROM=../../.dev/paseo-home playwright test --project=real-provider e2e/browser/pi-workflow-subagent-tree.real.spec.ts --workers=1 --output=/home/sinkerine/dev/paseo/docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-results
