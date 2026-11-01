@@ -2503,6 +2503,7 @@ export const zhCN: TranslationResources = {
         title: "智能体配置 · {{host}}",
         select: "选择配置：{{name}}",
         start: "启动智能体：{{name}}",
+        missing: "{{host}} 上没有名为 {{name}} 的智能体配置",
         starting: "正在启动智能体：{{name}}",
       },
       dialogTitle: "快捷键",

@@ -30,13 +30,10 @@ describe("saved profile routing", () => {
     "dispatches %s to its host and profile",
     (action) => {
       expect(
-        routeKeyboardShortcut(
-          { action, payload: { serverId: "host", profileId: "profile" } },
-          makeCtx(),
-        ),
+        routeKeyboardShortcut({ action, payload: { profileKey: "profile" } }, makeCtx()),
       ).toEqual({
         kind: "dispatch",
-        action: { id: action, scope: "workspace", serverId: "host", profileId: "profile" },
+        action: { id: action, scope: "workspace", profileKey: "profile" },
       });
       expect(routeKeyboardShortcut({ action, payload: null }, makeCtx())).toEqual({ kind: "none" });
     },

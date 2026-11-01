@@ -2589,6 +2589,7 @@ export const es: TranslationResources = {
         title: "Perfiles de agente · {{host}}",
         select: "Seleccionar perfil: {{name}}",
         start: "Iniciar agente: {{name}}",
+        missing: "No hay ningún perfil de agente llamado {{name}} en {{host}}",
         starting: "Iniciando agente: {{name}}",
       },
       dialogTitle: "Atajos",

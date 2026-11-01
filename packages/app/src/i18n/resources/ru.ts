@@ -2577,6 +2577,7 @@ export const ru: TranslationResources = {
         title: "Профили агента · {{host}}",
         select: "Выбрать профиль: {{name}}",
         start: "Запустить агента: {{name}}",
+        missing: "На {{host}} нет профиля агента с именем {{name}}",
         starting: "Запуск агента: {{name}}",
       },
       dialogTitle: "Сочетания клавиш",

@@ -2553,6 +2553,7 @@ export const ja: TranslationResources = {
         title: "エージェントプロファイル · {{host}}",
         select: "プロファイルを選択: {{name}}",
         start: "エージェントを開始: {{name}}",
+        missing: "{{host}} に {{name}} という名前のエージェントプロファイルはありません",
         starting: "エージェントを開始中: {{name}}",
       },
       dialogTitle: "ショートカット",

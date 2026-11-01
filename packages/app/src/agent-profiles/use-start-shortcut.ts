@@ -8,6 +8,9 @@ import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-dr
 import { materializeAgentProfile } from "./internal/materialize-profile";
 import { useAgentProfiles } from "./internal/use-agent-profiles";
 
+import { findAgentProfileForShortcut } from "./shortcuts";
+import { useMissingAgentProfileToast } from "./internal/use-missing-profile-toast";
+
 interface StartShortcutInput {
   serverId: string;
   workspaceId: string;
@@ -22,15 +25,20 @@ export function useAgentProfileStartShortcut(input: StartShortcutInput) {
   const client = useHostRuntimeClient(input.serverId);
   const { profiles, isSupported } = useAgentProfiles(input.serverId);
   const pending = useRef(false);
+  const showMissingProfile = useMissingAgentProfileToast(input.serverId);
   useKeyboardActionHandler({
     handlerId: `profile-start:${input.serverId}:${input.workspaceId}`,
     actions: ["agent-profile.start"],
     enabled: input.enabled && isSupported,
     priority: 100,
     handle: (action) => {
-      if (action.id !== "agent-profile.start" || action.serverId !== input.serverId) return false;
-      const profile = profiles?.find((entry) => entry.id === action.profileId);
-      if (!profile || !client || !input.cwd || !input.workspaceId) return false;
+      if (action.id !== "agent-profile.start" || profiles === null) return false;
+      const profile = findAgentProfileForShortcut(profiles, action.profileKey);
+      if (!profile) {
+        showMissingProfile(action.profileKey);
+        return true;
+      }
+      if (!client || !input.cwd || !input.workspaceId) return false;
       if (pending.current) return true;
       pending.current = true;
       const dismissPending = toast.show(

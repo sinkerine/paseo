@@ -2569,6 +2569,7 @@ export const ptBR: TranslationResources = {
         title: "Perfis de agente · {{host}}",
         select: "Selecionar perfil: {{name}}",
         start: "Iniciar agente: {{name}}",
+        missing: "Nenhum perfil de agente chamado {{name}} em {{host}}",
         starting: "Iniciando agente: {{name}}",
       },
       dialogTitle: "Atalhos",

@@ -2590,6 +2590,7 @@ export const fr: TranslationResources = {
         title: "Profils d’agent · {{host}}",
         select: "Sélectionner le profil : {{name}}",
         start: "Démarrer un agent : {{name}}",
+        missing: "Aucun profil d’agent nommé {{name}} sur {{host}}",
         starting: "Démarrage de l’agent : {{name}}",
       },
       dialogTitle: "Raccourcis",

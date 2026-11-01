@@ -2568,6 +2568,7 @@ export const ar: TranslationResources = {
         title: "ملفات الوكيل · {{host}}",
         select: "اختيار الملف: {{name}}",
         start: "بدء وكيل: {{name}}",
+        missing: "لا يوجد ملف تعريف وكيل باسم {{name}} على {{host}}",
         starting: "جارٍ بدء الوكيل: {{name}}",
       },
       dialogTitle: "الاختصارات",

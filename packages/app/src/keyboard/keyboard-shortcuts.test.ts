@@ -76,7 +76,7 @@ describe("saved agent profile shortcuts", () => {
   it.each(["agent-profile.select", "agent-profile.start"] as const)(
     "resolves %s with stable host and profile identity",
     (action) => {
-      const id = agentProfileShortcutId(action, "host:one", "profile/two");
+      const id = agentProfileShortcutId(action, "profile/two");
       const bindings = buildEffectiveBindings({ [id]: "Ctrl+Shift+9" });
       const result = resolveShortcut({
         event: { key: "9", code: "Digit9", ctrlKey: true, shiftKey: true },
@@ -84,7 +84,7 @@ describe("saved agent profile shortcuts", () => {
       });
       expect(result.match).toEqual({
         action,
-        payload: { serverId: "host:one", profileId: "profile/two" },
+        payload: { profileKey: "profile/two" },
         preventDefault: true,
         stopPropagation: true,
       });
@@ -105,7 +105,7 @@ describe("saved agent profile shortcuts", () => {
   );
 
   it("ignores malformed profile bindings and cleared shortcuts", () => {
-    const id = agentProfileShortcutId("agent-profile.select", "host", "profile");
+    const id = agentProfileShortcutId("agent-profile.select", "profile");
     const bindings = buildEffectiveBindings({
       [id]: null,
       '["agent-profile.select",42,"profile"]': "Ctrl+Shift+9",
@@ -122,7 +122,7 @@ describe("saved agent profile shortcuts", () => {
   it("supports chord sequences for profiles", () => {
     vi.useFakeTimers();
     try {
-      const id = agentProfileShortcutId("agent-profile.select", "host", "profile");
+      const id = agentProfileShortcutId("agent-profile.select", "profile");
       const bindings = buildEffectiveBindings({ [id]: "Ctrl+K Ctrl+9" });
       const prefix = resolveShortcut({
         event: { key: "k", code: "KeyK", ctrlKey: true },
@@ -134,7 +134,7 @@ describe("saved agent profile shortcuts", () => {
         chordState: prefix.nextChordState,
         bindings,
       });
-      expect(completed.match?.payload).toEqual({ serverId: "host", profileId: "profile" });
+      expect(completed.match?.payload).toEqual({ profileKey: "profile" });
     } finally {
       vi.useRealTimers();
     }

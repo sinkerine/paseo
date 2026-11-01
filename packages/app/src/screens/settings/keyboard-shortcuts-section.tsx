@@ -1,5 +1,9 @@
 import { useAgentProfiles } from "@/agent-profiles";
-import { agentProfileShortcutBinding, agentProfileShortcutId } from "@/agent-profiles/shortcuts";
+import {
+  agentProfileShortcutBinding,
+  agentProfileShortcutId,
+  agentProfileShortcutKey,
+} from "@/agent-profiles/shortcuts";
 import { useHosts } from "@/runtime/host-runtime";
 import type { HostProfile } from "@/types/host-connection";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -347,11 +351,13 @@ function ProfileShortcutSection({
   const { profiles, isSupported } = useAgentProfiles(host.serverId);
   if (!isSupported || !profiles?.length) return null;
   const rows = profiles.flatMap((profile) => {
+    const profileKey = agentProfileShortcutKey(profile.name);
+    if (!profileKey) return [];
     return (["agent-profile.select", "agent-profile.start"] as const).map((action) => {
       const key = action === "agent-profile.select" ? "select" : "start";
       const label = t(`settings.shortcuts.profiles.${key}`, { name: profile.name });
       return {
-        id: agentProfileShortcutId(action, host.serverId, profile.id),
+        id: agentProfileShortcutId(action, profileKey),
         label,
         labelKey: label,
         chord: null,

@@ -62,8 +62,7 @@ export type KeyboardActionDefinition =
   | {
       id: "agent-profile.select" | "agent-profile.start";
       scope: KeyboardActionScope;
-      serverId: string;
-      profileId: string;
+      profileKey: string;
     }
   | { id: "agent.interrupt"; scope: KeyboardActionScope }
   | { id: "message-input.focus"; scope: KeyboardActionScope }

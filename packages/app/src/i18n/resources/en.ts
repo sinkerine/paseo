@@ -2657,6 +2657,7 @@ export const en = {
         title: "Agent profiles · {{host}}",
         select: "Select profile: {{name}}",
         start: "Start agent: {{name}}",
+        missing: "No agent profile named {{name}} on {{host}}",
         starting: "Starting agent: {{name}}",
       },
       dialogTitle: "Shortcuts",
