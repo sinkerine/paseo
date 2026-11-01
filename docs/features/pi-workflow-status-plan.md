@@ -18,6 +18,28 @@ The current user environment is Pi 1.4.0 / pi-subagents 0.84.0 (`/nix/store/spwn
 
 Current-version E2E launches `subagent` directly through the model. Pi 1.4 documents `model-only` tools as unavailable to `codemode` / `ctx.executeTool`, and pi-subagents 0.84 registers `subagent` with that exposure. The historical `tools.subagent` journey returns `TypeError: tools.subagent does not exist`. Current codemode launch validation is unsupported, not passed; historical nested-event fixtures remain the adapter compatibility proof. Do not override provider exposure to manufacture an E2E pass.
 
+## Remaining work on current main (2026-10-31)
+
+The user authorized implementation directly in the main checkout and skipped design.
+The Option C contract above remains authoritative; the original tasks below are historical.
+
+### T1 — settle groups after terminal dispatch
+
+Wave 1; dependencies: none. Own `packages/server/src/server/agent/providers/pi/extensions/pi-subagents/workflow.ts` and its adjacent `workflow.test.ts`; extend `index.test.ts` only if adapter replay coverage is needed. Keep the existing tracker interfaces unchanged.
+
+A frozen terminal artifact can retain pending/running graph nodes after later notices explicitly settle every child. Prevent those stale nodes from keeping a group running. Preserve active-dispatch lane tracking between stages and preserve explicitly running children after terminal dispatch. Cover completed, failed and canceled child evidence, repeated artifact observations, and notice replay.
+
+Unit proof, from `packages/server`:
+`npx vitest run src/server/agent/providers/pi/extensions/pi-subagents/workflow.test.ts --bail=1`.
+Adapter integration proof from the same directory:
+`npx vitest run src/server/agent/providers/pi/extensions/pi-subagents/index.test.ts --bail=1`.
+
+### Current verification and E2E
+
+Run repository typecheck, lint and formatting after the final edit; rebuild workspace declarations before diagnosing cross-package type failures. Run only targeted suites.
+
+Use the existing `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` with Pi 1.4.0 and pi-subagents 0.84.0 for live execution, idle-parent activity, isolation, completion, restart/replay, failure, stop and owner death. Use `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` for wide/compact trees, panes, settlement and reload. These harnesses must own isolated daemon state and clean it up; never restart production port 6767. Retain current raw evidence alongside historical QA. Current codemode model-only launch remains unsupported as specified above.
+
 ## Original approved plan (historical)
 
 Status: **approved by the user (2026-10-30); superseded above**
