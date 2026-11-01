@@ -416,26 +416,105 @@ describe("Pi workflow tracker", () => {
       subtitle: `${expected === "running" ? 0 : 1} of 1 groups done`,
     });
   });
-  test("keeps a lane running while graph stages are pending or running", () => {
-    const fixture = setup();
-    fixture.launch();
-    for (const status of ["pending", "running", "completed"]) {
+  test.each(["queued", "running", "paused", "unknown"])(
+    "keeps a lane running while graph stages are pending or running in %s dispatch",
+    (state) => {
+      const fixture = setup();
+      fixture.launch();
+      for (const status of ["pending", "running", "completed"]) {
+        fixture.writeStatus({
+          state,
+          steps: [step({ status: "completed" })],
+          workflowGraph: {
+            phases: [{ title: "T1", nodeIds: ["T1-implement", "review"] }],
+            nodes: [
+              { id: "T1-implement", status: "completed" },
+              { id: "review", status },
+            ],
+          },
+        });
+        const expected = status === "completed" ? "completed" : "running";
+        expect(event(fixture.tracker.poll(), workflowGroupSubagentId(runId, "T1"))).toMatchObject({
+          status: expected,
+        });
+      }
+    },
+  );
+  test.each([
+    { state: "complete", outcome: "completed", expected: "completed" },
+    { state: "failed", outcome: "failed", expected: "failed" },
+    { state: "stopped", outcome: "stopped", expected: "canceled" },
+  ])(
+    "settles frozen $state dispatch groups after $outcome notices live and on replay",
+    ({ state, outcome, expected }) => {
+      const fixture = setup();
+      const groupId = workflowGroupSubagentId(runId, "T1");
+      const otherId = workflowRunSubagentId(runId, "other");
       fixture.writeStatus({
-        steps: [step({ status: "completed" })],
+        state,
+        pid: process.pid,
+        steps: [step(), step({ workflowKey: "other", label: "Other child" })],
         workflowGraph: {
-          phases: [{ title: "T1", nodeIds: ["T1-implement", "review"] }],
+          phases: [{ title: "T1", nodeIds: ["T1-implement", "other", "review"] }],
           nodes: [
-            { id: "T1-implement", status: "completed" },
-            { id: "review", status },
+            { id: "T1-implement", status: "running" },
+            { id: "other", status: "running" },
+            { id: "review", status: "pending" },
           ],
         },
       });
-      const expected = status === "completed" ? "completed" : "running";
-      expect(event(fixture.tracker.poll(), workflowGroupSubagentId(runId, "T1"))).toMatchObject({
-        status: expected,
-      });
-    }
-  });
+      const liveStore = new ProviderSubagentStore();
+      apply(liveStore, fixture.launch());
+      expect(liveStore.get("parent", groupId)?.status).toBe("running");
+      const firstNotice = incremental();
+      const lastNotice = incremental(
+        `Workflow child ${outcome}: **other**\nWorkflow run: ${runId}`,
+      );
+      apply(liveStore, fixture.tracker.mapNotice(firstNotice));
+      expect(liveStore.get("parent", childId)?.status).toBe("completed");
+      expect(liveStore.get("parent", otherId)?.status).toBe("running");
+      expect(liveStore.get("parent", groupId)?.status).toBe("running");
+      apply(liveStore, fixture.tracker.poll());
+      expect(liveStore.get("parent", childId)?.status).toBe("completed");
+      expect(liveStore.get("parent", groupId)?.status).toBe("running");
+
+      const settled = fixture.tracker.mapNotice(lastNotice);
+      expect(event(settled, groupId)).toMatchObject({ status: expected });
+      expect(event(settled, rootId)).toMatchObject({ subtitle: "1 of 1 groups done" });
+      apply(liveStore, settled);
+      const dispatchNotice = terminal(
+        fixture.asyncDir,
+        "T1-implement=child-1 (running), other=child-2 (running)",
+      );
+      for (const mapping of [
+        fixture.tracker.poll(),
+        fixture.launch(),
+        fixture.tracker.mapNotice(dispatchNotice),
+        fixture.tracker.mapNotice(dispatchNotice),
+      ]) {
+        expect(event(mapping, groupId)).toMatchObject({ status: expected });
+        expect(event(mapping, childId)).toMatchObject({ status: "completed" });
+        expect(event(mapping, otherId)).toMatchObject({ status: expected });
+        apply(liveStore, mapping);
+      }
+      expect(fixture.tracker.poll()).toBeUndefined();
+
+      for (const notices of [
+        [dispatchNotice, firstNotice, lastNotice],
+        [lastNotice, firstNotice, dispatchNotice],
+      ]) {
+        const replay = createPiWorkflowTracker({ readSessions: new Set() });
+        const replayStore = new ProviderSubagentStore();
+        for (const notice of notices) apply(replayStore, replay.mapNotice(notice));
+        apply(replayStore, replay.poll());
+        expect(replayStore.get("parent", groupId)?.status).toBe(expected);
+        expect(replayStore.get("parent", childId)?.status).toBe("completed");
+        expect(replayStore.get("parent", otherId)?.status).toBe(expected);
+        expect(replayStore.get("parent", rootId)?.subtitle).toBe("1 of 1 groups done");
+        expect(replay.poll()).toBeUndefined();
+      }
+    },
+  );
   test("ignores foreign steps and host steps including their transcripts", () => {
     const fixture = setup();
     fixture.launch();
