@@ -1,6 +1,7 @@
 import { classifyAssistantFileLink } from "@/assistant-file-links";
 import { ASSISTANT_FILE_EXTENSIONS } from "@/assistant-file-links/extensions";
 import { normalizeMarkdownHtml } from "./html";
+import { collectMathEdits, needsMathAdaptation, type SourceEdit, type SourceRange } from "./math";
 import { gfmTable } from "micromark-extension-gfm-table";
 import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
 import type { AssistantFileLinkSource } from "@/assistant-file-links";
@@ -108,11 +109,42 @@ function workspaceHoverTitle(link: Link, markup: string, workspaceRoot?: string)
   return link.url.slice(workspaceRoot.length + 1);
 }
 
-/** Preserve source spelling; adapt workspace images, spoiler delimiters, and entity text. */
+/** MD4C flags for the shared renderer. Math is web-only until native builds include RaTeX. */
+export function md4cFlags(supportsMath: boolean) {
+  return { latexMath: supportsMath, hardSoftBreaks: true, admonitions: true } as const;
+}
+
+// Merging makes both starts and ends monotonic, including nested delimiter edits.
+function mergeRanges(ranges: readonly SourceRange[]): SourceRange[] {
+  const merged: SourceRange[] = [];
+  for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
+    const previous = merged.at(-1);
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+    } else {
+      merged.push({ start: range.start, end: range.end });
+    }
+  }
+  return merged;
+}
+
+// Ranges must be sorted and disjoint. Only intersecting ranges need visiting.
+function firstRangeEndingAfter(ranges: readonly SourceRange[], offset: number): number {
+  let low = 0;
+  let high = ranges.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    if (ranges[middle].end <= offset) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+/** Preserve source spelling; adapt images, spoilers, entities, and supported math delimiters. */
 export function prepareMarkdownSource(
   source: string,
   workspaceRoot?: string,
-  options: { supportsSvg?: boolean } = {},
+  options: { supportsSvg?: boolean; supportsMath?: boolean } = {},
 ) {
   source = normalizeMarkdownHtml(source);
   const images: MarkdownImage[] = [];
@@ -123,14 +155,59 @@ export function prepareMarkdownSource(
       mdastExtensions: [gfmTableFromMarkdown()],
     }));
   const metadata = linkMetadata(collectInlineCodePaths(source, workspaceRoot));
-  const edits: { start: number; end: number; text: string }[] = [];
+  const edits: SourceEdit[] = [];
   if (
     !source.includes("![") &&
     !source.includes("||") &&
     !source.includes("&") &&
+    !(options.supportsMath && needsMathAdaptation(source)) &&
     !(workspaceRoot && source.includes("]("))
   ) {
     return { images, ...metadata, render: () => source };
+  }
+
+  const literal: SourceRange[] = [];
+  const opaque: SourceRange[] = [];
+  const references: Extract<Nodes, { type: "linkReference" }>[] = [];
+  function collectLiteral(node: Nodes) {
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined) return;
+    if (["code", "inlineCode", "html"].includes(node.type)) {
+      literal.push({ start, end });
+      return;
+    }
+    if (["image", "imageReference", "definition"].includes(node.type)) {
+      opaque.push({ start, end });
+      return;
+    }
+    if (node.type === "link" || node.type === "linkReference") {
+      if (source[start] !== "[") {
+        // Autolink text is also its destination.
+        opaque.push({ start, end });
+        return;
+      }
+      const labelStart = node.children[0]?.position?.start.offset ?? start + 1;
+      const labelEnd = node.children.at(-1)?.position?.end.offset ?? labelStart;
+      opaque.push({ start, end: labelStart }, { start: labelEnd, end });
+      if (node.type === "linkReference" && node.referenceType !== "full") references.push(node);
+    }
+    if ("children" in node) node.children.forEach(collectLiteral);
+  }
+  let math: SourceRange[] = [];
+  let protectedText: SourceRange[] = [];
+  if (options.supportsMath) {
+    collectLiteral(getTree());
+    const collected = collectMathEdits(source, literal, opaque);
+    for (const edit of collected.edits) edits.push(edit);
+    math = collected.math;
+    protectedText = mergeRanges([...math, ...collected.edits]);
+  }
+  function addEdit(edit: SourceEdit) {
+    const range = math[firstRangeEndingAfter(math, edit.start)];
+    const lastOffset = Math.max(edit.start, edit.end - 1);
+    if (range && range.start <= lastOffset) return;
+    edits.push(edit);
   }
 
   const definitions = new Map<string, { url: string; title?: string | null }>();
@@ -151,7 +228,7 @@ export function prepareMarkdownSource(
       options.supportsSvg === false &&
       /(?:\.svg(?:[?#]|$)|^data:image\/svg\+xml)/i.test(target.url)
     ) {
-      edits.push({ start, end, text: escapeMarkdownText(node.alt ?? "") });
+      addEdit({ start, end, text: escapeMarkdownText(node.alt ?? "") });
       return;
     }
     if (target)
@@ -196,28 +273,40 @@ export function prepareMarkdownSource(
         splitBoundaries.add(boundary);
         // A trailing backslash was a hard break; at a paragraph end it would render literally.
         const cut = source[boundary - 1] === "\\" ? boundary - 1 : boundary;
-        edits.push({ start: cut, end: boundary + 1, text: `\n${blank}\n` });
+        addEdit({ start: cut, end: boundary + 1, text: `\n${blank}\n` });
       };
       if (lineStart > start) split(lineStart - 1);
       if (lineEnd < end) split(lineEnd);
     }
   }
+  function adaptText(start: number, end: number) {
+    if (start === end) return;
+    const original = source.slice(start, end);
+    const text = original
+      .replace(/(?<!\\)&(?:#(?:[xX][\da-fA-F]+|\d+)|[a-zA-Z][a-zA-Z\d]+);/g, (entity) =>
+        decodeString(entity).replace(/[!-/:-@[-`{-~]/g, "\\$&"),
+      )
+      .replace(/(?<!\\)\|\|/g, "\\|\\|");
+    if (text !== original) addEdit({ start, end, text });
+  }
   function visit(node: Nodes) {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start !== undefined && end !== undefined) {
+      const containingMath = math[firstRangeEndingAfter(math, start)];
+      if (containingMath && start >= containingMath.start && end <= containingMath.end) return;
       if (node.type === "paragraph") splitStandaloneImages(node, start, end);
       if (node.type === "link") {
         const title = workspaceHoverTitle(node, source.slice(start, end), workspaceRoot);
         if (title !== null)
-          edits.push({ start: end - 1, end: end - 1, text: ` ${JSON.stringify(title)}` });
+          addEdit({ start: end - 1, end: end - 1, text: ` ${JSON.stringify(title)}` });
       }
       if (node.type === "tableRow") {
         // MD4C's always-enabled spoiler extension otherwise consumes adjacent cell
         // delimiters. Spaces keep empty GFM cells empty without producing spoilers.
         const row = source.slice(start, end);
         for (const match of row.matchAll(/(?<!\\)\|(?=\|)/g)) {
-          edits.push({ start: start + match.index + 1, end: start + match.index + 1, text: " " });
+          addEdit({ start: start + match.index + 1, end: start + match.index + 1, text: " " });
         }
       }
       if (node.type === "image" || node.type === "imageReference") {
@@ -225,18 +314,40 @@ export function prepareMarkdownSource(
         return;
       }
       if (node.type === "text") {
-        const text = source
-          .slice(start, end)
-          .replace(/(?<!\\)&(?:#(?:[xX][\da-fA-F]+|\d+)|[a-zA-Z][a-zA-Z\d]+);/g, (entity) =>
-            decodeString(entity).replace(/[!-/:-@[-`{-~]/g, "\\$&"),
-          )
-          .replace(/(?<!\\)\|\|/g, "\\|\\|");
-        if (text !== source.slice(start, end)) edits.push({ start, end, text });
+        let cursor = start;
+        const first = firstRangeEndingAfter(protectedText, start);
+        for (let index = first; index < protectedText.length; index++) {
+          const range = protectedText[index];
+          if (range.start >= end) break;
+          adaptText(cursor, Math.max(cursor, range.start));
+          cursor = Math.min(end, range.end);
+        }
+        adaptText(cursor, end);
       }
     }
     if ("children" in node) node.children.forEach(visit);
   }
   visit(getTree());
+  function preserveReferenceKeys() {
+    if (!references.length) return;
+    // Include all adaptations: a lone dollar, entity or spoiler can change the key
+    // just as bracket math does. Index once after all visible text edits are known.
+    const changedLabels = mergeRanges(edits);
+    for (const reference of references) {
+      const start = reference.position?.start.offset;
+      const end = reference.position?.end.offset;
+      if (start === undefined || end === undefined) continue;
+      const labelStart = reference.children[0]?.position?.start.offset ?? start + 1;
+      const labelEnd = reference.children.at(-1)?.position?.end.offset ?? labelStart;
+      const change = changedLabels[firstRangeEndingAfter(changedLabels, labelStart)];
+      if (!change || change.start >= labelEnd) continue;
+      // Shortcut/collapsed labels also name the definition. Retain the authored key
+      // when adapting the visible label, or the destination would become unresolved.
+      const suffixStart = labelEnd + 1;
+      addEdit({ start: suffixStart, end, text: source.slice(start, suffixStart) });
+    }
+  }
+  preserveReferenceKeys();
   return {
     images,
     ...metadata,
@@ -260,11 +371,17 @@ export function prepareMarkdownSource(
             : escapeMarkdownText(image.alt),
         });
       }
-      let result = source;
+      // Copy each source gap once. Rebuilding the full string per edit is quadratic
+      // for completed messages with many formulas. Reverse assembly preserves the
+      // existing order of insertions at the same offset.
+      const chunks: string[] = [];
+      let cursor = source.length;
       for (const edit of replacements.sort((a, b) => b.start - a.start)) {
-        result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+        chunks.push(source.slice(edit.end, cursor), edit.text);
+        cursor = edit.start;
       }
-      return result;
+      chunks.push(source.slice(0, cursor));
+      return chunks.toReversed().join("");
     },
   };
 }

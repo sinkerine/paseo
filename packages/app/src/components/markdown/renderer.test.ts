@@ -3,14 +3,14 @@ import { toNativeLinkRecognition } from "react-native-enriched-markdown/src/util
 import { parseMarkdown } from "react-native-enriched-markdown/src/web/parseMarkdown";
 import { recognizeTextLinks } from "react-native-enriched-markdown/src/web/recognizeTextLinks";
 import { classifyAssistantFileLink } from "@/assistant-file-links";
-import { markInlineImages } from "react-native-enriched-markdown/src/web/utils";
+import { extractNodeText, markInlineImages } from "react-native-enriched-markdown/src/web/utils";
 import type { ASTNode } from "react-native-enriched-markdown/src/web/types";
 import { QueryClient } from "@tanstack/react-query";
 import { decodeMarkdownImage, getMarkdownImageStatus } from "./image-decoding";
 import { describe, expect, it } from "vitest";
 import { darkTheme, lightTheme } from "@/styles/theme";
 import { createMarkdownStyles } from "./styles";
-import { prepareMarkdownSource, PENDING_MARKDOWN_IMAGE } from "./source";
+import { md4cFlags, prepareMarkdownSource, PENDING_MARKDOWN_IMAGE } from "./source";
 import { normalizeMarkdownHtml } from "./html";
 
 describe("shared Markdown source adaptation", () => {
@@ -67,10 +67,7 @@ describe("shared Markdown source adaptation", () => {
   it("renders own-line images as blocks through the library parser", async () => {
     const source =
       "Before:\n![Shot](https://x/a.png)\nIcon ![i](https://x/i.png) in text\n> Quoted\n> ![Q](https://x/q.png)";
-    const tree = await parseMarkdown(prepareMarkdownSource(source).render(), {
-      hardSoftBreaks: true,
-      latexMath: false,
-    });
+    const tree = await parseMarkdown(prepareMarkdownSource(source).render(), md4cFlags(false));
     markInlineImages(tree);
     const images: ASTNode[] = [];
     const collect = (node: ASTNode) => {
@@ -146,7 +143,7 @@ it("preserves stable inline-code file classification through the library parser"
   const source = paths.map((path) => `\`${path}\``).join(" and ");
   const prepared = prepareMarkdownSource(source, "/repo");
   const tree = recognizeTextLinks(
-    await parseMarkdown(prepared.render(), { latexMath: false }),
+    await parseMarkdown(prepared.render(), md4cFlags(false)),
     prepared.linkRecognition.text,
     prepared.linkRecognition.inlineCode,
   );
@@ -185,7 +182,7 @@ it("lets the engine own code boundaries while classifying candidate values", asy
   ].join("\n\n");
   const prepared = prepareMarkdownSource(source, "/repo");
   const tree = recognizeTextLinks(
-    await parseMarkdown(prepared.render(), { latexMath: false }),
+    await parseMarkdown(prepared.render(), md4cFlags(false)),
     prepared.linkRecognition.text,
     prepared.linkRecognition.inlineCode,
   );
@@ -216,7 +213,7 @@ describe("bare URL sentence punctuation", () => {
       const source = `${url}${punctuation} Not merged.`;
       const prepared = prepareMarkdownSource(source);
       const tree = recognizeTextLinks(
-        await parseMarkdown(prepared.render(), { latexMath: false }),
+        await parseMarkdown(prepared.render(), md4cFlags(false)),
         prepared.linkRecognition.text,
         prepared.linkRecognition.inlineCode,
       );
@@ -263,7 +260,7 @@ describe("bare URL sentence punctuation", () => {
   ])("links %s whole and leaves %j outside", async (url, punctuation) => {
     const prepared = prepareMarkdownSource(`See ${url}${punctuation} now`);
     const tree = recognizeTextLinks(
-      await parseMarkdown(prepared.render(), { latexMath: false }),
+      await parseMarkdown(prepared.render(), md4cFlags(false)),
       prepared.linkRecognition.text,
       prepared.linkRecognition.inlineCode,
     );
@@ -819,3 +816,391 @@ it.each([false, true])(
     expect(markdownStyle.codeBlock?.fontSize).toBe(theme.fontSize.code);
   },
 );
+
+function descendants(node: ASTNode): ASTNode[] {
+  return [node, ...(node.children ?? []).flatMap(descendants)];
+}
+
+const SCREENSHOT_TEX = String.raw`S = \frac{QK^\top}{\sqrt{D}}, \qquad P = \operatorname{softmax}(S + M), \qquad O = PV.`;
+const MATH_FIXTURES = [
+  {
+    name: "screenshot display",
+    source: `\\[\n${SCREENSHOT_TEX}\n\\]`,
+    math: [["LatexMathDisplay", ` ${SCREENSHOT_TEX} `]],
+  },
+  {
+    name: "own-line dollar delimiters",
+    source: "$$\nx^2\n$$",
+    math: [["LatexMathDisplay", " x^2 "]],
+  },
+  { name: "one-line dollar display", source: "$$x^2$$", math: [["LatexMathDisplay", "x^2"]] },
+  {
+    name: "display between text lines",
+    source: "Before\n$$x^2$$\nAfter",
+    math: [["LatexMathDisplay", "x^2"]],
+  },
+  { name: "multiline TeX", source: "\\[\nx +\ny\n\\]", math: [["LatexMathDisplay", " x + y "]] },
+  { name: "inline dollars", source: "Before $x^2$ after.", math: [["LatexMathInline", "x^2"]] },
+  {
+    name: "inline brackets",
+    source: String.raw`Before \(x^2\) after.`,
+    math: [["LatexMathInline", "x^2"]],
+  },
+  { name: "prefix currency", source: "It costs $5 and $10.", math: [] },
+  { name: "currency range", source: "$5-$10", math: [] },
+  { name: "currency suffix on prefix", source: "US$5", math: [] },
+  { name: "environment variables", source: "$HOME/$PATH", math: [] },
+  { name: "shell prompts", source: "$ npm install\n$ npm test", math: [] },
+  { name: "lone dollars", source: "$ \n $", math: [] },
+  { name: "code span", source: "`$x$ \\[y\\] \\(z\\)`", math: [] },
+  { name: "code fence", source: "```sh\n$x$ \\[y\\] \\(z\\)\n```", math: [] },
+  { name: "work in progress brackets", source: String.raw`\[WIP\] fix`, math: [] },
+  { name: "inline opening boundary", source: String.raw`foo\(x\)`, math: [] },
+  { name: "inline closing boundary", source: String.raw`\(x\)bar`, math: [] },
+  {
+    name: "malformed TeX",
+    source: String.raw`$$\frac{a$$`,
+    math: [["LatexMathDisplay", String.raw`\frac{a`]],
+  },
+  { name: "unclosed dollars", source: "$$ x", math: [] },
+  { name: "unclosed display brackets", source: String.raw`\[ x`, math: [] },
+  { name: "unclosed inline brackets", source: String.raw`\(x`, math: [] },
+  { name: "escaped brackets", source: String.raw`\\[x\\]`, math: [] },
+  { name: "quoted display", source: "> \\[\n> x^2\n> \\]", math: [["LatexMathDisplay", " x^2 "]] },
+  { name: "list display", source: "- \\[\n  x^2\n  \\]", math: [["LatexMathDisplay", " x^2 "]] },
+  {
+    name: "inline code boundary",
+    source: String.raw`\(a ` + "`code`" + String.raw` b\)`,
+    math: [],
+  },
+  { name: "HTML literal block", source: "<?literal\n\\[x\\]\n\\(y\\)\n$ npm\n?>", math: [] },
+];
+
+describe("web math through the real MD4C parser", () => {
+  it.each(MATH_FIXTURES)("parses $name", async ({ source, math }) => {
+    const prepared = prepareMarkdownSource(source, undefined, { supportsMath: true });
+    const tree = await parseMarkdown(prepared.render(), md4cFlags(true));
+    const nodes = descendants(tree).filter((node) => node.type.startsWith("LatexMath"));
+    expect(nodes.map((node) => [node.type, extractNodeText(node)])).toEqual(math);
+  });
+
+  it.each(MATH_FIXTURES)("keeps native source and flags unchanged: $name", async ({ source }) => {
+    const prepared = prepareMarkdownSource(source, undefined, { supportsMath: false });
+    expect(prepared.render()).toBe(source);
+    expect(prepared.render()).toBe(prepareMarkdownSource(source).render());
+    const tree = await parseMarkdown(prepared.render(), md4cFlags(false));
+    expect(descendants(tree).filter((node) => node.type.startsWith("LatexMath"))).toEqual([]);
+  });
+
+  it("preserves the screenshot TeX bytes and lifts one display block", async () => {
+    const source = `\\[\n${SCREENSHOT_TEX}\n\\]`;
+    const rendered = prepareMarkdownSource(source, undefined, { supportsMath: true }).render();
+    expect(rendered).toBe(`$$\n${SCREENSHOT_TEX}\n$$`);
+    const tree = await parseMarkdown(rendered, md4cFlags(true));
+    expect(tree.children).toEqual([
+      { type: "LatexMathDisplay", children: [{ type: "Text", content: ` ${SCREENSHOT_TEX} ` }] },
+    ]);
+  });
+
+  it("keeps inline math and surrounding prose in a single paragraph", async () => {
+    const prepared = prepareMarkdownSource(String.raw`Before $x^2$ and \(y^2\) after.`, undefined, {
+      supportsMath: true,
+    });
+    const tree = await parseMarkdown(prepared.render(), md4cFlags(true));
+    expect(tree.children).toEqual([
+      {
+        type: "Paragraph",
+        children: [
+          { type: "Text", content: "Before " },
+          { type: "LatexMathInline", children: [{ type: "Text", content: "x^2" }] },
+          { type: "Text", content: " and " },
+          { type: "LatexMathInline", children: [{ type: "Text", content: "y^2" }] },
+          { type: "Text", content: " after." },
+        ],
+      },
+    ]);
+  });
+
+  it("preserves currency and shell prompt text including visible dollars", async () => {
+    const source = "It costs $5 and $10. $5-$10 US$5 $HOME/$PATH\n$ npm install\n$ npm test";
+    const prepared = prepareMarkdownSource(source, undefined, { supportsMath: true });
+    const tree = await parseMarkdown(prepared.render(), md4cFlags(true));
+    expect(
+      descendants(tree)
+        .filter((node) => node.type === "Text")
+        .map((node) => node.content),
+    ).toEqual(["It costs $5 and $10. $5-$10 US$5 $HOME/$PATH", "$ npm install", "$ npm test"]);
+    expect(descendants(tree).filter((node) => node.type.startsWith("LatexMath"))).toEqual([]);
+  });
+
+  it("protects converted math from entities, spoilers, images and file titles", async () => {
+    const tex = String.raw`||x|| &amp; [open](/repo/src/file.ts) ![img](local.png)`;
+    const source = `AT&amp;T ||prose|| \\(${tex}\\) tail &amp; ||end||`;
+    const prepared = prepareMarkdownSource(source, "/repo", { supportsMath: true });
+    expect(prepared.render()).toBe(`AT\\&T \\|\\|prose\\|\\| $${tex}$ tail \\& \\|\\|end\\|\\|`);
+    expect(prepared.images).toEqual([]);
+    const tree = recognizeTextLinks(
+      await parseMarkdown(prepared.render(), md4cFlags(true)),
+      prepared.linkRecognition.text,
+      prepared.linkRecognition.inlineCode,
+    );
+    expect(descendants(tree).filter((node) => node.type === "LatexMathInline")).toEqual([
+      { type: "LatexMathInline", children: [{ type: "Text", content: tex }] },
+    ]);
+    expect(descendants(tree).filter((node) => node.type === "Link")).toEqual([]);
+  });
+
+  it.each([
+    String.raw`![\(x\)](a.png) tail`,
+    String.raw`![\(x\)][picture] tail` + "\n\n[picture]: a.png",
+    String.raw`![\(x\)][] tail` + "\n\n" + String.raw`[\(x\)]: a.png`,
+    String.raw`![\(x\)] tail` + "\n\n" + String.raw`[\(x\)]: a.png`,
+  ])("keeps image math opaque across every replacement state: %s", (source) => {
+    const prepared = prepareMarkdownSource(source, undefined, { supportsMath: true });
+    const baseline = prepareMarkdownSource(source);
+    expect(prepared.images).toEqual(baseline.images);
+    expect(prepared.images).toHaveLength(1);
+    const states = [
+      {
+        urls: new Map<string, string>(),
+        unavailable: new Set<string>(),
+        pending: new Set<string>(),
+      },
+      {
+        urls: new Map<string, string>(),
+        unavailable: new Set(["a.png"]),
+        pending: new Set<string>(),
+      },
+      {
+        urls: new Map<string, string>(),
+        unavailable: new Set<string>(),
+        pending: new Set(["a.png"]),
+      },
+      {
+        urls: new Map([["a.png", "blob:resolved"]]),
+        unavailable: new Set<string>(),
+        pending: new Set<string>(),
+      },
+    ];
+    for (const { urls, unavailable, pending } of states) {
+      const rendered = prepared.render(urls, unavailable, pending);
+      expect(rendered).toBe(baseline.render(urls, unavailable, pending));
+      expect(rendered).toContain(" tail");
+    }
+  });
+
+  it.each([
+    String.raw`[open](https://example.com/\(x\) "\(title\)") tail`,
+    String.raw`[open](<https://example.com/\(x\)> '\(title\)') tail`,
+    String.raw`[open][\(key\)] tail` +
+      "\n\n" +
+      String.raw`[\(key\)]: https://example.com/\(x\) "\(title\)"`,
+    String.raw`<https://example.com/\(x\)> tail`,
+  ])("preserves link destinations, titles and reference syntax: %s", async (source) => {
+    const rendered = prepareMarkdownSource(source, undefined, { supportsMath: true }).render();
+    expect(rendered).toBe(source);
+    const baseline = await parseMarkdown(source, md4cFlags(false));
+    const tree = await parseMarkdown(rendered, md4cFlags(true));
+    expect(tree).toEqual(baseline);
+    expect(descendants(tree).filter((node) => node.type === "Link")).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      String.raw`[\(x\)](https://example.com/\(dest\) "\(title\)") tail`,
+      String.raw`[$x$](https://example.com/\(dest\) "\(title\)") tail`,
+    ],
+    [
+      String.raw`[\(x\)][\(key\)] tail` + "\n\n" + String.raw`[\(key\)]: /target "title"`,
+      String.raw`[$x$][\(key\)] tail` + "\n\n" + String.raw`[\(key\)]: /target "title"`,
+    ],
+    [
+      String.raw`[\(x\)][] tail` + "\n\n" + String.raw`[\(x\)]: /target "title"`,
+      String.raw`[$x$][\(x\)] tail` + "\n\n" + String.raw`[\(x\)]: /target "title"`,
+    ],
+    [
+      String.raw`[\(x\)] tail` + "\n\n" + String.raw`[\(x\)]: /target "title"`,
+      String.raw`[$x$][\(x\)] tail` + "\n\n" + String.raw`[\(x\)]: /target "title"`,
+    ],
+  ])("renders visible link math while retaining navigation: %s", async (source, expected) => {
+    const rendered = prepareMarkdownSource(source, undefined, { supportsMath: true }).render();
+    expect(rendered).toBe(expected);
+    const baseline = descendants(await parseMarkdown(source, md4cFlags(false))).filter(
+      (node) => node.type === "Link",
+    );
+    const tree = await parseMarkdown(rendered, md4cFlags(true));
+    const links = descendants(tree).filter((node) => node.type === "Link");
+    expect(links.map((node) => node.attributes)).toEqual(baseline.map((node) => node.attributes));
+    expect(links).toHaveLength(1);
+    expect(descendants(links[0]).filter((node) => node.type === "LatexMathInline")).toEqual([
+      { type: "LatexMathInline", children: [{ type: "Text", content: "x" }] },
+    ]);
+    expect(extractNodeText(tree)).toContain(" tail");
+  });
+
+  it.each([
+    { label: "cost $ now", adapted: String.raw`cost \$ now` },
+    { label: "AT&amp;T", adapted: String.raw`AT\&T` },
+    { label: "||words||", adapted: String.raw`\|\|words\|\|` },
+  ])(
+    "preserves reference keys for every visible label edit: $label",
+    async ({ label, adapted }) => {
+      for (const suffix of ["", "[]"]) {
+        const definition = `[${label}]: /target "Original title"`;
+        const source = `Before [${label}]${suffix} after.\n\n${definition}`;
+        const rendered = prepareMarkdownSource(source, undefined, { supportsMath: true }).render();
+        expect(rendered).toBe(`Before [${adapted}][${label}] after.\n\n${definition}`);
+        const tree = await parseMarkdown(rendered, md4cFlags(true));
+        const links = descendants(tree).filter((node) => node.type === "Link");
+        expect(links.map((node) => node.attributes)).toEqual([
+          { url: "/target", title: "Original title" },
+        ]);
+        const baseline = await parseMarkdown(source, md4cFlags(false));
+        expect(links.map((node) => node.attributes)).toEqual(
+          descendants(baseline)
+            .filter((node) => node.type === "Link")
+            .map((node) => node.attributes),
+        );
+        expect(extractNodeText(tree)).toBe(`Before ${label.replace("&amp;", "&")} after.`);
+      }
+    },
+  );
+
+  it.each([
+    String.raw`[\(x\)][missing] tail`,
+    String.raw`[\(x\)][] tail`,
+    String.raw`[\(x\)] tail`,
+  ])("keeps unresolved references as visible prose without creating links: %s", async (source) => {
+    const rendered = prepareMarkdownSource(source, undefined, { supportsMath: true }).render();
+    expect(rendered).toBe(source.replace(String.raw`\(x\)`, "$x$"));
+    const tree = await parseMarkdown(rendered, md4cFlags(true));
+    expect(descendants(tree).filter((node) => node.type === "Link")).toEqual([]);
+    expect(extractNodeText(tree)).toContain(" tail");
+  });
+
+  it("keeps existing entity and spoiler spelling when native math is off", () => {
+    const source = String.raw`\(x\) &#124;|| |||words||| $ npm`;
+    const expected = String.raw`\(x\) \|\|\| \|\||words\|\|| $ npm`;
+    expect(prepareMarkdownSource(source).render()).toBe(expected);
+    expect(prepareMarkdownSource(source, undefined, { supportsMath: false }).render()).toBe(
+      expected,
+    );
+  });
+
+  it("prepares and renders many completed formulas across text nodes", () => {
+    const paragraph = String.raw`Before &amp; \(x\) after ||words||.` + "\n\n";
+    const expected = String.raw`Before \& $x$ after \|\|words\|\|.` + "\n\n";
+    const source = paragraph.repeat(25_000);
+    const prepared = prepareMarkdownSource(source, undefined, { supportsMath: true });
+    expect(prepared.images).toEqual([]);
+    expect(prepared.render()).toBe(expected.repeat(25_000));
+  });
+
+  it("prepares many completed formulas within one text node", () => {
+    const source = String.raw`\(x\) &amp; `.repeat(25_000);
+    expect(prepareMarkdownSource(source, undefined, { supportsMath: true }).render()).toBe(
+      String.raw`$x$ \& `.repeat(25_000),
+    );
+  });
+
+  it("preserves many adapted reference keys beside completed formulas", () => {
+    const paragraph = String.raw`\(x\) [cost $ now][] and [cost $ now] after.` + "\n\n";
+    const expected =
+      String.raw`$x$ [cost \$ now][cost $ now] and [cost \$ now][cost $ now] after.` + "\n\n";
+    const definition = '[cost $ now]: /target "Original title"';
+    const source = paragraph.repeat(10_000) + definition;
+    expect(prepareMarkdownSource(source, undefined, { supportsMath: true }).render()).toBe(
+      expected.repeat(10_000) + definition,
+    );
+  });
+
+  it("keeps raw dollar spoiler adaptation as documented", () => {
+    expect(prepareMarkdownSource("$||x||$", undefined, { supportsMath: true }).render()).toBe(
+      "$\\|\\|x\\|\\|$",
+    );
+  });
+
+  it("keeps code contents literal and inline-code file links recognized", async () => {
+    const source = '`$x$ \\[y\\] \\(z\\)` and `src/file.ts`\n\n```sh\necho "$HOME" \\[x\\]\n```';
+    const prepared = prepareMarkdownSource(source, "/repo", { supportsMath: true });
+    expect(prepared.render()).toBe(source);
+    const tree = recognizeTextLinks(
+      await parseMarkdown(prepared.render(), md4cFlags(true)),
+      prepared.linkRecognition.text,
+      prepared.linkRecognition.inlineCode,
+    );
+    expect(
+      descendants(tree)
+        .filter((node) => node.type === "Code")
+        .map((node) => node.children),
+    ).toEqual([
+      [{ type: "Text", content: String.raw`$x$ \[y\] \(z\)` }],
+      [{ type: "Text", content: "src/file.ts" }],
+    ]);
+    expect(descendants(tree).filter((node) => node.type === "CodeBlock")).toEqual([
+      {
+        type: "CodeBlock",
+        children: [{ type: "Text", content: 'echo "$HOME" \\[x\\]\n' }],
+        attributes: { language: "sh", fenceChar: "`" },
+      },
+    ]);
+    expect(
+      descendants(tree)
+        .filter((node) => node.type === "Link")
+        .map((node) => node.attributes?.url),
+    ).toEqual(["src/file.ts"]);
+  });
+
+  it("leaves other Markdown behavior intact beside math", async () => {
+    const source = [
+      String.raw`\(x\) [Open](/repo/src/file.ts) ![Image](https://example.com/a.png) ||words|| AT&amp;T`,
+      "| A || B |\n| --- | --- | --- |\n| x || z |",
+      "```mermaid\ngraph TD\nA-->B\n```",
+    ].join("\n\n");
+    const web = prepareMarkdownSource(source, "/repo", { supportsMath: true });
+    const baseline = prepareMarkdownSource(source, "/repo");
+    expect(web.render()).toBe(baseline.render().replace(String.raw`\(x\)`, "$x$"));
+    expect(web.images).toEqual(baseline.images);
+    const tree = await parseMarkdown(web.render(), md4cFlags(true));
+    const nodes = descendants(tree);
+    expect(nodes.filter((node) => node.type === "Link").map((node) => node.attributes)).toEqual([
+      { url: "/repo/src/file.ts", title: "src/file.ts" },
+    ]);
+    expect(
+      nodes.filter((node) => node.type === "Image").map((node) => node.attributes?.url),
+    ).toEqual(["https://example.com/a.png"]);
+    expect(nodes.filter((node) => node.type === "Table")).toHaveLength(1);
+    expect(nodes.filter((node) => node.type === "Text").map((node) => node.content)).toContain(
+      " ||words|| AT&T",
+    );
+    expect(nodes.filter((node) => node.type === "CodeBlock")).toEqual([
+      {
+        type: "CodeBlock",
+        children: [{ type: "Text", content: "graph TD\nA-->B\n" }],
+        attributes: { language: "mermaid", fenceChar: "`" },
+      },
+    ]);
+  });
+
+  it.each([darkTheme, lightTheme])("styles math with paragraph and muted colours", (theme) => {
+    for (const muted of [false, true]) {
+      const { markdownStyle: style } = createMarkdownStyles(theme, {
+        compact: true,
+        muted,
+        blockGap: 12,
+      });
+      const color = muted ? theme.colors.foregroundMuted : theme.colors.foreground;
+      expect(style.paragraph?.color).toBe(color);
+      expect(style.inlineMath).toEqual({ color });
+      expect(style.math).toEqual({
+        marginTop: 0,
+        marginBottom: 12,
+        fontSize: Math.round(theme.fontSize.base * 1.2),
+        color,
+        backgroundColor: "transparent",
+        padding: 4,
+        textAlign: "center",
+      });
+    }
+  });
+});

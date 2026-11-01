@@ -13,14 +13,14 @@ import { density, resolveDensity } from "@/styles/density";
 import { MarkdownBlockStack } from "./block-stack";
 import { WEB_RENDERERS } from "./renderers";
 import { createMarkdownStyles } from "./styles";
-import { PENDING_MARKDOWN_IMAGE } from "./source";
+import { md4cFlags, PENDING_MARKDOWN_IMAGE } from "./source";
 import { splitStreamingMarkdown } from "./streaming";
 import { useMarkdownSource, type MarkdownImageContext } from "./images";
 
 import { MermaidFence, MermaidStreamingContext, splitMermaidFences } from "./fence/mermaid";
 
 const ThemedMarkdown = withUnistyles(EnrichedMarkdownText);
-const MD4C_FLAGS = { latexMath: false, hardSoftBreaks: true, admonitions: true };
+const MD4C_FLAGS = md4cFlags(isWeb);
 
 // Reading the breakpoint here makes Unistyles restyle the text when the layout crosses it.
 const markdownStyle =

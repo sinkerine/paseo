@@ -38,7 +38,11 @@ export interface MarkdownImageContext {
 export function useMarkdownSource(text: string, context: MarkdownImageContext) {
   const occurrenceKey = useId();
   const prepared = useMemo(
-    () => prepareMarkdownSource(text, context.workspaceRoot, { supportsSvg: isWeb }),
+    () =>
+      prepareMarkdownSource(text, context.workspaceRoot, {
+        supportsSvg: isWeb,
+        supportsMath: isWeb,
+      }),
     [text, context.workspaceRoot],
   );
   const sources = [...new Set(prepared.images.map((image) => image.source))];

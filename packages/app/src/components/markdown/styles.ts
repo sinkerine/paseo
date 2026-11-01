@@ -34,6 +34,15 @@ export function createMarkdownStyles(
     selectionColor: theme.colors.terminal.selectionBackground,
     markdownStyle: {
       paragraph,
+      math: {
+        ...block,
+        fontSize: Math.round(fontSize * 1.2),
+        color: paragraph.color,
+        backgroundColor: "transparent",
+        padding: 4,
+        textAlign: "center",
+      },
+      inlineMath: { color: paragraph.color },
       h1: heading(1.6),
       h2: heading(1.4),
       h3: heading(1.2),
