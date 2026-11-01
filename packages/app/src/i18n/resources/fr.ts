@@ -2587,7 +2587,8 @@ export const fr: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "Profils d’agent · {{host}}",
+        title: "Profils d’agent",
+        sharedHint: "Les raccourcis s’appliquent au profil du même nom sur chaque hôte.",
         select: "Sélectionner le profil : {{name}}",
         start: "Démarrer un agent : {{name}}",
         missing: "Aucun profil d’agent nommé {{name}} sur {{host}}",

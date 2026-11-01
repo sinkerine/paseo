@@ -19,7 +19,11 @@ export type { AgentProfileSeed } from "./internal/profile-form-model";
 export { useAgentProfileEditor, type AgentProfileEditorControls } from "./agent-profile-editor";
 export { useAgentProfileStartShortcut } from "./use-start-shortcut";
 export { useAgentProfileSelectShortcut } from "./use-select-shortcut";
-export { useAgentProfiles } from "./internal/use-agent-profiles";
+export {
+  useAgentProfiles,
+  useAgentProfilesForHosts,
+  type HostAgentProfiles,
+} from "./internal/use-agent-profiles";
 export {
   useAgentProfilePicker,
   type AgentProfileApplyTarget,

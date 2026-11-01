@@ -2566,7 +2566,8 @@ export const ptBR: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "Perfis de agente · {{host}}",
+        title: "Perfis de agente",
+        sharedHint: "Os atalhos se aplicam ao perfil com o mesmo nome em todos os hosts.",
         select: "Selecionar perfil: {{name}}",
         start: "Iniciar agente: {{name}}",
         missing: "Nenhum perfil de agente chamado {{name}} em {{host}}",

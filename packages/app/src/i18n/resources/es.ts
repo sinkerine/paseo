@@ -2586,7 +2586,8 @@ export const es: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "Perfiles de agente · {{host}}",
+        title: "Perfiles de agente",
+        sharedHint: "Los atajos se aplican al perfil con el mismo nombre en todos los hosts.",
         select: "Seleccionar perfil: {{name}}",
         start: "Iniciar agente: {{name}}",
         missing: "No hay ningún perfil de agente llamado {{name}} en {{host}}",

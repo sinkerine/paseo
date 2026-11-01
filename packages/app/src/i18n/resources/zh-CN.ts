@@ -2500,7 +2500,8 @@ export const zhCN: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "智能体配置 · {{host}}",
+        title: "智能体配置",
+        sharedHint: "快捷键适用于每台主机上同名的智能体配置。",
         select: "选择配置：{{name}}",
         start: "启动智能体：{{name}}",
         missing: "{{host}} 上没有名为 {{name}} 的智能体配置",

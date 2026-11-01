@@ -1,12 +1,8 @@
-import { useAgentProfiles } from "@/agent-profiles";
-import {
-  agentProfileShortcutBinding,
-  agentProfileShortcutId,
-  agentProfileShortcutKey,
-} from "@/agent-profiles/shortcuts";
+import { useAgentProfilesForHosts } from "@/agent-profiles";
+import { agentProfileShortcutBinding } from "@/agent-profiles/shortcuts";
+import { buildProfileShortcutRows } from "./profile-shortcut-rows";
 import { useHosts } from "@/runtime/host-runtime";
-import type { HostProfile } from "@/types/host-connection";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { View, Text, type PressableStateCallbackType } from "react-native";
 import { useIsFocused } from "expo-router/react-navigation";
@@ -292,7 +288,10 @@ function ShortcutRow({
 
   return (
     <View style={rowStyle}>
-      <Text style={styles.rowLabel}>{t(row.labelKey)}</Text>
+      <View style={styles.rowLabelContainer}>
+        <Text style={styles.rowLabel}>{t(row.labelKey)}</Text>
+        {row.note && <Text style={styles.rowNote}>{row.note}</Text>}
+      </View>
       <View style={styles.rowActions}>
         <View style={styles.rowKeys}>
           <ShortcutRowKeys
@@ -340,40 +339,16 @@ function ShortcutRow({
   );
 }
 
-function ProfileShortcutSection({
-  host,
-  renderRow,
-}: {
-  host: HostProfile;
-  renderRow: (row: KeyboardShortcutHelpRow, index: number) => ReactNode;
-}) {
-  const { t } = useTranslation();
-  const { profiles, isSupported } = useAgentProfiles(host.serverId);
-  if (!isSupported || !profiles?.length) return null;
-  const rows = profiles.flatMap((profile) => {
-    const profileKey = agentProfileShortcutKey(profile.name);
-    if (!profileKey) return [];
-    return (["agent-profile.select", "agent-profile.start"] as const).map((action) => {
-      const key = action === "agent-profile.select" ? "select" : "start";
-      const label = t(`settings.shortcuts.profiles.${key}`, { name: profile.name });
-      return {
-        id: agentProfileShortcutId(action, profileKey),
-        label,
-        labelKey: label,
-        chord: null,
-      };
-    });
-  });
-  return (
-    <SettingsSection title={t("settings.shortcuts.profiles.title", { host: host.label })}>
-      <View style={settingsStyles.card}>{rows.map(renderRow)}</View>
-    </SettingsSection>
-  );
-}
-
 export function KeyboardShortcutsSection() {
   const { t } = useTranslation();
   const hosts = useHosts();
+  const serverIds = useMemo(() => hosts.map((host) => host.serverId), [hosts]);
+  const hostProfiles = useAgentProfilesForHosts(serverIds);
+  const profileRows = buildProfileShortcutRows({
+    hosts: hostProfiles,
+    hostLabel: (serverId) => hosts.find((host) => host.serverId === serverId)?.label ?? serverId,
+    t,
+  });
   const [capturingBindingId, setCapturingBindingId] = useState<string | null>(null);
   const [capturedCombos, setCapturedCombos] = useState<string[]>([]);
   const [heldModifiers, setHeldModifiers] = useState<string | null>(null);
@@ -551,9 +526,14 @@ export function KeyboardShortcutsSection() {
 
   return (
     <>
-      {hosts.map((host) => (
-        <ProfileShortcutSection key={host.serverId} host={host} renderRow={renderShortcutRow} />
-      ))}
+      {profileRows.length > 0 && (
+        <SettingsSection
+          title={t("settings.shortcuts.profiles.title")}
+          info={t("settings.shortcuts.profiles.sharedHint")}
+        >
+          <View style={settingsStyles.card}>{profileRows.map(renderShortcutRow)}</View>
+        </SettingsSection>
+      )}
       {sections.map(function (section, sectionIndex) {
         return (
           <SettingsSection
@@ -579,6 +559,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowCapturing: {
     backgroundColor: theme.colors.surface2,
+  },
+  rowLabelContainer: {
+    flexShrink: 1,
+    gap: theme.spacing[1],
+  },
+  rowNote: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
   },
   rowLabel: {
     fontSize: theme.fontSize.base,
