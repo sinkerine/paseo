@@ -1,0 +1,8 @@
+
+> paseo@0.13.2 format:check:files
+> oxfmt --check docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/README.md docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/commands.md docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-nix-retry/README.md docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-nix-retry/cleanup.json docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-nix-retry/nix-runtime.json docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-nix-retry/trace-runtime.json
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 142ms on 6 files using 32 threads.

@@ -1,0 +1,57 @@
+[
+  {
+    "version": 8,
+    "type": "context-options",
+    "origin": "testRunner",
+    "browserName": "",
+    "playwrightVersion": "1.58.2",
+    "options": {},
+    "platform": "linux",
+    "wallTime": 1793503067579,
+    "monotonicTime": 52044.706,
+    "sdkLanguage": "javascript"
+  },
+  {
+    "version": 8,
+    "type": "context-options",
+    "origin": "library",
+    "browserName": "chromium",
+    "playwrightVersion": "1.58.2",
+    "options": {
+      "noDefaultViewport": false,
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "ignoreHTTPSErrors": false,
+      "javaScriptEnabled": true,
+      "bypassCSP": false,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+      "locale": "en-US",
+      "offline": false,
+      "deviceScaleFactor": 1,
+      "isMobile": false,
+      "hasTouch": false,
+      "colorScheme": "light",
+      "acceptDownloads": "accept",
+      "baseURL": "http://localhost:40983",
+      "recordVideo": {
+        "dir": "/home/sinkerine/dev/paseo/docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-nix-retry/browser-results/.playwright-artifacts-0",
+        "size": {
+          "width": 800,
+          "height": 450
+        }
+      },
+      "serviceWorkers": "allow",
+      "selectorEngines": [],
+      "testIdAttributeName": "data-testid"
+    },
+    "platform": "linux",
+    "wallTime": 1793503067583,
+    "monotonicTime": 52049.13,
+    "sdkLanguage": "javascript",
+    "testIdAttributeName": "data-testid",
+    "contextId": "browser-context@d9fffe572c95223e5e23481efa3cdd17",
+    "title": "pi-workflow-subagent-tree.real.spec.ts:177 \u203a scripted Pi workflow tree discloses independently, streams child tools, settles and rebuilds"
+  }
+]

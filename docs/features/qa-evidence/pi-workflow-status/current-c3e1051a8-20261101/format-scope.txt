@@ -1,0 +1,10 @@
+/*
+!/docs/
+/docs/*
+!/docs/features/
+/docs/features/*
+!/docs/features/qa-evidence/
+/docs/features/qa-evidence/*
+!/docs/features/qa-evidence/pi-workflow-status/
+/docs/features/qa-evidence/pi-workflow-status/*
+!/docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/

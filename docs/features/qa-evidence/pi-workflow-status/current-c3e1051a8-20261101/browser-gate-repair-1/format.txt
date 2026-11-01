@@ -1,0 +1,5 @@
+
+> paseo@0.13.2 format:files
+> oxfmt packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/README.md docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/commands.md docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-gate-repair-1/README.md docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-gate-repair-1/cleanup.json docs/features/qa-evidence/pi-workflow-status/current-c3e1051a8-20261101/browser-gate-repair-1/verification-commands.json
+
+Finished in 143ms on 6 files using 32 threads.

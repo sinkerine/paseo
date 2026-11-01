@@ -1,0 +1,8 @@
+
+> paseo@0.13.2 format:check
+> oxfmt --check . --ignore-path=/tmp/pi-workflow-acceptance-format.ignore
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 1244ms on 5477 files using 32 threads.

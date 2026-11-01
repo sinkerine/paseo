@@ -1,0 +1,9 @@
+
+ RUN  v4.1.6 /home/sinkerine/dev/paseo/packages/server
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:12:12
+   Duration  18.06s (transform 3.66s, setup 21ms, import 4.71s, tests 13.27s, environment 0ms)
+

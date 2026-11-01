@@ -114,6 +114,8 @@ When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: write
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
+For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. These harnesses own isolated daemon state and cleanup; never restart production port 6767. See [docs/testing.md](docs/testing.md) for targeted test execution.
+
 ## Release branches
 
 When the user says "this goes to next", create or

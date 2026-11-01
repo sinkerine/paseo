@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-11-01T03:18:46.100327+00:00",
+  "roots": [
+    {
+      "path": "/tmp/nix-shell.uDIhsQ",
+      "exists": false
+    },
+    {
+      "path": "/tmp/nix-shell.uDIhsQ/paseo-e2e-worker-0-Sdjuph",
+      "exists": false
+    }
+  ],
+  "matchingProcesses": [],
+  "checkedTestPorts": [40983, 36981],
+  "remainingTestListeners": [],
+  "productionPid": 813116,
+  "harnessOutput": "Worker 0 daemon stopped; Metro stopped; no cleanup assertion failure",
+  "shellCacheCleanup": {
+    "path": "/tmp/nix-shell.uDIhsQ",
+    "remainingEntriesBeforeRemoval": [
+      "jiti",
+      "playwright-transform-cache-1000",
+      "tsx-1000",
+      "claude-1000",
+      "node-compile-cache",
+      "metro-cache",
+      "metro-file-map-expo-8fdf5f0fb050081a0371fa7bea655d4b-d09f75f77c8cd016525bd952b47836bc"
+    ],
+    "removedAfterProcessCheck": true,
+    "existsAfterRemoval": false
+  }
+}
