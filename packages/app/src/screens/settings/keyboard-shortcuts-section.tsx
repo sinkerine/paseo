@@ -290,7 +290,9 @@ function ShortcutRow({
     <View style={rowStyle}>
       <View style={styles.rowLabelContainer}>
         <Text style={styles.rowLabel}>{t(row.labelKey)}</Text>
-        {row.note && <Text style={styles.rowNote}>{row.note}</Text>}
+        {(row.noteKey || row.note) && (
+          <Text style={styles.rowNote}>{row.noteKey ? t(row.noteKey) : row.note}</Text>
+        )}
       </View>
       <View style={styles.rowActions}>
         <View style={styles.rowKeys}>
