@@ -122,3 +122,13 @@ it("keeps text around nested plugin blocks in separate occurrences", () => {
   expect(findRenderedMatches(row, "details").map((range) => range.toString())).toEqual(["details"]);
   expect(findRenderedMatches(row, "beta").map((range) => range.toString())).toEqual(["beta"]);
 });
+
+it("finds visible MathML and surrounding prose without matching hidden TeX annotations", () => {
+  const row = content(
+    '<p>Before <span role="math" aria-label="\\sqrt{x}"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msqrt><mi>x</mi></msqrt><annotation encoding="application/x-tex">\\sqrt{x}</annotation></semantics></math></span> after.</p>',
+  );
+  expect(findRenderedMatches(row, "sqrt")).toEqual([]);
+  expect(findRenderedMatches(row, "x").map((range) => range.toString())).toEqual(["x"]);
+  expect(findRenderedMatches(row, "Before").map((range) => range.toString())).toEqual(["Before"]);
+  expect(findRenderedMatches(row, "after").map((range) => range.toString())).toEqual(["after"]);
+});

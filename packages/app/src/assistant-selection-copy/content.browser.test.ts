@@ -815,3 +815,145 @@ it("copies a workspace image path instead of its temporary display URL", () => {
     "![chart](assets/chart.png)",
   );
 });
+
+describe("math selection copy", () => {
+  function mountMath(
+    display = false,
+    fallback = false,
+    tex = String.raw` \sqrt{x_1} `,
+  ): HTMLElement {
+    const message = mountFixture();
+    const formula = document.createElement("span");
+    formula.setAttribute("role", "math");
+    formula.setAttribute("aria-label", tex);
+    if (fallback) {
+      formula.style.display = display ? "block" : "inline";
+      formula.textContent = `$$${tex}$$`;
+    } else {
+      formula.innerHTML = `<math xmlns="http://www.w3.org/1998/Math/MathML" display="${display ? "block" : "inline"}"><semantics><msqrt><mi>x</mi></msqrt><annotation encoding="application/x-tex"></annotation></semantics></math>`;
+      fixtureElement(formula, "annotation").textContent = tex;
+    }
+    message.innerHTML = display
+      ? "<p>Before <strong>bold</strong>.</p><p>After.</p>"
+      : "<p>Before <strong>bold</strong> and <em>after</em>.</p>";
+    if (display) message.firstElementChild!.after(formula);
+    else message.querySelector("em")!.before(formula, " ");
+    return message;
+  }
+
+  it("copies inline math from raw TeX while retaining surrounding Markdown", () => {
+    const message = mountMath();
+    expect(copiedMarkdown(selectNodeContents(message))).toBe(
+      String.raw`Before **bold** and $ \sqrt{x_1} $ _after_.`,
+    );
+  });
+
+  it.each([" x", "x ", " x "])(
+    "keeps TeX whitespace inside inline delimiters next to punctuation: %j",
+    (tex) => {
+      const message = mountMath(false, false, tex);
+      const formula = fixtureElement(message, '[role="math"]');
+      const paragraph = fixtureElement(message, "p");
+      paragraph.replaceChildren("Value ", formula, ".");
+      const original = message.innerHTML;
+      const selection = selectNodeContents(paragraph);
+      const range = selection.getRangeAt(0).cloneRange();
+
+      expect(copiedMarkdown(selection)).toBe(`Value $${tex}$.`);
+      expect(message.innerHTML).toBe(original);
+      expect(selection.getRangeAt(0).compareBoundaryPoints(Range.START_TO_START, range)).toBe(0);
+      expect(selection.getRangeAt(0).compareBoundaryPoints(Range.END_TO_END, range)).toBe(0);
+    },
+  );
+
+  it.each([false, true])(
+    "preserves prose whitespace and adjacent punctuation for inline fallback=%s",
+    (fallback) => {
+      const message = mountMath(false, fallback);
+      const formula = fixtureElement(message, '[role="math"]');
+      const paragraph = fixtureElement(message, "p");
+      paragraph.replaceChildren("Before (", formula, "), after.");
+      const original = message.innerHTML;
+
+      expect(copiedMarkdown(selectNodeContents(paragraph))).toBe(
+        String.raw`Before ($ \sqrt{x_1} $), after.`,
+      );
+      paragraph.replaceChildren("Before ", formula, " after.");
+      expect(copiedMarkdown(selectNodeContents(paragraph))).toBe(
+        String.raw`Before $ \sqrt{x_1} $ after.`,
+      );
+      paragraph.replaceChildren("Before (", formula, "), after.");
+      expect(message.innerHTML).toBe(original);
+    },
+  );
+
+  it("copies adjacent punctuation when a selection starts inside a formula", () => {
+    const message = mountMath();
+    const formula = fixtureElement(message, '[role="math"]');
+    const after = document.createElement("span");
+    after.textContent = "), after.";
+    fixtureElement(message, "p").replaceChildren("Before (", formula, after);
+    const original = message.innerHTML;
+
+    expect(copiedMarkdown(selectRange(fixtureElement(message, "mi"), 0, after, 2))).toBe(
+      String.raw`$ \sqrt{x_1} $),`,
+    );
+    expect(message.innerHTML).toBe(original);
+  });
+
+  it.each([false, true])(
+    "keeps exact display TeX whitespace between paragraphs with fallback=%s",
+    (fallback) => {
+      const tex = " \n\\sqrt{x_1}\n ";
+      const message = mountMath(true, fallback, tex);
+      const original = message.innerHTML;
+
+      expect(copiedMarkdown(selectNodeContents(message))).toBe(
+        `Before **bold**.\n\n$$\n${tex}\n$$\n\nAfter.`,
+      );
+      expect(message.innerHTML).toBe(original);
+    },
+  );
+
+  it("copies display math as its own block between paragraphs", () => {
+    const message = mountMath(true);
+    expect(copiedMarkdown(selectNodeContents(message))).toBe(
+      "Before **bold**.\n\n$$\n \\sqrt{x_1} \n$$\n\nAfter.",
+    );
+  });
+
+  it.each([false, true])(
+    "expands a selection inside a MathML token to the whole formula with display=%s",
+    (display) => {
+      const message = mountMath(display);
+      const original = message.innerHTML;
+      const selection = selectText(fixtureElement(message, "mi"), 0, 1);
+      const range = selection.getRangeAt(0).cloneRange();
+
+      expect(copiedMarkdown(selection)).toBe(
+        display ? "$$\n \\sqrt{x_1} \n$$" : String.raw`$ \sqrt{x_1} $`,
+      );
+      expect(message.innerHTML).toBe(original);
+      expect(selection.getRangeAt(0).compareBoundaryPoints(Range.START_TO_START, range)).toBe(0);
+      expect(selection.getRangeAt(0).compareBoundaryPoints(Range.END_TO_END, range)).toBe(0);
+    },
+  );
+
+  it("expands either selection edge inside math without expanding neighbouring prose", () => {
+    const message = mountMath();
+    const token = fixtureElement(message, "mi");
+    const after = fixtureElement(message, "em");
+    expect(copiedMarkdown(selectRange(token, 0, after, 3))).toBe(String.raw`$ \sqrt{x_1} $ aft`);
+    expect(copiedMarkdown(selectRange(fixtureElement(message, "strong"), 2, token, 1))).toBe(
+      String.raw`ld and $ \sqrt{x_1} $`,
+    );
+  });
+
+  it.each([false, true])("copies atomic fallback math with display=%s", (display) => {
+    const message = mountMath(display, true);
+    const formula = fixtureElement(message, '[role="math"]');
+    expect(copiedMarkdown(selectText(formula, 4, 8))).toBe(
+      display ? "$$\n \\sqrt{x_1} \n$$" : String.raw`$ \sqrt{x_1} $`,
+    );
+  });
+});

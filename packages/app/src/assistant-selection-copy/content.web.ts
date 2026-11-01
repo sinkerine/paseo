@@ -25,6 +25,7 @@ const CHAT_SCROLL_SELECTOR = '[data-testid="agent-chat-scroll"]';
 const messageRowSelector = (messageId: string) => `[data-message-id="${CSS.escape(messageId)}"]`;
 const CODE_BLOCK_SELECTOR = `pre, [${MARKDOWN_COPY_TAG_ATTRIBUTE}="pre"]`;
 const CODE_REGION_SELECTOR = `${CODE_BLOCK_SELECTOR}, code, [${MARKDOWN_COPY_TAG_ATTRIBUTE}="code"]`;
+const MATH_SELECTOR = 'span[role="math"]';
 const IMAGE_FRAME_SELECTOR = `img, [${MARKDOWN_COPY_TAG_ATTRIBUTE}="img"]`;
 
 const SEMANTIC_TAGS =
@@ -90,6 +91,14 @@ turndown.addRule("compactListItem", {
   },
 });
 
+turndown.addRule("assistantMath", {
+  filter: (node) => node.matches(MATH_SELECTOR),
+  replacement: (_content, node) => {
+    const tex = node.getAttribute("aria-label") ?? "";
+    return node.style.display === "block" ? `\n\n$$\n${tex}\n$$\n\n` : `$${tex}$`;
+  },
+});
+
 export function createAssistantSelectionClipboardContent(
   selection: Selection | null,
 ): MarkdownClipboardContent | null {
@@ -97,7 +106,7 @@ export function createAssistantSelectionClipboardContent(
     return null;
   }
 
-  const range = startAfterImageFrame(selection.getRangeAt(0));
+  const range = expandMathSelection(startAfterImageFrame(selection.getRangeAt(0)));
   const parts = selectedMessageParts(range)?.filter((part) => selectsContent(part.range));
   if (!parts?.length) {
     return null;
@@ -114,6 +123,7 @@ export function createAssistantSelectionClipboardContent(
   for (const part of parts) {
     container.append(cloneMarkdownSelection(part.range, part.message));
   }
+  normalizeClonedMath(container);
   restoreMarkdownElements(container);
 
   const markdown = turndown.turndown(container.innerHTML).trim();
@@ -122,6 +132,19 @@ export function createAssistantSelectionClipboardContent(
   }
   const content = createMarkdownClipboardContent(markdown);
   return { ...content, html: flattenClipboardListMarkup(content.html) };
+}
+
+// Range.cloneContents omits ancestors shared by both edges and cuts their children.
+// Expand the live range before cloning so even a selected MathML token retains its TeX.
+function expandMathSelection(range: Range): Range {
+  const expanded = range.cloneRange();
+  const mathAt = (node: Node) =>
+    (node instanceof Element ? node : node.parentElement)?.closest(MATH_SELECTOR);
+  const start = mathAt(range.startContainer);
+  const end = mathAt(range.endContainer);
+  if (start) expanded.setStartBefore(start);
+  if (end) expanded.setEndAfter(end);
+  return expanded;
 }
 
 /**
@@ -587,6 +610,17 @@ function selectedMessageParts(range: Range): SelectedMessagePart[] | null {
   });
 }
 
+function normalizeClonedMath(container: HTMLElement): void {
+  for (const math of container.querySelectorAll<HTMLElement>(MATH_SELECTOR)) {
+    const display =
+      math.querySelector('math[display="block"]') !== null || math.style.display === "block";
+    math.style.display = display ? "block" : "inline";
+    // Turndown reads flanking whitespace before applying the math rule. Keep the
+    // cloned wrapper atomic so hidden annotation whitespace stays inside its TeX label.
+    math.textContent = "math";
+  }
+}
+
 function restoreMarkdownElements(container: HTMLElement): void {
   for (const ignored of container.querySelectorAll(`[${MARKDOWN_COPY_IGNORE_ATTRIBUTE}]`)) {
     ignored.remove();
@@ -638,7 +672,7 @@ function restoreMarkdownElements(container: HTMLElement): void {
     element.replaceWith(...element.childNodes);
   }
 
-  const presentational = Array.from(container.querySelectorAll("div, span"));
+  const presentational = Array.from(container.querySelectorAll(`div, span:not(${MATH_SELECTOR})`));
   for (const element of presentational.toReversed()) {
     element.replaceWith(...element.childNodes);
   }
