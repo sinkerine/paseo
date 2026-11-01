@@ -3,13 +3,15 @@
 // react-native-web stamps a hardcoded default font onto every text element, so a
 // plain `body { font-family }` never cascades in — the element already has its own
 // font. Instead we inject ONE rule that points all text at a CSS variable and set
-// that variable live. The selector is high-specificity (1,2,0) so it deterministically
+// that variable live. The selector is high-specificity (1,2,2) so it deterministically
 // beats both RN-web's base font and Unistyles' generated classes (0,1,0) — no reliance
 // on stylesheet order. Code/diff/terminal surfaces carry `data-pmono` (and have their
 // subtree excluded via `:not([data-pmono] *)`) so they keep their monospace font.
+// MathML and all its descendants need the browser's math font: forcing the UI
+// stack onto them can suppress radical glyphs even when a math font is available.
 const STYLE_ID = "paseo-ui-font";
 const RULE =
-  ":is(#root, #overlay-root) *:not([data-pmono]):not([data-pmono] *){font-family:var(--paseo-ui-font);}";
+  ":is(#root, #overlay-root) *:not([data-pmono]):not([data-pmono] *):not(math):not(math *){font-family:var(--paseo-ui-font);}";
 
 export function applyRootUiFont(uiFontStack: string): void {
   if (typeof document === "undefined") return;
