@@ -2550,9 +2550,11 @@ export const ja: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "エージェントプロファイル · {{host}}",
+        title: "エージェントプロファイル",
+        sharedHint: "ショートカットは、すべてのホストの同じ名前のプロファイルに適用されます。",
         select: "プロファイルを選択: {{name}}",
         start: "エージェントを開始: {{name}}",
+        missing: "{{host}} に {{name}} という名前のエージェントプロファイルはありません",
         starting: "エージェントを開始中: {{name}}",
       },
       dialogTitle: "ショートカット",

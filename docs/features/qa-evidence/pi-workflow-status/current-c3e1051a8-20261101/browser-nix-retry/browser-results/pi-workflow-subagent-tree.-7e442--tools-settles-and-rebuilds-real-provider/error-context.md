@@ -1,0 +1,51 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e12]:
+    - generic [ref=e15]:
+        - generic [ref=e17]:
+            - button "New workspace" [ref=e20] [cursor=pointer]:
+                - img [ref=e22]
+                - generic [ref=e23]: New workspace
+            - button "History" [ref=e26] [cursor=pointer]:
+                - img [ref=e28]
+                - generic [ref=e32]: History
+            - button "Search" [ref=e35] [cursor=pointer]:
+                - img [ref=e37]
+                - generic [ref=e40]: Search
+            - button "Schedules" [ref=e43] [cursor=pointer]:
+                - img [ref=e45]
+                - generic [ref=e49]: Schedules
+        - generic [ref=e53]:
+            - generic [ref=e54]:
+                - generic [ref=e55]: No projects yet
+                - generic [ref=e56]: Add a project to get started
+            - generic [ref=e57]:
+                - button "Add project" [ref=e58] [cursor=pointer]:
+                    - img [ref=e61]
+                    - generic [ref=e62]: Add project
+                - button "Import session" [ref=e63] [cursor=pointer]:
+                    - img [ref=e66]
+                    - generic [ref=e69]: Import session
+        - generic [ref=e71]:
+            - button "Add project" [ref=e72] [cursor=pointer]:
+                - img [ref=e74]
+            - button "Usage" [ref=e76] [cursor=pointer]:
+                - img [ref=e78]
+            - button "Hosts" [ref=e82] [cursor=pointer]:
+                - img [ref=e84]
+            - button "Help and support" [ref=e88] [cursor=pointer]:
+                - img [ref=e90]
+            - button "Settings" [ref=e93] [cursor=pointer]:
+                - img [ref=e95]
+    - generic [ref=e117]:
+        - button "Close menu" [expanded] [ref=e122] [cursor=pointer]:
+            - img [ref=e124]
+        - generic [ref=e127]:
+            - generic [ref=e128]:
+                - generic [ref=e129]: Workspace unavailable
+                - generic [ref=e130]: localhost
+            - button "Back" [ref=e132] [cursor=pointer]:
+                - img [ref=e135]
+                - generic [ref=e137]: Back
+```

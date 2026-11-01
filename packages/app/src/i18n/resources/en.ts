@@ -2654,9 +2654,11 @@ export const en = {
     },
     shortcuts: {
       profiles: {
-        title: "Agent profiles · {{host}}",
+        title: "Agent profiles",
+        sharedHint: "Shortcuts apply to every host's profile with the same name.",
         select: "Select profile: {{name}}",
         start: "Start agent: {{name}}",
+        missing: "No agent profile named {{name}} on {{host}}",
         starting: "Starting agent: {{name}}",
       },
       dialogTitle: "Shortcuts",

@@ -79,6 +79,48 @@ async function settle(ticks: number): Promise<void> {
 }
 
 describe("createShortcutOverrideStore", () => {
+  it("runs an update after a pending set using its latest value", async () => {
+    const h = createHarness();
+    const set = h.store.set("a", "Mod+1");
+    const update = h.store.update((current) => ({ ...current, b: "Mod+2" }));
+
+    await Promise.all([set, update]);
+
+    expect(h.cached()).toEqual({ a: "Mod+1", b: "Mod+2" });
+    expect(h.persisted()).toEqual({ a: "Mod+1", b: "Mod+2" });
+    expect(h.events).toEqual([
+      'cache {"a":"Mod+1"}',
+      'write {"a":"Mod+1"}',
+      'cache {"a":"Mod+1","b":"Mod+2"}',
+      'write {"a":"Mod+1","b":"Mod+2"}',
+    ]);
+  });
+
+  it("skips cache and storage writes when an update returns its input", async () => {
+    const h = createHarness({ seed: { a: "Mod+1" } });
+    const original = h.cached();
+
+    await h.store.update((current) => current);
+
+    expect(h.cached()).toBe(original);
+    expect(h.persisted()).toEqual(original);
+    expect(h.events).toEqual([]);
+  });
+
+  it("rolls back a failed update and continues with the restored map", async () => {
+    const h = createHarness({ seed: { a: "Mod+1" }, failWrites: [1] });
+    const original = h.cached();
+
+    await h.store.update((current) => ({ ...current, b: "Mod+2" }));
+
+    expect(h.cached()).toBe(original);
+    expect(h.persisted()).toEqual(original);
+    expect(h.errors).toEqual([new Error("storage unavailable")]);
+
+    await h.store.update((current) => ({ ...current, c: "Mod+3" }));
+    expect(h.persisted()).toEqual({ a: "Mod+1", c: "Mod+3" });
+  });
+
   it("persists a rebind", async () => {
     const h = createHarness();
 

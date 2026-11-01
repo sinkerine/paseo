@@ -28,6 +28,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function partsOf(path: string): string[] {
+  if (path.startsWith("shortcuts.")) return ["shortcuts", path.slice("shortcuts.".length)];
   const parts = path.split(".");
   if (parts.some((part) => !part || ["__proto__", "constructor", "prototype"].includes(part))) {
     throw new Error(`Invalid app configuration path: ${path}`);

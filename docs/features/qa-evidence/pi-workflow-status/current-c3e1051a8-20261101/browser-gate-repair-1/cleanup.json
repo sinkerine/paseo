@@ -1,0 +1,45 @@
+{
+  "checkedAt": "2026-11-01T03:22:20.846862+00:00",
+  "roots": [
+    {
+      "path": "/tmp/nix-shell.Aa4CUI",
+      "existsBeforeCacheCleanup": true
+    },
+    {
+      "path": "/tmp/nix-shell.Aa4CUI/paseo-e2e-worker-0-8i8J84",
+      "existsBeforeCacheCleanup": false
+    },
+    {
+      "path": "/tmp/nix-shell.Aa4CUI/paseo-pi-workflow-browser-F8DwJq",
+      "existsBeforeCacheCleanup": false
+    }
+  ],
+  "existsAfterCacheCleanup": [
+    {
+      "path": "/tmp/nix-shell.Aa4CUI",
+      "exists": false
+    },
+    {
+      "path": "/tmp/nix-shell.Aa4CUI/paseo-e2e-worker-0-8i8J84",
+      "exists": false
+    },
+    {
+      "path": "/tmp/nix-shell.Aa4CUI/paseo-pi-workflow-browser-F8DwJq",
+      "exists": false
+    }
+  ],
+  "shellCachesRemoved": [
+    "metro-file-map-expo-8fdf5f0fb050081a0371fa7bea655d4b-d09f75f77c8cd016525bd952b47836bc",
+    "playwright-transform-cache-1000",
+    "claude-1000",
+    "tsx-1000",
+    "node-compile-cache",
+    "jiti",
+    "metro-cache"
+  ],
+  "matchingProcesses": [],
+  "checkedTestPorts": [38963, 33417],
+  "remainingTestListeners": [],
+  "harnessOutput": "Worker 0 daemon stopped; Metro stopped; runtime cleanup assertion passed",
+  "productionPid": 813116
+}

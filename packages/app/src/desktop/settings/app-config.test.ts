@@ -106,6 +106,67 @@ describe("desktop app configuration", () => {
     expect(shortcuts).toEqual({});
   });
 
+  it("accepts and lists shared profile IDs and rejects legacy writes", async () => {
+    const { handler, shortcuts } = setup();
+    const id = JSON.stringify(["agent-profile.select", "saved"]);
+    await handler({ operation: "set", path: `shortcuts.${id}`, value: "Ctrl+Shift+1" });
+    expect(shortcuts).toEqual({ [id]: "Ctrl+Shift+1" });
+    const listed = await handler({ operation: "shortcuts" });
+    expect(listed.shortcuts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id, effective: "Ctrl+Shift+1" })]),
+    );
+    // COMPAT(sharedProfileShortcuts): added 2026-10-31, remove after 2027-04-30
+    const legacyId = JSON.stringify(["agent-profile.select", "host", "profile"]);
+    await expect(
+      handler({ operation: "set", path: `shortcuts.${legacyId}`, value: "Ctrl+Shift+2" }),
+    ).rejects.toThrow(/Unknown shortcut/);
+    expect(shortcuts).toEqual({ [id]: "Ctrl+Shift+1" });
+  });
+
+  it.each(["research..review", "research.review"])(
+    "gets, sets, and unsets the opaque shortcut ID for %s",
+    async (name) => {
+      const { handler, shortcuts } = setup();
+      const id = JSON.stringify(["agent-profile.select", name]);
+      const path = `shortcuts.${id}`;
+      await handler({ operation: "set", path, value: "Ctrl+Shift+1" });
+      expect(shortcuts).toEqual({ [id]: "Ctrl+Shift+1" });
+      expect(await handler({ operation: "get", path })).toEqual({
+        source: "desktop",
+        path,
+        set: true,
+        value: "Ctrl+Shift+1",
+      });
+      await handler({ operation: "unset", path });
+      expect(shortcuts).toEqual({});
+      expect(await handler({ operation: "get", path })).toEqual({
+        source: "desktop",
+        path,
+        set: false,
+        value: undefined,
+      });
+    },
+  );
+
+  it.each([
+    "settings..vimKeybindings",
+    "settings.filePanelAssociations.__proto__.polluted",
+    "settings.filePanelAssociations.constructor.prototype",
+    "settings.filePanelAssociations.prototype",
+  ])("rejects unsafe settings traversal for get, set, and unset: %s", async (path) => {
+    const { handler, settings } = setup();
+    await expect(handler({ operation: "get", path })).rejects.toThrow(
+      /Invalid app configuration path/,
+    );
+    await expect(handler({ operation: "set", path, value: true })).rejects.toThrow(
+      /Invalid app configuration path/,
+    );
+    await expect(handler({ operation: "unset", path })).rejects.toThrow(
+      /Invalid app configuration path/,
+    );
+    expect(settings()).toEqual(DEFAULT_CLIENT_SETTINGS);
+  });
+
   it("reports persistence failures and continues processing later requests", async () => {
     const handler = createAppConfigHandler({
       readSettings: async () => DEFAULT_CLIENT_SETTINGS,

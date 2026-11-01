@@ -1,0 +1,33 @@
+{
+  "daemonHome": "/tmp/nix-shell.Aa4CUI/paseo-e2e-worker-0-8i8J84",
+  "daemonPort": "33417",
+  "piEnvironment": {
+    "PATH": "/nix/store/v86wfk7n5acr75lbhd5aa2qsfbf615rb-pi-coding-agent-1.4.0/bin:/home/sinkerine/dev/paseo/packages/app/node_modules/.bin:/home/sinkerine/dev/paseo/packages/node_modules/.bin:/home/sinkerine/dev/paseo/node_modules/.bin:/home/sinkerine/dev/node_modules/.bin:/home/sinkerine/node_modules/.bin:/home/node_modules/.bin:/node_modules/.bin:/nix/store/635qp27ryiksnnrpd8152lw31w7l82fv-nodejs-slim-22.22.1-npm/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/nix/store/gi0p7azcixb20pddx39k5mwnkj6xl4bz-nodejs-22.22.1/bin:/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin:/nix/store/1nv3i8mpypy3d516f4pd95m0w72r73jy-pkg-config-wrapper-0.29.2/bin:/nix/store/8x49w8i0vafv34rlc6h4a0f7z0z2qpb5-git-2.53.0/bin:/nix/store/i9cay78m4dwjgf1yiyhz74mc1gi4fmbl-ripgrep-15.1.0/bin:/nix/store/jyi1vkcbaihqbfbra4qd0107sj1jhdk4-jq-1.8.1-bin/bin:/nix/store/hqdqynn0caylvl4rr86mvyqjky1pf1xa-ffmpeg-8.0.1-bin/bin:/nix/store/jwk06yywq64vg8q6x3wk9l03ka264lsa-xvfb-run-1+g87f6705/bin:/nix/store/590yx3aynyhs48jyk8ip37fk1mjqfhkb-patchelf-0.15.2/bin:/nix/store/kbw2j1vag664b3sj3rjwz9v53cqx87sb-gcc-wrapper-15.2.0/bin:/nix/store/sca0pf46jmxva40qahkcwys5c1lvk6n2-gcc-15.2.0/bin:/nix/store/2c48s343k15i0cmwb9cp1vi6randmzcw-glibc-2.42-51-bin/bin:/nix/store/hlxw2q9qansq7bn52xvlb5badw3z1v8s-coreutils-9.10/bin:/nix/store/4yi6jj75bb5hhdzpzlxfyf69d35wsf2x-binutils-wrapper-2.44/bin:/nix/store/9nmzd62x45ayp4vmswvn6z45h6bzrsla-binutils-2.44/bin:/nix/store/hlxw2q9qansq7bn52xvlb5badw3z1v8s-coreutils-9.10/bin:/nix/store/b3rx5wac9hhfxn9120xkcvdwj51mc9z2-findutils-4.10.0/bin:/nix/store/icrrz26xbyp293kagrlkab1bhc6gra0r-diffutils-3.12/bin:/nix/store/wv7qq5yb8plyhxji9x3r5gpkyfm2kf29-gnused-4.9/bin:/nix/store/8laf6k81j9ckylrigj3xsk76j69knhvl-gnugrep-3.12/bin:/nix/store/gf7b4yz4vhd0y2hnnrimhh875ghwzzzj-gawk-5.3.2/bin:/nix/store/isva9q9zx3frx6hh6cnpihh1kd2bx6bk-gnutar-1.35/bin:/nix/store/w1n7yp2vnldr395hbwbcaw9sflh413bm-gzip-1.14/bin:/nix/store/x8l7qzpab2gpdrp89g48mxlrsiz4f0gm-bzip2-1.0.8-bin/bin:/nix/store/0xw6y53ijaqwfd9c99wyaqiinychzv1f-gnumake-4.4.1/bin:/nix/store/2hjsch59amjs3nbgh7ahcfzm2bfwl8zi-bash-5.3p9/bin:/nix/store/8y5jm97n4lyw80gh71yihghbhqc11fdz-patch-2.8/bin:/nix/store/27fx8p4k6098wan3zahdbyj79ndcn03z-xz-5.8.2-bin/bin:/nix/store/p3j7lphwlci13f9w2v4rav6rbvpi80li-file-5.45/bin:/home/sinkerine/.pi/agent/bin:/nix/store/vli6118fdbngwy46j1w741ansmrzfszr-ripgrep-15.2.0/bin:/nix/store/4xblm8snjdb609iygrqyrx9l07mqfp2c-fd-10.5.0/bin:/home/sinkerine/.nix-profile/bin:/run/wrappers/bin:/run/current-system/sw/bin",
+    "PI_CODING_AGENT_DIR": "/tmp/nix-shell.Aa4CUI/paseo-pi-workflow-browser-F8DwJq/pi-agent",
+    "PI_SUBAGENTS_TEMP_ROOT": "/tmp/nix-shell.Aa4CUI/paseo-pi-workflow-browser-F8DwJq/subagents-tmp",
+    "PASEO_SCRIPTED_GATE": "/tmp/nix-shell.Aa4CUI/paseo-pi-workflow-browser-F8DwJq/gate"
+  },
+  "workflows": [
+    "pi-subagents-workflow:87e71a1d-0546-4d7d-a4ac-9fa77d6e745e",
+    "pi-subagents-workflow:6b0dcc70-21fb-4d79-ac26-b08baf6cc9c9"
+  ],
+  "before": [
+    "Workflow1 of 2 groups done",
+    "T1Review T1 round 1",
+    "Implement T1worker",
+    "Review T1 round 1reviewer",
+    "T2Review T2",
+    "Implement T2worker",
+    "Review T2reviewer"
+  ],
+  "after": [
+    "Workflow2 of 2 groups done",
+    "T1Review T1 round 1",
+    "Implement T1worker",
+    "Review T1 round 1reviewer",
+    "T2Review T2",
+    "Implement T2worker",
+    "Review T2reviewer",
+    "Cleanupworker"
+  ]
+}

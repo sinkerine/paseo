@@ -164,7 +164,7 @@ function routeMessageInputAction(payload: KeyboardShortcutPayload): ShortcutActi
 function routeAgentProfile(input: ShortcutRoutingInput): ShortcutAction {
   if (input.action !== "agent-profile.select" && input.action !== "agent-profile.start")
     return NONE;
-  if (!input.payload || !("profileId" in input.payload)) return NONE;
+  if (!input.payload || !("profileKey" in input.payload)) return NONE;
   return dispatch({ id: input.action, scope: "workspace", ...input.payload });
 }
 

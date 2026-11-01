@@ -18,7 +18,12 @@ export type { MaterializedAgentProfile } from "./internal/materialize-profile";
 export type { AgentProfileSeed } from "./internal/profile-form-model";
 export { useAgentProfileEditor, type AgentProfileEditorControls } from "./agent-profile-editor";
 export { useAgentProfileStartShortcut } from "./use-start-shortcut";
-export { useAgentProfiles } from "./internal/use-agent-profiles";
+export { useAgentProfileSelectShortcut } from "./use-select-shortcut";
+export {
+  useAgentProfiles,
+  useAgentProfilesForHosts,
+  type HostAgentProfiles,
+} from "./internal/use-agent-profiles";
 export {
   useAgentProfilePicker,
   type AgentProfileApplyTarget,
@@ -28,3 +33,5 @@ export {
 } from "./internal/use-agent-profile-picker";
 export { AgentProfileGlyph } from "./internal/agent-profile-glyph";
 export { AgentProfilesSection } from "./settings/agent-profiles-section";
+
+export { useMissingAgentProfileToast } from "./internal/use-missing-profile-toast";

@@ -1,3 +1,5 @@
+export const daemonConfigQueryRoot = ["daemon-config"] as const;
+
 export function daemonConfigQueryKey(serverId: string | null) {
-  return ["daemon-config", serverId] as const;
+  return [...daemonConfigQueryRoot, serverId] as const;
 }

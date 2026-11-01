@@ -2541,9 +2541,11 @@ export const ko: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "에이전트 프로필 · {{host}}",
+        title: "에이전트 프로필",
+        sharedHint: "단축키는 모든 호스트에서 이름이 같은 프로필에 적용됩니다.",
         select: "프로필 선택: {{name}}",
         start: "에이전트 시작: {{name}}",
+        missing: "{{host}}에 {{name}} 이름의 에이전트 프로필이 없습니다",
         starting: "에이전트 시작 중: {{name}}",
       },
       dialogTitle: "단축키",

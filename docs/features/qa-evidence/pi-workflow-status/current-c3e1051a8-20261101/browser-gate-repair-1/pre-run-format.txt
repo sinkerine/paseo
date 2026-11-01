@@ -1,0 +1,5 @@
+
+> paseo@0.13.2 format:files
+> oxfmt packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts
+
+Finished in 84ms on 1 files using 32 threads.

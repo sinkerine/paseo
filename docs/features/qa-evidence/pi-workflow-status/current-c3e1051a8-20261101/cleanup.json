@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-11-01T03:13:56.844414+00:00",
+  "roots": [
+    {
+      "path": "/tmp/paseo-pi-workflow-e2e-gCiNwg",
+      "exists": false
+    },
+    {
+      "path": "/tmp/paseo-e2e-worker-0-tUODkP",
+      "exists": false
+    },
+    {
+      "path": "/tmp/paseo-e2e-worker-1-dFC4ow",
+      "exists": false
+    }
+  ],
+  "matchingProcesses": [],
+  "productionPidBefore": 813116,
+  "productionPidAfter": 813116,
+  "browserHarness": "Worker 0 and Worker 1 daemon stopped; Metro stopped; no cleanup assertion failure",
+  "checkedTestPorts": [42935, 46665, 45169],
+  "remainingTestListeners": []
+}

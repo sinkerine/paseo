@@ -1,0 +1,5 @@
+
+> paseo@0.13.2 format
+> oxfmt . --ignore-path=/tmp/pi-workflow-acceptance-format.ignore
+
+Finished in 1262ms on 5477 files using 32 threads.

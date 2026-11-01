@@ -83,7 +83,7 @@ interface ShortcutWhen {
 }
 
 type ShortcutPayloadDef =
-  | { type: "agent-profile"; serverId: string; profileId: string }
+  | { type: "agent-profile"; profileKey: string }
   | { type: "index" }
   | { type: "delta"; delta: 1 | -1 }
   | { type: "message-input"; kind: MessageInputKeyboardActionKind };
@@ -1380,7 +1380,7 @@ function resolvePayload(
   if (!def) return null;
   switch (def.type) {
     case "agent-profile":
-      return { serverId: def.serverId, profileId: def.profileId };
+      return { profileKey: def.profileKey };
     case "index": {
       const index = parseDigit(event);
       return index ? { index } : null;

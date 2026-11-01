@@ -8,10 +8,8 @@ import {
   type ReactElement,
   type RefObject,
 } from "react";
-import { useId } from "react";
 import { useIsFocused } from "expo-router/react-navigation";
 import { useRetainedPanelActive } from "@/components/retained-panel";
-import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import { useTranslation } from "react-i18next";
 import { router } from "expo-router";
 import {
@@ -89,6 +87,7 @@ import { CompactModelSheet } from "@/composer/agent-controls/model-sheet";
 import {
   useAgentProfileEditor,
   useAgentProfilePicker,
+  useAgentProfileSelectShortcut,
   type AgentProfileApplyTarget,
   type AgentProfileEditorControls,
   type AgentProfilePicker,
@@ -477,7 +476,7 @@ function buildOpenChangeHandler(
   };
 }
 
-function useAgentProfileSelectShortcut({
+function useComposerAgentProfileSelectShortcut({
   modelSelectorServerId,
   agentProfiles,
   onApplyAgentProfile,
@@ -486,26 +485,14 @@ function useAgentProfileSelectShortcut({
   ControlledAgentControlsProps,
   "modelSelectorServerId" | "agentProfiles" | "onApplyAgentProfile" | "disabled"
 >) {
-  const handlerId = useId();
   const isRouteFocused = useIsFocused();
   const isPanelActive = useRetainedPanelActive();
   const { isActiveComposer } = useComposerKeyboardScope();
-  useKeyboardActionHandler({
-    handlerId,
-    actions: ["agent-profile.select"],
+  useAgentProfileSelectShortcut({
+    serverId: modelSelectorServerId ?? null,
+    agentProfiles: agentProfiles ?? null,
+    onApplyAgentProfile,
     enabled: isActiveComposer && isRouteFocused && isPanelActive && !disabled,
-    priority: 200,
-    handle: (action) => {
-      if (action.id !== "agent-profile.select" || action.serverId !== modelSelectorServerId)
-        return false;
-      if (
-        !onApplyAgentProfile ||
-        !agentProfiles?.rows.some((profile) => profile.id === action.profileId)
-      )
-        return false;
-      onApplyAgentProfile(action.profileId);
-      return true;
-    },
   });
 }
 
@@ -541,7 +528,7 @@ function ControlledAgentControls({
 }: ControlledAgentControlsProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  useAgentProfileSelectShortcut({
+  useComposerAgentProfileSelectShortcut({
     modelSelectorServerId,
     agentProfiles,
     onApplyAgentProfile,

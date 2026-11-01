@@ -91,6 +91,7 @@ import { useLatchedBoolean } from "@/hooks/use-latched-boolean";
 import { useFaviconStatus } from "@/hooks/use-favicon-status";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { KeyboardShiftProvider } from "@/keyboard/shift";
+import { ProfileShortcutMigration } from "@/keyboard/profile-shortcut-migration";
 import { useCompactWebViewportZoomLock } from "@/hooks/use-compact-web-viewport-zoom-lock";
 import { useOpenProject } from "@/hooks/use-open-project";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -160,6 +161,8 @@ function ManagedDaemonSession({ daemon }: { daemon: HostProfile }) {
   return (
     <SessionProvider key={daemon.serverId} serverId={daemon.serverId} client={client}>
       <LegacyFavoriteProfileMigrationBootstrap serverId={daemon.serverId} client={client} />
+      {/* COMPAT(sharedProfileShortcuts): added 2026-10-31, remove after 2027-04-30 */}
+      <ProfileShortcutMigration serverId={daemon.serverId} />
       <PluginCatalogSync serverId={daemon.serverId} client={client} />
     </SessionProvider>
   );

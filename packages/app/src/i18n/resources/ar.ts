@@ -2565,9 +2565,11 @@ export const ar: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "ملفات الوكيل · {{host}}",
+        title: "ملفات الوكيل",
+        sharedHint: "تنطبق الاختصارات على ملف التعريف الذي يحمل الاسم نفسه على كل مضيف.",
         select: "اختيار الملف: {{name}}",
         start: "بدء وكيل: {{name}}",
+        missing: "لا يوجد ملف تعريف وكيل باسم {{name}} على {{host}}",
         starting: "جارٍ بدء الوكيل: {{name}}",
       },
       dialogTitle: "الاختصارات",

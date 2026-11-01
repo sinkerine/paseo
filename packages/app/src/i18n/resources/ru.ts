@@ -2574,9 +2574,11 @@ export const ru: TranslationResources = {
     },
     shortcuts: {
       profiles: {
-        title: "Профили агента · {{host}}",
+        title: "Профили агента",
+        sharedHint: "Сочетания клавиш применяются к профилю с тем же именем на каждом хосте.",
         select: "Выбрать профиль: {{name}}",
         start: "Запустить агента: {{name}}",
+        missing: "На {{host}} нет профиля агента с именем {{name}}",
         starting: "Запуск агента: {{name}}",
       },
       dialogTitle: "Сочетания клавиш",
