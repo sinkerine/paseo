@@ -113,6 +113,67 @@ async function measureRails(page: Page, workflowId: string, testInfo: TestInfo, 
   await testInfo.attach(name, { path: evidencePath, contentType: "application/json" });
 }
 
+test("running workflow panes show shared child trees on wide and compact layouts", async ({
+  page,
+  piWorkflow,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "pi-workflow-pane" });
+  const handles: AgentHandle[] = [];
+  try {
+    for (const compact of [false, true]) {
+      await page.setViewportSize(
+        compact ? { width: 494, height: 862 } : { width: 1280, height: 900 },
+      );
+      const handle = await launchPiWorkflow(page, piWorkflow);
+      handles.push(handle);
+      const id = await runningWorkflow(client, handle);
+      await page.getByTestId("subagents-track-header").filter({ visible: true }).click();
+      await trackRow(page, id).filter({ visible: true }).click();
+      const pane = page.getByTestId("provider-subagent-panel").filter({ visible: true });
+      const tree = pane.getByTestId("provider-subagent-tree");
+      await expect(tree).toBeVisible();
+      await expect(pane.getByTestId("turn-working-indicator")).toHaveCount(0);
+      await expect(tree.getByTestId(`subagents-track-row-${id}/T2.review`)).toBeVisible();
+      await expect(pane.getByTestId("provider-subagent-pane-subtitle")).toHaveText(
+        "1 of 2 groups done",
+      );
+      await tree.getByTestId(`subagents-track-disclosure-${id}/group:T1`).click();
+      await expect(tree.getByTestId(`subagents-track-row-${id}/T1-implement`)).toBeVisible();
+      await screenshot(page, testInfo, `workflow-pane-${compact ? "compact" : "wide"}`);
+      await tree.getByTestId(`subagents-track-row-${id}/group:T2`).click();
+      const groupPane = page
+        .getByTestId("provider-subagent-panel")
+        .filter({ visible: true })
+        .last();
+      await expect(groupPane.getByTestId("provider-subagent-tree")).toBeVisible();
+      await expect(groupPane.getByTestId("turn-working-indicator")).toHaveCount(0);
+      await groupPane.getByTestId(`subagents-track-row-${id}/T2.review`).click();
+      const runPane = page.getByTestId("provider-subagent-panel").filter({ visible: true }).last();
+      await expect(runPane.getByTestId("provider-subagent-tree")).toHaveCount(0);
+      await expect(
+        runPane.getByTestId("tool-call-badge").filter({ hasText: "Shell" }),
+      ).toBeVisible();
+      await screenshot(page, testInfo, `workflow-run-${compact ? "compact" : "wide"}`);
+      await releasePiWorkflow(piWorkflow);
+      await expect
+        .poll(
+          async () =>
+            (await client.listProviderSubagents(handle.agentId)).subagents.every(
+              (row) => row.status !== "running",
+            ),
+          { timeout: 60_000 },
+        )
+        .toBe(true);
+      await rm(piWorkflow.gate);
+    }
+  } finally {
+    await releasePiWorkflow(piWorkflow);
+    for (const handle of handles) await closeAgent(handle);
+    await client.close();
+  }
+});
+
 test("scripted Pi workflow tree discloses independently, streams child tools, settles and rebuilds", async ({
   page,
   piWorkflow,

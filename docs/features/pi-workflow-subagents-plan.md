@@ -9,8 +9,11 @@ Two parts:
   workflows as a Workflow → group → run tree of provider subagents.
 - **App.** The subagents track panel renders any provider subagent subtree as a collapsible tree.
 
-No protocol or daemon store changes. `parentSubagentId` already exists on the wire, behind the
-`providerSubagentNesting` feature gate.
+`parentSubagentId` already exists on the wire, behind the `providerSubagentNesting` feature gate.
+The optional descriptor field `hasTimeline` defaults to today's timeline behavior when absent.
+Workflow roots and groups set it to false, preserved by the daemon store and emitted in both list
+responses and live upserts. The app uses the existing nesting gate and explicit false value to
+open a descendant-tree pane; runs retain their transcript panes.
 
 ## 0. Root cause (confirmed)
 
@@ -133,7 +136,8 @@ Target panel (agent track, wide layout):
   - A lane group stays `running` while its `workflowGraph` nodes include unstarted stages.
 - **AC5 (timelines).** A run's `sessionFile` from `status.json` streams into that run's timeline
   while it runs. It gets its final read when the run reaches a final status, and it is read at
-  most once per adapter session. Workflow and group descriptors have no timeline.
+  most once per adapter session. Workflow and group descriptors have no timeline and declare
+  `hasTimeline: false`; run descriptors omit the field.
 - **AC6 (replay).** Replaying the captured fixture yields the same store state as the live run,
   reduced through the real `ProviderSubagentStore` and ignoring timestamps. That covers the same
   descriptor ids, titles, subtitles, statuses and parents, and the same per-run timeline item
@@ -184,6 +188,12 @@ Target panel (agent track, wide layout):
     runs reads as 1 running.
   - "Archive finished" hides finished direct children; a hidden row hides its subtree.
   - A row with a running descendant is never hidden.
+- **AC15a (synthetic panes).** With `providerSubagentNesting`, a descriptor declaring
+  `hasTimeline: false` shows its subtitle and descendant tree in the pane body, reusing the
+  track's rows, layout, disclosure state and child navigation. It does not subscribe to a timeline
+  or render `AgentStreamView` and its working footer. An absent or true field preserves the
+  timeline pane, even if the subagent has children. The rule is provider-neutral and applies on
+  wide and compact layouts.
 - **AC15 (platform).**
   - Wide layouts (popover) and compact layouts (sheet) render the same tree, using the shared
     `TREE_INDENT_PER_LEVEL` rail.
@@ -786,7 +796,8 @@ After integration (orchestrator, independent evidence):
    spend Claude credits, so ask the user before running them locally. Otherwise defer them to CI
    or a credentialed run, and record that they were not run.
 
-Builds: none expected. No protocol or client types change. If typecheck reports cross-package
+Build protocol and client declarations after changing `hasTimeline`, then regenerate outbound
+validators through the protocol package lifecycle scripts. If typecheck reports cross-package
 declaration errors, run `npm run build:server` (server/CLI) or `npm run build:client` before
 diagnosing.
 

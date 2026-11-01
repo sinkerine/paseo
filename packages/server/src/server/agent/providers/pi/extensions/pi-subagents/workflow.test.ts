@@ -194,7 +194,9 @@ describe("Pi workflow tracker", () => {
       WorkflowLaunchDetails.safeParse({ mode: "workflow", runId: " ", asyncDir: "/tmp" }).success,
     ).toBe(false);
     const expected = {
-      subagents: [{ type: "upsert", id: rootId, title: "Workflow", status: "running" }],
+      subagents: [
+        { type: "upsert", id: rootId, title: "Workflow", status: "running", hasTimeline: false },
+      ],
     };
     expect(fixture.launch()).toEqual(expected);
     fixture.writeStatus({ steps: [step()] });
@@ -454,6 +456,7 @@ describe("Pi workflow tracker", () => {
           type: "upsert",
           id: rootId,
           title: "Workflow",
+          hasTimeline: false,
           status: "running",
           subtitle: "0 of 0 runs done",
         },
@@ -581,6 +584,25 @@ describe("Pi workflow tracker", () => {
       expect(fixture.tracker.mapNotice(message)).toBeUndefined();
     }
     expect(fixture.tracker.poll()).toBeUndefined();
+  });
+});
+
+describe("workflow timeline capability", () => {
+  test("marks synthetic roots and groups without changing run timelines live and on replay", () => {
+    const fixture = setup();
+    expect(event(fixture.launch(), rootId)).toMatchObject({ hasTimeline: false });
+    fixture.writeStatus({ state: "complete", steps: [step({ phase: "T1", status: "completed" })] });
+    const live = fixture.tracker.poll();
+    const replay = createPiWorkflowTracker({ readSessions: new Set() }).mapNotice(
+      terminal(fixture.asyncDir),
+    );
+    for (const mapping of [live, replay]) {
+      expect(event(mapping, rootId)).toMatchObject({ hasTimeline: false });
+      expect(event(mapping, workflowGroupSubagentId(runId, "T1"))).toMatchObject({
+        hasTimeline: false,
+      });
+      expect(event(mapping, childId)).not.toHaveProperty("hasTimeline");
+    }
   });
 });
 

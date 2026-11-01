@@ -2,6 +2,17 @@ import { describe, expect, test } from "vitest";
 import { ProviderSubagentStore } from "./store.js";
 
 describe("ProviderSubagentStore", () => {
+  test("preserves explicit timeline capability across partial upserts", () => {
+    const store = new ProviderSubagentStore();
+    store.apply("parent", "pi", { type: "upsert", id: "root", hasTimeline: false });
+    const update = store.apply("parent", "pi", { type: "upsert", id: "root", status: "completed" });
+    expect(update).toMatchObject({ type: "upsert", subagent: { hasTimeline: false } });
+    expect(store.list("parent")[0]).toMatchObject({ hasTimeline: false });
+    store.apply("parent", "pi", { type: "upsert", id: "root", hasTimeline: true });
+    expect(store.get("parent", "root")).toMatchObject({ hasTimeline: true });
+    store.apply("parent", "pi", { type: "upsert", id: "legacy" });
+    expect(store.get("parent", "legacy")?.hasTimeline).toBeUndefined();
+  });
   test("keeps provider children and their timelines scoped to the parent agent", () => {
     const subagents = new ProviderSubagentStore();
 

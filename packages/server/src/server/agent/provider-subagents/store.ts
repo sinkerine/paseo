@@ -10,6 +10,7 @@ import type {
 export type ProviderSubagentStatus = "running" | "completed" | "failed" | "canceled";
 
 export interface ProviderSubagentDescriptor {
+  hasTimeline?: boolean;
   id: string;
   parentAgentId: string;
   /** Direct provider-subagent parent. Null identifies a child of the managed agent. */
@@ -29,6 +30,7 @@ export type ProviderSubagentInputEvent =
   | {
       type: "upsert";
       id: string;
+      hasTimeline?: boolean;
       title?: string | null;
       description?: string | null;
       /**
@@ -114,6 +116,7 @@ export class ProviderSubagentStore {
     }
     const timestamp = event.timestamp ?? new Date().toISOString();
     const subagent: ProviderSubagentDescriptor = {
+      hasTimeline: event.hasTimeline ?? previous?.hasTimeline,
       id: event.id,
       parentAgentId,
       provider,

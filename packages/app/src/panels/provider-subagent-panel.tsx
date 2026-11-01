@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import invariant from "tiny-invariant";
 import { useShallow } from "zustand/react/shallow";
@@ -19,7 +19,9 @@ import { useSessionStore } from "@/stores/session-store";
 import { ParentAgentCallout } from "@/subagents/parent";
 import { type SubagentRow, useSubagentsForParent } from "@/subagents/select";
 import { useSubagentOpensInSheet } from "@/subagents/opens-in-sheet";
-import { SubagentsTrack } from "@/subagents/track";
+import { SubagentTreeRows, SubagentsTrack } from "@/subagents/track";
+import { MenuRoot } from "@/components/ui/menu";
+import { showsSubagentTree } from "@/subagents/track-presentation";
 import type { ProviderSubagentRow } from "@/subagents/select";
 import type { SubagentTreeRow } from "@/subagents/tree";
 import {
@@ -32,6 +34,7 @@ import {
   refreshProviderSubagents,
   observeProviderSubagentTimeline,
   useProviderSubagentStore,
+  type ProviderSubagentTimelineState,
 } from "@/subagents/provider-store";
 import { useTranslation } from "react-i18next";
 import type { PendingPermission } from "@/types/shared";
@@ -44,6 +47,14 @@ import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 const EMPTY_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_STREAM_ITEMS: StreamItem[] = [];
 const NOOP_SUBAGENT = () => undefined;
+const KEEP_TREE_OPEN = () => true;
+
+function timelineItems(timeline: ProviderSubagentTimelineState | null) {
+  return {
+    streamItems: timeline?.tail ?? EMPTY_STREAM_ITEMS,
+    streamHead: timeline?.head ?? EMPTY_STREAM_ITEMS,
+  };
+}
 
 function resolveChildTrackClearance(childCount: number, isCompact: boolean) {
   if (childCount === 0) return { tail: 0, controls: 0 };
@@ -148,6 +159,10 @@ function ProviderSubagentPanel() {
   const serverInfo = useSessionStore((state) => state.sessions[serverId]?.serverInfo ?? null);
   // COMPAT(projectedSubagentTimeline): added after v0.8.0, remove after 2027-03-14.
   const supported = serverInfo?.features?.projectedSubagentTimeline === true;
+  const showsTree = showsSubagentTree(
+    descriptor,
+    serverInfo?.features?.providerSubagentNesting === true,
+  );
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const isCompact = useIsCompactFormFactor();
   const directChildRows = useSubagentsForParent({
@@ -193,7 +208,7 @@ function ProviderSubagentPanel() {
   }, [client, serverId, supported, target.parentAgentId]);
 
   useEffect(() => {
-    if (!client || !supported) return;
+    if (!client || !supported || showsTree) return;
     return observeProviderSubagentTimeline({
       client,
       serverId,
@@ -209,7 +224,7 @@ function ProviderSubagentPanel() {
         });
       },
     });
-  }, [client, supported, serverId, target.parentAgentId, target.subagentId]);
+  }, [client, supported, showsTree, serverId, target.parentAgentId, target.subagentId]);
 
   const loadOlder = useCallback((): boolean => {
     if (!client || !supported || isLoadingOlder || !timeline?.hasOlder || !timeline.epoch) {
@@ -287,31 +302,50 @@ function ProviderSubagentPanel() {
   return (
     <View style={styles.container} testID="provider-subagent-panel">
       {subtitle ? <PaneSubtitle text={subtitle} testID="provider-subagent-pane-subtitle" /> : null}
-      <View style={styles.stream}>
-        <AgentStreamView
-          agentId={streamId}
-          serverId={serverId}
-          context={streamContext}
-          streamItems={timeline?.tail ?? EMPTY_STREAM_ITEMS}
-          streamHead={timeline?.head ?? EMPTY_STREAM_ITEMS}
-          turnPresentation={turnPresentation}
-          pendingPermissions={EMPTY_PERMISSIONS}
-          isAuthoritativeHistoryReady
-          onOpenWorkspaceFile={openFileInWorkspace}
-          readOnly
-          historyPagination={historyPagination}
-          bottomOverlayTailClearance={childTrackClearance.tail}
-          bottomOverlayControlClearance={childTrackClearance.controls}
-        />
-        <ProviderSubagentChildTrack
-          serverId={serverId}
-          rows={childRows}
-          treeRows={childTreeRows}
-          onToggleExpansion={handleToggleExpansion}
-          onOpenProviderSubagent={openProviderChild}
-          opensInSheet={opensInSheet}
-        />
-      </View>
+      {showsTree ? (
+        <ScrollView
+          style={styles.stream}
+          testID="provider-subagent-tree"
+          contentContainerStyle={styles.treeContent}
+        >
+          <MenuRoot>
+            <SubagentTreeRows
+              serverId={serverId}
+              treeRows={childTreeRows}
+              onToggleExpansion={handleToggleExpansion}
+              onOpenSubagent={NOOP_SUBAGENT}
+              onOpenProviderSubagent={openProviderChild}
+              opensInSheet={KEEP_TREE_OPEN}
+              onArchiveSubagent={NOOP_SUBAGENT}
+            />
+          </MenuRoot>
+        </ScrollView>
+      ) : (
+        <View style={styles.stream}>
+          <AgentStreamView
+            agentId={streamId}
+            serverId={serverId}
+            context={streamContext}
+            {...timelineItems(timeline)}
+            turnPresentation={turnPresentation}
+            pendingPermissions={EMPTY_PERMISSIONS}
+            isAuthoritativeHistoryReady
+            onOpenWorkspaceFile={openFileInWorkspace}
+            readOnly
+            historyPagination={historyPagination}
+            bottomOverlayTailClearance={childTrackClearance.tail}
+            bottomOverlayControlClearance={childTrackClearance.controls}
+          />
+          <ProviderSubagentChildTrack
+            serverId={serverId}
+            rows={childRows}
+            treeRows={childTreeRows}
+            onToggleExpansion={handleToggleExpansion}
+            onOpenProviderSubagent={openProviderChild}
+            opensInSheet={opensInSheet}
+          />
+        </View>
+      )}
       <ParentAgentCallout serverId={serverId} parentAgentId={target.parentAgentId} />
     </View>
   );
@@ -320,6 +354,7 @@ function ProviderSubagentPanel() {
 const styles = StyleSheet.create((theme) => ({
   container: { flex: 1, minHeight: 0 },
   stream: { flex: 1, minHeight: 0 },
+  treeContent: { paddingVertical: theme.spacing[2] },
   unsupported: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   unsupportedText: { color: theme.colors.foregroundMuted, textAlign: "center" },
 }));

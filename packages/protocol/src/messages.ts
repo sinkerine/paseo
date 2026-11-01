@@ -4796,6 +4796,8 @@ export const AgentTimelineListPromptsResponseMessageSchema = z.object({
 });
 
 export const ProviderSubagentDescriptorPayloadSchema = z.object({
+  // COMPAT(providerSubagentTimeline): added in v0.13.2, absence means true; remove after 2027-05-01.
+  hasTimeline: z.boolean().optional(),
   id: z.string(),
   parentAgentId: z.string(),
   // COMPAT(providerSubagentNesting): added in v0.7, remove optional after 2027-03-04.

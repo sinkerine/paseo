@@ -987,7 +987,13 @@ describe("pi-subagents workflows", () => {
       const mapped = host.mapToolCall(call);
       expect(mapped?.detail).toBeUndefined();
       expect(mapped?.subagents).toEqual([
-        { type: "upsert", id: workflowId, title: "Workflow", status: "running" },
+        {
+          type: "upsert",
+          id: workflowId,
+          title: "Workflow",
+          status: "running",
+          hasTimeline: false,
+        },
       ]);
       expect(
         host.mapToolCall({ ...workflowLaunch("/missing/workflow"), status: "failed" }),

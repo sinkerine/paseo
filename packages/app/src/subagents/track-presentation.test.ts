@@ -6,6 +6,7 @@ import {
   buildSubagentRowPresentationData,
   countFinishedSubagents,
   resolveRowLabel,
+  showsSubagentTree,
 } from "./track-presentation";
 
 function row(
@@ -29,6 +30,16 @@ function row(
     createdAt: overrides.createdAt ?? new Date("2026-04-20T00:00:00.000Z"),
   };
 }
+
+describe("provider subagent pane content", () => {
+  it("shows a tree only for explicit timeline-less nodes on nesting-capable hosts", () => {
+    expect(showsSubagentTree({ hasTimeline: false }, true)).toBe(true);
+    expect(showsSubagentTree({ hasTimeline: true }, true)).toBe(false);
+    expect(showsSubagentTree({}, true)).toBe(false);
+    expect(showsSubagentTree(null, true)).toBe(false);
+    expect(showsSubagentTree({ hasTimeline: false }, false)).toBe(false);
+  });
+});
 
 describe("buildSubagentPillPresentation", () => {
   // The real instance, so a label that names a key nobody added renders as that key and fails.

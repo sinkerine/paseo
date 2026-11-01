@@ -5,7 +5,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import type { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { WSOutboundMessageSchema } from "../../src/messages.js";
+import {
+  ProviderSubagentDescriptorPayloadSchema,
+  WSOutboundMessageSchema,
+} from "../../src/messages.js";
 import { validateWSOutboundMessage } from "../../src/validation/ws-outbound.js";
 
 interface GeneratedSchema {
@@ -64,6 +67,44 @@ async function compileInlineSchema(sourceSchema: string): Promise<GeneratedSchem
 }
 
 describe("WS outbound zod-aot validation", () => {
+  it("preserves optional provider timeline capability in lists and live upserts", () => {
+    const legacy = {
+      id: "workflow",
+      parentAgentId: "parent",
+      provider: "pi",
+      title: "Workflow",
+      description: null,
+      status: "running",
+      createdAt: "now",
+      updatedAt: "now",
+      toolCallId: null,
+    };
+    expect(ProviderSubagentDescriptorPayloadSchema.parse(legacy)).not.toHaveProperty("hasTimeline");
+    const oldSchema = ProviderSubagentDescriptorPayloadSchema.omit({ hasTimeline: true });
+    for (const hasTimeline of [false, true]) {
+      const subagent = { ...legacy, hasTimeline };
+      expect(ProviderSubagentDescriptorPayloadSchema.parse(subagent)).toMatchObject({
+        hasTimeline,
+      });
+      expect(oldSchema.parse(subagent)).toEqual(legacy);
+      for (const message of [
+        {
+          type: "agent.provider_subagents.list.response",
+          payload: {
+            requestId: "list",
+            parentAgentId: "parent",
+            subagents: [subagent],
+            error: null,
+          },
+        },
+        { type: "agent.provider_subagents.update", payload: { kind: "upsert", subagent } },
+      ])
+        expect(validateWSOutboundMessage({ type: "session", message })).toMatchObject({
+          success: true,
+          data: { message },
+        });
+    }
+  });
   it("applies defaults inside discriminated-union branches", async () => {
     const schema = await compileInlineSchema(`
 const SourceSchema = z.discriminatedUnion("type", [

@@ -6,6 +6,14 @@ import type { SubagentRow } from "./select";
 import { isFinishedSubagent } from "./archive-finished";
 import { providerSubagentLifecycleStatus } from "./provider-store";
 
+export function showsSubagentTree(
+  descriptor: { hasTimeline?: boolean } | null,
+  nestingSupported: boolean,
+): boolean {
+  // COMPAT(providerSubagentTimeline): added in v0.13.2, remove absence default after 2027-05-01.
+  return nestingSupported && descriptor?.hasTimeline === false;
+}
+
 function presentationStatus(row: SubagentRow) {
   if (row.kind === "paseo") {
     if (row.turn.phase === "open") return "running";

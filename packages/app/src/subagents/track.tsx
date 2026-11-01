@@ -115,6 +115,44 @@ export function SubagentsTrack({
           />
         </ComposerTrackActions>
       ) : null}
+      <SubagentTreeRows
+        serverId={serverId}
+        treeRows={treeRows}
+        onToggleExpansion={onToggleExpansion}
+        onOpenSubagent={onOpenSubagent}
+        onOpenProviderSubagent={onOpenProviderSubagent}
+        opensInSheet={opensInSheet}
+        onArchiveSubagent={onArchiveSubagent}
+        onDetachSubagent={onDetachSubagent}
+      />
+    </ComposerTrackPill>
+  );
+}
+
+export type SubagentTreeRowsProps = Pick<
+  SubagentsTrackProps,
+  | "serverId"
+  | "treeRows"
+  | "onToggleExpansion"
+  | "onOpenSubagent"
+  | "onOpenProviderSubagent"
+  | "opensInSheet"
+  | "onArchiveSubagent"
+  | "onDetachSubagent"
+>;
+
+export function SubagentTreeRows({
+  serverId,
+  treeRows,
+  onToggleExpansion,
+  onOpenSubagent,
+  onOpenProviderSubagent,
+  opensInSheet,
+  onArchiveSubagent,
+  onDetachSubagent,
+}: SubagentTreeRowsProps): ReactElement {
+  return (
+    <>
       {treeRows.map((treeRow) => (
         <SubagentsTrackRow
           key={
@@ -132,7 +170,7 @@ export function SubagentsTrack({
           onDetachSubagent={onDetachSubagent}
         />
       ))}
-    </ComposerTrackPill>
+    </>
   );
 }
 

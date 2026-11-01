@@ -290,6 +290,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
     subagents.push({
       type: "upsert",
       id: workflowSubagentId(runId),
+      hasTimeline: false,
       title: "Workflow",
       ...(workflowStatus === undefined ? {} : { status: workflowStatus }),
       subtitle: `${finished} of ${statuses.length} ${unit} done`,
@@ -305,6 +306,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
       subagents.push({
         type: "upsert",
         id: workflowGroupSubagentId(runId, group),
+        hasTimeline: false,
         title: group,
         parentSubagentId: workflowSubagentId(runId),
         status: groupStatuses.get(group),
@@ -359,6 +361,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
           {
             type: "upsert",
             id: workflowSubagentId(details.runId),
+            hasTimeline: false,
             title: "Workflow",
             status: "running",
           },
