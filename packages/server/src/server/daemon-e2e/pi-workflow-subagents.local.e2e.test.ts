@@ -155,6 +155,10 @@ test("direct workflow streams its tree and child transcripts, then replays after
   const log = pino.destination({ dest: path.join(root, "daemon.log"), sync: true });
   const logger = pino({ level: "debug" }, log);
   const command = isolatedPiCommand();
+  async function pushCount(): Promise<number> {
+    const lines = (await readFile(path.join(root, "daemon.log"), "utf8")).trim().split("\n");
+    return lines.filter((line) => JSON.parse(line).msg === "Sending push notification").length;
+  }
 
   async function start() {
     daemon = await createPaseoDaemon(
@@ -351,6 +355,15 @@ test("direct workflow streams its tree and child transcripts, then replays after
             ?.status,
       )
       .toBe("running");
+    async function expectParentRead(): Promise<void> {
+      const parent = (await active.fetchAgentTimeline(agent.id, { limit: 0 })).agent;
+      expect(parent?.requiresAttention).toBe(false);
+    }
+    // Opening the app after the initial parent turn must not release finished attention
+    // while its real async workflow is still running behind the gate.
+    await expectParentRead();
+    expect(await pushCount()).toBe(0);
+    await active.clearAgentAttention(agent.id);
     const observerCwd = path.join(root, "observer");
     await mkdir(observerCwd);
     const observerWorkspace = await active.createWorkspace({
@@ -379,6 +392,9 @@ test("direct workflow streams its tree and child transcripts, then replays after
       observer: observer.id,
       observerSubagents: [],
     });
+    // The independent observer finishes normally and contributes one unrelated push.
+    await expect.poll(pushCount).toBe(1);
+    await expectParentRead();
     await writeFile(gate, "open\n");
     const expected = completedTree(workflowId);
     await expect
@@ -407,6 +423,33 @@ test("direct workflow streams its tree and child transcripts, then replays after
     await expect
       .poll(() => readFile(sessionFile, "utf8"), { timeout: 15_000, interval: 100 })
       .toContain("Retention-managed async directory:");
+    await expect
+      .poll(
+        async () => {
+          const parent = (await active.fetchAgentTimeline(agent.id, { limit: 0 })).agent;
+          return { status: parent?.status, reason: parent?.attentionReason };
+        },
+        { timeout: 15_000 },
+      )
+      .toEqual({ status: "idle", reason: "finished" });
+    await expect.poll(pushCount).toBe(2);
+    await active.clearAgentAttention(agent.id);
+    // Keep observing beyond the fallback grace: the autonomous final turn must
+    // cancel its timer even when the user clears the final notification at once.
+    const quietUntil = Date.now() + 4000;
+    await expect
+      .poll(
+        async () => {
+          expect(await pushCount()).toBe(2);
+          expect(
+            (await active.fetchAgentTimeline(agent.id, { limit: 0 })).agent?.requiresAttention,
+          ).toBe(false);
+          return Date.now() >= quietUntil;
+        },
+        { timeout: 6000, interval: 100 },
+      )
+      .toBe(true);
+    await record("finished-attention", { workflowId, workflowPushes: 1, observerPushes: 1 });
     await record("completed", {
       descriptors: descriptorState(completed),
       timelines: liveTimelines,

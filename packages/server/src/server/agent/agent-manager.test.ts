@@ -8106,6 +8106,131 @@ test("subscribe fails when filter agentId is not a UUID", () => {
   ).toThrow("subscribe: agentId must be a UUID");
 });
 
+async function createSubagentAttentionHarness() {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-subagent-attention-"));
+  const sessions: TestAgentSession[] = [];
+  class AttentionClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      const session = new TestAgentSession(config);
+      sessions.push(session);
+      return session;
+    }
+  }
+  const notifications: string[] = [];
+  const manager = new AgentManager({
+    clients: { codex: new AttentionClient() },
+    registry: new AgentStorage(join(workdir, "agents"), logger),
+    logger,
+    onAgentAttention: ({ reason }) => notifications.push(reason),
+  });
+  const parent = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+    workspaceId: undefined,
+  });
+  onTestFinished(async () => {
+    manager.prepareForShutdown();
+    vi.useRealTimers();
+    await manager.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  });
+  async function event(session: TestAgentSession, streamEvent: AgentStreamEvent) {
+    session.pushEvent(streamEvent);
+    // Wait for the manager's serialized event lane, without advancing the grace clock.
+    await manager.flush();
+  }
+  async function child(status: "running" | "completed") {
+    await event(sessions[0]!, {
+      type: "provider_subagent",
+      provider: "codex",
+      event: { type: "upsert", id: "native-child", status },
+    });
+  }
+  return { manager, parent, sessions, notifications, event, child, workdir };
+}
+
+test("finished attention waits for provider subagents and fires once after the grace window", async () => {
+  const h = await createSubagentAttentionHarness();
+  await h.child("running");
+  await h.manager.runAgent(h.parent.id, "work");
+  expect(h.manager.getAgent(h.parent.id)?.attention).toEqual({ requiresAttention: false });
+  expect(h.notifications).toEqual([]);
+  await h.manager.clearAgentAttention(h.parent.id);
+  vi.useFakeTimers();
+  await h.child("completed");
+  await vi.advanceTimersByTimeAsync(2999);
+  expect(h.notifications).toEqual([]);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.notifications).toEqual(["finished"]);
+  await h.manager.clearAgentAttention(h.parent.id);
+  await h.child("completed");
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(h.notifications).toEqual(["finished"]);
+});
+
+test("a new parent turn cancels deferred finished attention even after attention is cleared", async () => {
+  const h = await createSubagentAttentionHarness();
+  await h.child("running");
+  await h.manager.runAgent(h.parent.id, "work");
+  vi.useFakeTimers();
+  await h.child("completed");
+  await h.event(h.sessions[0]!, { type: "turn_started", provider: "codex", turnId: "autonomous" });
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(h.notifications).toEqual([]);
+  await h.event(h.sessions[0]!, {
+    type: "turn_completed",
+    provider: "codex",
+    turnId: "autonomous",
+  });
+  expect(h.notifications).toEqual(["finished"]);
+  await h.manager.clearAgentAttention(h.parent.id);
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(h.notifications).toEqual(["finished"]);
+});
+
+test("managed children and their native descendants hold finished attention", async () => {
+  const h = await createSubagentAttentionHarness();
+  const child = await h.manager.createAgent({ provider: "codex", cwd: h.workdir }, undefined, {
+    workspaceId: undefined,
+    labels: { [PARENT_AGENT_ID_LABEL]: h.parent.id },
+  });
+  await h.event(h.sessions[1]!, { type: "turn_started", provider: "codex", turnId: "child-turn" });
+  await h.manager.runAgent(h.parent.id, "work");
+  expect(h.notifications).toEqual([]);
+  vi.useFakeTimers();
+  await h.event(h.sessions[1]!, {
+    type: "provider_subagent",
+    provider: "codex",
+    event: { type: "upsert", id: "grandchild", status: "running" },
+  });
+  await h.event(h.sessions[1]!, {
+    type: "turn_completed",
+    provider: "codex",
+    turnId: "child-turn",
+  });
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(h.notifications).toEqual([]);
+  await h.event(h.sessions[1]!, {
+    type: "provider_subagent",
+    provider: "codex",
+    event: { type: "upsert", id: "grandchild", status: "completed" },
+  });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(h.manager.getAgent(child.id)?.lifecycle).toBe("idle");
+  expect(h.notifications).toEqual(["finished"]);
+});
+
+test("permission and error attention still notify while provider subagents run", async () => {
+  const h = await createSubagentAttentionHarness();
+  await h.child("running");
+  await h.event(h.sessions[0]!, {
+    type: "permission_requested",
+    provider: "codex",
+    request: { id: "permission", provider: "codex", kind: "tool", name: "Read file" },
+  });
+  expect(h.notifications).toEqual(["permission"]);
+  await h.event(h.sessions[0]!, { type: "turn_failed", provider: "codex", error: "failure" });
+  expect(h.notifications).toEqual(["permission", "error"]);
+});
+
 test("onAgentAttention is not called for internal agents", async () => {
   const internalAgentId = "00000000-0000-4000-8000-000000000111";
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-test-"));

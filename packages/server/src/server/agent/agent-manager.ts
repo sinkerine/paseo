@@ -759,6 +759,10 @@ export class AgentManager {
   private readonly registry?: AgentStorage;
   private readonly durableTimelineStore?: AgentTimelineStore;
   private readonly previousStatuses = new Map<string, AgentLifecycleStatus>();
+  private readonly deferredFinishedAttention = new Map<
+    string,
+    ReturnType<typeof setTimeout> | null
+  >();
   private readonly backgroundTasks = new Set<Promise<void>>();
   private readonly agentRegistrationTasks = new Set<Promise<void>>();
   private readonly inFlightAgentCloses = new Map<string, Promise<void>>();
@@ -885,6 +889,9 @@ export class AgentManager {
 
   prepareForShutdown(): void {
     this.acceptingAgentRegistrations = false;
+    for (const agentId of this.deferredFinishedAttention.keys()) {
+      this.clearDeferredFinishedAttention(agentId);
+    }
   }
 
   setPaseoToolsEnabled(enabled: boolean): void {
@@ -3993,6 +4000,7 @@ export class AgentManager {
   ): ManagedAgentClosed {
     this.agentStreamCoalescer.flushAndDiscard(agent.id);
     this.agents.delete(agent.id);
+    this.clearDeferredFinishedAttention(agent.id);
     this.previousStatuses.delete(agent.id);
     if (agent.unsubscribeSession) {
       agent.unsubscribeSession();
@@ -5155,6 +5163,9 @@ export class AgentManager {
 
     // Track the new status
     this.previousStatuses.set(agent.id, currentStatus);
+    if (currentStatus !== "idle" || agent.attention.requiresAttention) {
+      this.clearDeferredFinishedAttention(agent.id);
+    }
 
     // Skip attention tracking for internal agents
     if (agent.internal) {
@@ -5168,6 +5179,13 @@ export class AgentManager {
 
     // Check if agent transitioned from running to idle (finished)
     if (previousStatus === "running" && currentStatus === "idle") {
+      if (this.hasRunningSubagents(agent.id)) {
+        if (this.acceptingAgentRegistrations) {
+          this.deferredFinishedAttention.set(agent.id, null);
+        }
+        return;
+      }
+      this.clearDeferredFinishedAttention(agent.id);
       agent.attention = {
         requiresAttention: true,
         attentionReason: "finished",
@@ -5186,6 +5204,73 @@ export class AgentManager {
       };
       this.broadcastAgentAttention(agent, "error");
       return;
+    }
+  }
+
+  private hasRunningSubagents(agentId: string, visited = new Set<string>()): boolean {
+    if (visited.has(agentId)) return false;
+    visited.add(agentId);
+    if (this.providerSubagents.list(agentId).some((child) => child.status === "running")) {
+      return true;
+    }
+    for (const child of this.agents.values()) {
+      if (getParentAgentIdFromLabels(child.labels) !== agentId) continue;
+      if (child.lifecycle === "running" || this.hasRunningSubagents(child.id, visited)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private clearDeferredFinishedAttention(agentId: string): void {
+    const timer = this.deferredFinishedAttention.get(agentId);
+    if (timer) clearTimeout(timer);
+    this.deferredFinishedAttention.delete(agentId);
+  }
+
+  private reconcileDeferredFinishedAttention(): void {
+    for (const [agentId, timer] of this.deferredFinishedAttention) {
+      const agent = this.agents.get(agentId);
+      if (
+        !agent ||
+        agent.lifecycle !== "idle" ||
+        agent.attention.requiresAttention ||
+        !this.acceptingAgentRegistrations
+      ) {
+        this.clearDeferredFinishedAttention(agentId);
+        continue;
+      }
+      if (this.hasRunningSubagents(agentId)) {
+        if (timer) clearTimeout(timer);
+        this.deferredFinishedAttention.set(agentId, null);
+        continue;
+      }
+      if (timer) continue;
+      // Give a child's completion delivery time to start the parent's next turn.
+      const grace = setTimeout(() => {
+        this.deferredFinishedAttention.delete(agentId);
+        if (
+          this.agents.get(agentId) !== agent ||
+          agent.lifecycle !== "idle" ||
+          agent.attention.requiresAttention ||
+          agent.pendingPermissions.size > 0 ||
+          !this.acceptingAgentRegistrations
+        )
+          return;
+        if (this.hasRunningSubagents(agentId)) {
+          this.deferredFinishedAttention.set(agentId, null);
+          return;
+        }
+        agent.attention = {
+          requiresAttention: true,
+          attentionReason: "finished",
+          attentionTimestamp: new Date(),
+        };
+        this.broadcastAgentAttention(agent, "finished");
+        this.emitState(agent);
+      }, 3000);
+      grace.unref?.();
+      this.deferredFinishedAttention.set(agentId, grace);
     }
   }
 
@@ -5339,6 +5424,9 @@ export class AgentManager {
   }
 
   private dispatch(event: AgentManagerEvent): void {
+    if (event.type === "agent_state" || event.type === "provider_subagent") {
+      this.reconcileDeferredFinishedAttention();
+    }
     for (const subscriber of this.subscribers) {
       if (
         subscriber.agentId &&
