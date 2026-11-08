@@ -7,6 +7,7 @@ import type { z } from "zod";
 import { describe, expect, it } from "vitest";
 import {
   ProviderSubagentDescriptorPayloadSchema,
+  PluginRpcInvokeResponseSchema,
   WSOutboundMessageSchema,
 } from "../../src/messages.js";
 import { validateWSOutboundMessage } from "../../src/validation/ws-outbound.js";
@@ -441,4 +442,9 @@ const SourceSchema = z.object({
       message: { payload: { agent: { capabilities: { supportsRewindConversation: false } } } },
     });
   });
+});
+
+it("accepts omitted RPC output so the receiving client can apply schema defaults", () => {
+  const message = { type: "plugin.rpc.invoke.response", payload: { requestId: "default-output" } };
+  expect(PluginRpcInvokeResponseSchema.safeParse(message).success).toBe(true);
 });

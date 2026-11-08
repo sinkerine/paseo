@@ -1,27 +1,44 @@
-import { createHook, executionAsyncResource } from "node:async_hooks";
-import { performance, PerformanceObserver } from "node:perf_hooks";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { build } from "esbuild";
+import {
+  createTestRegistries,
+  createTestLogger,
+  deferred,
+} from "./test-fixtures/reconciliation-registries.js";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
 import type pino from "pino";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, afterEach, describe, expect, test } from "vitest";
 import {
   createPersistedProjectRecord,
   createPersistedWorkspaceRecord,
-} from "./workspace-registry.js";
-import type {
-  PersistedProjectRecord,
-  PersistedWorkspaceRecord,
-  ProjectRegistry,
-  WorkspaceRegistry,
 } from "./workspace-registry.js";
 import {
   type ReconciliationChange,
   WorkspaceReconciliationService,
 } from "./workspace-reconciliation-service.js";
 import { deriveProjectKey } from "./project-key.js";
+
+let probeDirectory: string;
+let probePath: string;
+beforeAll(async () => {
+  probeDirectory = mkdtempSync(path.join(tmpdir(), "reconciliation-probe-"));
+  probePath = path.join(probeDirectory, "reconciliation.mjs");
+  await build({
+    entryPoints: [
+      fileURLToPath(new URL("./test-fixtures/reconciliation-responsiveness.ts", import.meta.url)),
+    ],
+    outfile: probePath,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+  });
+});
+afterAll(() => rmSync(probeDirectory, { recursive: true, force: true }));
 
 function canonicalLocalProjectKey(rootPath: string): string {
   return deriveProjectKey({
@@ -30,107 +47,6 @@ function canonicalLocalProjectKey(rootPath: string): string {
     worktreeRoot: null,
     mainRepoRoot: null,
   });
-}
-
-function createTestRegistries() {
-  let archiveGate: {
-    started: ReturnType<typeof deferred>;
-    release: ReturnType<typeof deferred>;
-  } | null = null;
-  const holdNextArchive = () => {
-    archiveGate = { started: deferred(), release: deferred() };
-    return archiveGate;
-  };
-  const projects = new Map<string, PersistedProjectRecord>();
-  const workspaces = new Map<string, PersistedWorkspaceRecord>();
-
-  const projectRegistry: ProjectRegistry = {
-    initialize: async () => {},
-    existsOnDisk: async () => true,
-    list: async () => Array.from(projects.values()),
-    get: async (id: string) => projects.get(id) ?? null,
-    getOrCreateActiveByRoot: async (input) => {
-      const existing = Array.from(projects.values()).find(
-        (project) => !project.archivedAt && project.rootPath === input.rootPath,
-      );
-      if (existing) return existing;
-      const record = createPersistedProjectRecord({
-        projectId: `prj_${projects.size}`,
-        rootPath: input.rootPath,
-        kind: input.kind,
-        displayName: input.displayName,
-        createdAt: input.timestamp,
-        updatedAt: input.timestamp,
-      });
-      projects.set(record.projectId, record);
-      return record;
-    },
-    update: async (id, updater) => {
-      const current = projects.get(id);
-      if (!current) return null;
-      const updated = updater(current);
-      projects.set(id, updated);
-      return updated;
-    },
-    upsert: async (record: PersistedProjectRecord) => {
-      projects.set(record.projectId, record);
-    },
-    archive: async (id: string, archivedAt: string) => {
-      const existing = projects.get(id);
-      if (existing) {
-        projects.set(id, { ...existing, archivedAt, updatedAt: archivedAt });
-      }
-    },
-    remove: async (id: string) => {
-      projects.delete(id);
-    },
-  };
-
-  const workspaceRegistry: WorkspaceRegistry = {
-    initialize: async () => {},
-    existsOnDisk: async () => true,
-    list: async () => Array.from(workspaces.values()),
-    get: async (id: string) => workspaces.get(id) ?? null,
-    update: async (id, updater) => {
-      const existing = workspaces.get(id);
-      if (!existing) return null;
-      const updated = updater(existing);
-      workspaces.set(id, updated);
-      return updated;
-    },
-    upsert: async (record: PersistedWorkspaceRecord) => {
-      workspaces.set(record.workspaceId, record);
-    },
-    archive: async (id: string, archivedAt: string) => {
-      const gate = archiveGate;
-      archiveGate = null;
-      if (gate) {
-        gate.started.resolve();
-        await gate.release.promise;
-      }
-      const existing = workspaces.get(id);
-      if (!existing || existing.archivedAt) return false;
-      workspaces.set(id, { ...existing, archivedAt, updatedAt: archivedAt });
-      return true;
-    },
-    remove: async (id: string) => {
-      workspaces.delete(id);
-    },
-  };
-
-  return { projects, workspaces, projectRegistry, workspaceRegistry, holdNextArchive };
-}
-
-function createTestLogger() {
-  const logger = {
-    child: () => logger,
-    trace: () => undefined,
-    debug: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
-  };
-  return logger as unknown as pino.Logger;
 }
 
 interface CapturedLogRecord {
@@ -209,14 +125,6 @@ function createCheckout(
     mainRepoRoot: null,
     ...overrides,
   };
-}
-
-function deferred(): { promise: Promise<void>; resolve(): void } {
-  let resolve!: () => void;
-  const promise = new Promise<void>((accept) => {
-    resolve = accept;
-  });
-  return { promise, resolve };
 }
 
 class TestCheckouts {
@@ -627,130 +535,54 @@ describe("WorkspaceReconciliationService", () => {
   test("keeps the event loop responsive while inspecting 20000 real workspace paths", async () => {
     const rootPath = realpathSync(mkdtempSync(path.join(tmpdir(), "reconcile-many-")));
     tempDirs.push(rootPath);
-    const { projects, workspaces, projectRegistry, workspaceRegistry } = createTestRegistries();
-    projects.set(
-      "p1",
-      createPersistedProjectRecord({
-        projectId: "p1",
-        rootPath,
-        projectKey: canonicalLocalProjectKey(rootPath),
-        kind: "non_git",
-        displayName: "project",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }),
-    );
-    for (let i = 0; i < 20000; i++) {
-      const workspaceId = `w${i}`;
-      workspaces.set(
-        workspaceId,
-        createPersistedWorkspaceRecord({
-          workspaceId,
-          projectId: "p1",
-          cwd: path.join(rootPath, workspaceId),
-          kind: "directory",
-          displayName: workspaceId,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        }),
+    // This CPU belongs to the runner, not to reconciliation. Keep it present
+    // throughout the read so a later loop turn cannot contaminate the budget.
+    let running = true;
+    const unrelatedWork = () => {
+      const threadCpuUsage: (previous?: NodeJS.CpuUsage) => NodeJS.CpuUsage = Reflect.get(
+        process,
+        "threadCpuUsage",
       );
-    }
-    const service = new WorkspaceReconciliationService({
-      projectRegistry,
-      workspaceRegistry,
-      logger: createTestLogger(),
-    });
-    // Windows can deschedule Node inside a callback too. Budget charged thread
-    // CPU within callback spans, capped by wall time because Windows CPU counters
-    // advance in coarse increments. Also require real asynchronous inspections:
-    // synchronous filesystem waits can block the loop without consuming CPU.
-    // Node 22.20 provides this API; our older Node declarations omit it.
-    const threadCpuUsage: (previous?: NodeJS.CpuUsage) => NodeJS.CpuUsage = Reflect.get(
-      process,
-      "threadCpuUsage",
-    );
-    const startedAt = performance.now();
-    let last = startedAt;
-    let longestGap = 0;
-    let longestCallback = 0;
-    let longestCallbackCpu = 0;
-    let longestBlocking = 0;
-    let asyncInspections = 0;
-    let longestGc = 0;
-    const callbacks = new Map<number, { wall: number; cpu: NodeJS.CpuUsage }>();
-    const observeGc = (entries: readonly import("node:perf_hooks").PerformanceEntry[]) => {
-      for (const entry of entries) {
-        if (entry.startTime >= startedAt) longestGc = Math.max(longestGc, entry.duration);
-      }
+      const start = threadCpuUsage();
+      let elapsed: NodeJS.CpuUsage;
+      do {
+        elapsed = threadCpuUsage(start);
+      } while (elapsed.user + elapsed.system < 60_000);
+      if (running) unrelated = setImmediate(unrelatedWork);
     };
-    const gc = new PerformanceObserver((list) => observeGc(list.getEntries()));
-    gc.observe({ entryTypes: ["gc"] });
-    let probe: ReturnType<typeof setInterval>;
-    const activity = createHook({
-      init(_id, type) {
-        if (type === "FSREQPROMISE") asyncInspections++;
-      },
-      before(id) {
-        if (executionAsyncResource() === probe) return;
-        callbacks.set(id, { wall: performance.now(), cpu: threadCpuUsage() });
-      },
-      after(id) {
-        const start = callbacks.get(id);
-        if (!start) return;
-        callbacks.delete(id);
-        const duration = performance.now() - start.wall;
-        const { user, system } = threadCpuUsage(start.cpu);
-        const cpuMs = (user + system) / 1_000;
-        longestBlocking = Math.max(longestBlocking, Math.min(duration, cpuMs));
-        if (duration > longestCallback) {
-          longestCallback = duration;
-          longestCallbackCpu = cpuMs;
-        }
-      },
-    }).enable();
-    const sample = () => {
-      const now = performance.now();
-      longestGap = Math.max(longestGap, now - last);
-      last = now;
-    };
-    probe = setInterval(sample, 1);
-    let result;
+    let unrelated = setImmediate(unrelatedWork);
     try {
-      // Include the initial synchronous span: its callback predates the hook.
-      const actionStartedAt = performance.now();
-      const actionCpu = threadCpuUsage();
-      const pending = service.runOnce();
-      const actionWallMs = performance.now() - actionStartedAt;
-      const { user, system } = threadCpuUsage(actionCpu);
-      longestCallback = Math.max(longestCallback, actionWallMs);
-      longestBlocking = Math.max(longestBlocking, Math.min(actionWallMs, (user + system) / 1_000));
-      result = await pending;
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      sample();
-      observeGc(gc.takeRecords());
-    } finally {
-      clearInterval(probe);
-      activity.disable();
-      gc.disconnect();
-      service.dispose();
-    }
-    // GC CPU during callbacks is included above. GC elapsed durations, like
-    // callback elapsed durations, include runner preemption: log them separately.
-    const blockingMs = longestBlocking;
-    process.stderr.write(
-      `workspace reconciliation main-thread blocking: ${JSON.stringify({
+      const { stdout, stderr } = await promisify(execFile)(
+        process.execPath,
+        ["--expose-gc", probePath, rootPath],
+        { timeout: 25_000 },
+      );
+      process.stderr.write(stderr);
+      const {
+        changesApplied,
         blockingMs,
-        asyncInspections,
-        longestCallback,
-        longestCallbackCpu,
-        longestGc,
-        longestGap,
-      })}\n`,
-    );
-    expect(blockingMs).toBeLessThan(20);
-    expect(asyncInspections).toBe(20001);
-    expect(result.changesApplied).toHaveLength(20000);
-    expect([...workspaces.values()].every((workspace) => workspace.archivedAt !== null)).toBe(true);
+        filesystemRequests,
+        yields,
+        allArchived,
+        workerMessages,
+      } = JSON.parse(stdout) as {
+        changesApplied: number;
+        blockingMs: number;
+        filesystemRequests: number;
+        yields: number;
+        allArchived: boolean;
+        workerMessages: number;
+      };
+      expect(blockingMs).toBeLessThan(20);
+      expect(filesystemRequests).toBe(20001);
+      expect(changesApplied).toBe(20000);
+      expect(allArchived).toBe(true);
+      expect(yields).toBeGreaterThan(0);
+      expect(workerMessages).toBe(0);
+    } finally {
+      running = false;
+      clearImmediate(unrelated);
+    }
   }, 30000);
 
   test("preserves workspace archival that lands during boot reconciliation", async () => {

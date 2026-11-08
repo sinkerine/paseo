@@ -83,7 +83,7 @@ describe("Pi extension host", () => {
   test("declines a throwing adapter and preserves generic history", async () => {
     const host = createPiExtensionHost(undefined, [throwingAdapter]);
     const mapper = new PiHistoryMapper("pi", [], {}, host);
-    const events = mapper.mapMessages([
+    const events = await mapper.mapMessages([
       {
         role: "assistant",
         content: [{ type: "toolCall", id: "call-1", name: "other", arguments: {} }],
@@ -211,8 +211,7 @@ describe("Pi extension host", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
-
-  test("claims a tool, declines an unrelated one, and maps history like live events", () => {
+  test("claims a tool, declines an unrelated one, and maps history like live events", async () => {
     const host = createPiExtensionHost();
     const args = { agent: "scout", task: "Inspect files" };
     const result = parseToolResult({ content: [{ type: "text", text: "Found two files" }] });
@@ -229,7 +228,7 @@ describe("Pi extension host", () => {
           type: "sub_agent",
           subAgentType: "scout",
           description: "Inspect files",
-          log: "Found two files",
+          log: "",
         },
       }),
     );
@@ -244,7 +243,7 @@ describe("Pi extension host", () => {
     ).toBeUndefined();
 
     const mapper = new PiHistoryMapper("pi");
-    const events = mapper.mapMessages([
+    const events = await mapper.mapMessages([
       {
         role: "assistant",
         content: [{ type: "toolCall", id: "call-1", name: "subagent", arguments: args }],

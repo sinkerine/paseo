@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { extractTextFromToolResult } from "../../tool-call-mapper.js";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
 import { projectRun, readAsyncStatus, type AsyncRun } from "./async-runs.js";
 import { customMessageText, noticeStatus } from "./notice.js";
@@ -125,7 +124,8 @@ export const piSubagents: PiExtension = {
         type: "sub_agent" as const,
         subAgentType: args.agent,
         description: args.task,
-        log: extractTextFromToolResult(call.result)?.trim() ?? "",
+        // COMPAT(subagent-log): remove after 2027-04-30.
+        log: "",
       };
       const base = {
         type: "upsert" as const,

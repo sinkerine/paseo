@@ -2,6 +2,11 @@ import { useAgentProfilesForHosts } from "@/agent-profiles";
 import { agentProfileShortcutBinding } from "@/agent-profiles/shortcuts";
 import { buildProfileShortcutRows } from "./profile-shortcut-rows";
 import { useHosts } from "@/runtime/host-runtime";
+import {
+  usesDesktopBindings,
+  useHardwareKeyboardPresent,
+  useOverlayRegistration,
+} from "@/keyboard";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { View, Text, type PressableStateCallbackType } from "react-native";
@@ -39,8 +44,6 @@ import {
 import type { ShortcutKey } from "@/utils/format-shortcut";
 import { useKeyboardShortcutsStore } from "@/stores/keyboard-shortcuts-store";
 import { getShortcutOs } from "@/utils/shortcut-platform";
-import { getIsElectronRuntime } from "@/constants/layout";
-import { isNative } from "@/constants/platform";
 import { getDesktopHost } from "@/desktop/host";
 
 const EMPTY_CAPTURED_COMBOS: string[] = [];
@@ -309,12 +312,12 @@ function ShortcutRow({
         {isCapturing ? (
           <>
             {showDone && (
-              <Button variant="ghost" size="sm" disabled={!captureComplete} onPress={onDone}>
+              <Button variant="ghost" disabled={!captureComplete} onPress={onDone}>
                 {t("settings.shortcuts.actions.done")}
               </Button>
             )}
             {isBindable && (
-              <Button variant="ghost" size="sm" onPress={onCancel}>
+              <Button variant="ghost" onPress={onCancel}>
                 {t("settings.shortcuts.actions.cancel")}
               </Button>
             )}
@@ -351,6 +354,7 @@ export function KeyboardShortcutsSection() {
     hostLabel: (serverId) => hosts.find((host) => host.serverId === serverId)?.label ?? serverId,
     t,
   });
+  const hardwareKeyboardPresent = useHardwareKeyboardPresent();
   const [capturingBindingId, setCapturingBindingId] = useState<string | null>(null);
   const [capturedCombos, setCapturedCombos] = useState<string[]>([]);
   const [heldModifiers, setHeldModifiers] = useState<string | null>(null);
@@ -361,8 +365,7 @@ export function KeyboardShortcutsSection() {
 
   const isFocused = useIsFocused();
   const isMac = getShortcutOs() === "mac";
-  const isDesktopApp = getIsElectronRuntime();
-  const sections = buildKeyboardShortcutHelpSections({ isMac, isDesktop: isDesktopApp });
+  const sections = buildKeyboardShortcutHelpSections({ isMac, usesDesktopBindings });
 
   const cancelCapture = useCallback(() => {
     setCapturedCombos([]);
@@ -398,35 +401,29 @@ export function KeyboardShortcutsSection() {
     }
   }, [isFocused, capturingBindingId, cancelCapture]);
 
-  useEffect(() => {
-    if (isNative) return;
-    if (capturingBindingId === null) return;
-
-    function handleKeyDown(event: KeyboardEvent) {
+  useOverlayRegistration({
+    active: capturingBindingId !== null,
+    layer: 0,
+    keys: [],
+    manageFocus: false,
+    onKeyDown(event) {
+      if (capturingBindingId === null) return false;
       event.preventDefault();
-      event.stopPropagation();
-
       if (event.code === "Backspace" && heldModifiersFromEvent(event) === null) {
-        setCapturedCombos((current) => (current.length > 0 ? current.slice(0, -1) : current));
-        return;
+        setCapturedCombos((current) => current.slice(0, -1));
+        return true;
       }
-
       const comboString = keyboardEventToComboString(event);
       if (comboString === null) {
         setHeldModifiers(heldModifiersFromEvent(event));
-        return;
+        return true;
       }
-
       setHeldModifiers(null);
-      const capturedCombo = normalizeCapturedShortcutCombo(capturingBindingId!, comboString);
+      const capturedCombo = normalizeCapturedShortcutCombo(capturingBindingId, comboString);
       setCapturedCombos((current) => [...current, capturedCombo]);
-    }
-
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown, true);
-    };
-  }, [capturingBindingId]);
+      return true;
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -437,7 +434,7 @@ export function KeyboardShortcutsSection() {
   // Suppress desktop zoom accelerators while capturing so combos like Cmd+- are
   // recorded instead of zooming the window. No-op outside Electron.
   useEffect(() => {
-    if (isNative || !capturing) return;
+    if (!capturing) return;
     const menu = getDesktopHost()?.menu;
     void menu?.setCapturingShortcut?.(true);
     return () => {
@@ -463,7 +460,7 @@ export function KeyboardShortcutsSection() {
 
   const renderShortcutRow = useCallback(
     function renderShortcutRow(row: KeyboardShortcutHelpRow, index: number) {
-      const platform = { isMac, isDesktop: isDesktopApp };
+      const platform = { isMac, usesDesktopBindings };
       const profileBinding = agentProfileShortcutBinding(row.id);
       const bindingId = profileBinding ? row.id : getBindingIdForAction(row.id, platform);
       let displayChord = resolveShortcutKeysForAction(row.id, overrides, platform);
@@ -503,7 +500,6 @@ export function KeyboardShortcutsSection() {
     },
     [
       isMac,
-      isDesktopApp,
       overrides,
       capturingBindingId,
       capturedCombos,
@@ -516,15 +512,7 @@ export function KeyboardShortcutsSection() {
     ],
   );
 
-  if (isNative) {
-    return (
-      <SettingsSection title={t("settings.sections.shortcuts")}>
-        <View style={[settingsStyles.card, styles.mobileCard]}>
-          <Text style={styles.mobileText}>{t("settings.shortcuts.unavailableOnMobile")}</Text>
-        </View>
-      </SettingsSection>
-    );
-  }
+  if (!hardwareKeyboardPresent) return null;
 
   return (
     <>
@@ -611,12 +599,5 @@ const styles = StyleSheet.create((theme) => ({
   separator: {
     height: 1,
     backgroundColor: theme.colors.border,
-  },
-  mobileCard: {
-    padding: theme.spacing[4],
-  },
-  mobileText: {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.foregroundMuted,
   },
 }));

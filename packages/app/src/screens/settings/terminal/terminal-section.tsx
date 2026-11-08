@@ -64,7 +64,6 @@ export function TerminalSection() {
             </Text>
           </View>
           <FormTextInput
-            size="sm"
             initialValue={scrollbackValue}
             onChangeText={handleChangeText}
             onBlur={commitScrollback}
