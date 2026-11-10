@@ -113,3 +113,37 @@ describe("resolveAssistantTurnForkBoundary", () => {
     ).toBeUndefined();
   });
 });
+
+// Real Pi bash(true) completion ends on a tool row when the terminal assistant is empty.
+it("retains the selected tool-only completed turn's own cursor", () => {
+  const item: Extract<StreamItem, { kind: "tool_call" }> = {
+    kind: "tool_call",
+    id: "native-tool-only",
+    timestamp: timestamp(2),
+    timelineCursor: { epoch: "native-tool-turn", seq: 3 },
+    payload: {
+      source: "orchestrator",
+      data: {
+        toolCallId: "bash-true",
+        toolName: "bash",
+        arguments: "true",
+        result: "(no output)",
+        status: "completed",
+      },
+    },
+  };
+  expect(
+    resolveAssistantTurnForkBoundary({
+      items: [item],
+      startIndex: 0,
+      supportsTimelineCursor: true,
+    }),
+  ).toEqual({ boundaryCursor: { epoch: "native-tool-turn", seq: 3 } });
+  expect(
+    resolveAssistantTurnForkBoundary({
+      items: [item],
+      startIndex: 0,
+      supportsTimelineCursor: false,
+    }),
+  ).toBeUndefined();
+});

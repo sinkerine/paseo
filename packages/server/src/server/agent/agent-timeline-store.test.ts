@@ -441,3 +441,48 @@ it("continues a scroll across appends and lifecycle collapse without losing sour
   expect(last.endSeq).toBe(7);
   expect(last.hasNewer).toBe(false);
 });
+
+it("enriches native identities on canonical chunks without duplicating text on durable replay", () => {
+  const store = new InMemoryAgentTimelineStore();
+  store.initialize("agent");
+  const first = store.append(
+    "agent",
+    { type: "assistant_message", messageId: "a", text: "one " },
+    { providerMessageKey: "key-a" },
+  );
+  const second = store.append(
+    "agent",
+    { type: "assistant_message", messageId: "a", text: "response" },
+    { providerMessageKey: "key-a" },
+  );
+  const updates = store.enrichProviderMessage("agent", "key-a", "native-a");
+  expect(updates).toEqual([
+    { ...first, providerMessageId: "native-a" },
+    { ...second, providerMessageId: "native-a" },
+  ]);
+  const restored = new InMemoryAgentTimelineStore();
+  restored.initialize("agent", { rows: updates });
+  expect(
+    restored.getRows("agent").map((row) => ({ item: row.item, id: row.providerMessageId })),
+  ).toEqual([
+    { item: { type: "assistant_message", messageId: "a", text: "one response" }, id: "native-a" },
+  ]);
+});
+
+it("refuses a native identity when an unresolved projected row has mixed origins", () => {
+  const store = new InMemoryAgentTimelineStore();
+  store.initialize("agent");
+  store.append(
+    "agent",
+    { type: "assistant_message", messageId: "reused", text: "A" },
+    { providerMessageKey: "a" },
+  );
+  store.append(
+    "agent",
+    { type: "assistant_message", messageId: "reused", text: "B" },
+    { providerMessageKey: "b" },
+  );
+  expect(store.enrichProviderMessage("agent", "a", "native-a")).toEqual([]);
+  expect(store.enrichProviderMessage("agent", "b", "native-b")).toEqual([]);
+  expect(store.getRows("agent").map((row) => row.providerMessageId)).toEqual([undefined]);
+});

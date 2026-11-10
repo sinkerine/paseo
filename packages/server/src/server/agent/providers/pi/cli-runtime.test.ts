@@ -7,7 +7,7 @@ import pino from "pino";
 import { describe, expect, test, vi } from "vitest";
 
 import { PiCliRuntime } from "./cli-runtime.js";
-import type { PiRuntimeLaunch } from "./runtime.js";
+import { buildPiLaunch, type PiRuntimeLaunch } from "./runtime.js";
 
 type PiChild = ChildProcessWithoutNullStreams & {
   stdin: PassThrough;
@@ -645,4 +645,92 @@ test("permits the unpersisted empty new session but refuses a missing resumed tr
     await resumed.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+describe("fork helper launch isolation", () => {
+  test("normal launches retain explicit extensions while helper launches remove only verified Pi selectors", () => {
+    const command: [string, ...string[]] = [
+      "env",
+      "-u",
+      "PI_INHERITED",
+      "CUSTOM=kept",
+      "/bin/pi",
+      "--extension",
+      "source.ts",
+      "-e",
+      "another.ts",
+      "--session",
+      "source.jsonl",
+      "--fork",
+      "older.jsonl",
+      "--model",
+      "source-model",
+      "--continue",
+      "--resume",
+      "--system-prompt",
+      "source instructions",
+      "--offline",
+      "--api-key",
+      "secret",
+      "--",
+    ];
+    const normal = buildPiLaunch({ command, session: { cwd: "/work" } });
+    expect(normal.argv.slice(0, command.length)).toEqual(command);
+    const isolated = buildPiLaunch({
+      command,
+      session: {
+        cwd: "/work",
+        isolateForkHelper: true,
+        noSession: true,
+        extensionPaths: ["fork-helper.ts"],
+        extraArgs: ["--no-extensions", "--no-mcp"],
+      },
+    });
+    expect(isolated.argv).toEqual([
+      "env",
+      "-u",
+      "PI_INHERITED",
+      "CUSTOM=kept",
+      "/bin/pi",
+      "--offline",
+      "--api-key",
+      "secret",
+      "--mode",
+      "rpc",
+      "--no-extensions",
+      "--no-mcp",
+      "--no-session",
+      "--extension",
+      "fork-helper.ts",
+    ]);
+  });
+
+  test.each([
+    ["pi", "--extension"],
+    ["pi", "-e", "--model", "model"],
+    ["pi", "--extension=source.ts"],
+    ["pi", "--session=source.jsonl"],
+    ["pi", "--", "--extension", "source.ts"],
+    ["pi", "initial prompt"],
+    ["pi", "--unknown-wrapper-flag", "value"],
+    ["env", "--split-string", "pi -e source.ts"],
+    ["pi", "--clone"],
+    ["node", "--import", "user-loader.js", "pi.js"],
+  ])("refuses an unparseable helper command without launching it: %j", (...command) => {
+    expect(() =>
+      buildPiLaunch({
+        command: [command[0]!, ...command.slice(1)],
+        session: { cwd: "/work", noSession: true, isolateForkHelper: true },
+      }),
+    ).toThrowError(expect.objectContaining({ code: "materialize_failed" }));
+  });
+
+  test("preserves a node wrapper script and removes Pi options only after that prefix", () => {
+    expect(
+      buildPiLaunch({
+        command: ["node", "custom-pi.js", "--extension", "source.ts"],
+        session: { cwd: "/work", isolateForkHelper: true, noSession: true },
+      }).argv,
+    ).toEqual(["node", "custom-pi.js", "--mode", "rpc", "--no-session"]);
+  });
 });

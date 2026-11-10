@@ -29,7 +29,8 @@ interface PiRewindSession {
 }
 
 const TURN_TIMEOUT_MS = 240_000;
-const PI_REAL_TEST_MODEL = "openrouter/google/gemini-2.5-flash-lite";
+const PI_REAL_TEST_MODEL =
+  process.env.PI_REAL_TEST_MODEL ?? "openrouter/google/gemini-2.5-flash-lite";
 
 async function launchPiRewindSession(
   harness: PiRewindHarness,
@@ -139,7 +140,7 @@ async function askPi(
 ): Promise<void> {
   await harness.client.sendMessage(session.agentId, piPrompt(input));
   const finish = await harness.client.waitForFinish(session.agentId, TURN_TIMEOUT_MS);
-  expect(finish.status).toBe("idle");
+  expect(finish.status, finish.final?.lastError).toBe("idle");
   expect(finish.final?.lastError).toBeUndefined();
 }
 

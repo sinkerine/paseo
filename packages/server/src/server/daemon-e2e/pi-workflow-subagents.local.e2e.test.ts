@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { appendFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, cp, mkdir, mkdtemp, readFile, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -133,6 +133,81 @@ async function runTimelines(client: DaemonClient, agentId: string, workflowId: s
       return { key, items };
     }),
   );
+}
+
+async function forkWorkflowSession(client: DaemonClient, sourceId: string) {
+  const fork = await client.forkAgentSession(sourceId, { target: "latest" });
+  expect(fork.id).not.toBe(sourceId);
+  expect(fork.labels).toEqual({});
+  expect((await client.listProviderSubagents(fork.id)).subagents).toEqual([]);
+  const sourceNativeFile = (await client.fetchAgentTimeline(sourceId, { limit: 0 })).agent
+    ?.persistence?.nativeHandle;
+  expect(fork.persistence?.nativeHandle).not.toBe(sourceNativeFile);
+  return fork;
+}
+
+async function expectForkIdleAfterRestart(client: DaemonClient, forkId: string): Promise<void> {
+  expect((await client.listProviderSubagents(forkId)).subagents).toEqual([]);
+  expect((await client.fetchAgentTimeline(forkId, { limit: 0 })).agent?.status).toBe("idle");
+}
+
+async function verifyForkHistoryOwnership(
+  client: DaemonClient,
+  forkId: string,
+  sourceFile: string,
+  gate: string,
+  sourceWorkflow: string,
+) {
+  await rename(sourceFile, `${sourceFile}.held`);
+  try {
+    await expectForkIdleAfterRestart(client, forkId);
+    await client.refreshAgent(forkId);
+    await expectForkIdleAfterRestart(client, forkId);
+    const history = await client.fetchAgentTimeline(forkId, { limit: 0 });
+    expect(history.entries.some((entry) => entry.item.type === "tool_call")).toBe(true);
+  } finally {
+    await rename(`${sourceFile}.held`, sourceFile);
+  }
+  await rm(gate, { force: true });
+  await client.sendMessage(forkId, "RUN_FORK_WORKFLOW");
+  let ownWorkflow = "";
+  await expect
+    .poll(
+      async () => {
+        const rows = (await client.listProviderSubagents(forkId)).subagents;
+        ownWorkflow = rows.find((row) => row.title === "Workflow")?.id ?? "";
+        return rows.find((row) => row.id === `${ownWorkflow}/T2.review`)?.status;
+      },
+      { timeout: 60_000, interval: 100 },
+    )
+    .toBe("running");
+  expect(ownWorkflow).not.toBe(sourceWorkflow);
+  expect(
+    (await client.listProviderSubagents(forkId)).subagents.some((row) =>
+      row.id.startsWith(sourceWorkflow),
+    ),
+  ).toBe(false);
+  await client.sendMessage(forkId, `STOP_WORKFLOW:${ownWorkflow.split(":")[1]}`);
+  await expect
+    .poll(
+      async () =>
+        (await client.listProviderSubagents(forkId)).subagents.find((row) => row.id === ownWorkflow)
+          ?.status,
+      { timeout: 20_000 },
+    )
+    .toBe("canceled");
+  await client.refreshAgent(forkId);
+  const recovered = (await client.listProviderSubagents(forkId)).subagents;
+  expect(recovered.some((row) => row.id === ownWorkflow)).toBe(true);
+  expect(recovered.some((row) => row.id.startsWith(sourceWorkflow))).toBe(false);
+  await writeFile(gate, "open\n");
+  return {
+    forkId,
+    ownWorkflow,
+    repeatedHydration: true,
+    sourceRemovedDuringHydration: true,
+    recovered,
+  };
 }
 
 test("direct workflow streams its tree and child transcripts, then replays after isolated daemon restart", async () => {
@@ -364,6 +439,11 @@ test("direct workflow streams its tree and child transcripts, then replays after
     await expectParentRead();
     expect(await pushCount()).toBe(0);
     await active.clearAgentAttention(agent.id);
+    const nativeFork = await forkWorkflowSession(active, agent.id);
+    await record("native-fork-workflow-isolation-before-gate", {
+      source: agent.id,
+      fork: nativeFork,
+    });
     const observerCwd = path.join(root, "observer");
     await mkdir(observerCwd);
     const observerWorkspace = await active.createWorkspace({
@@ -480,6 +560,19 @@ test("direct workflow streams its tree and child transcripts, then replays after
     const replayed = (await active.listProviderSubagents(agent.id)).subagents;
     expect(new Set(replayed.map(({ id }) => id)).size).toBe(expected.length);
     expect(JSON.stringify(replayed)).not.toContain("decoy-run");
+    await expectForkIdleAfterRestart(active, nativeFork.id);
+    await record("native-fork-workflow-isolation-after-restart", {
+      fork: nativeFork.id,
+      subagents: [],
+    });
+    const forkOwnership = await verifyForkHistoryOwnership(
+      active,
+      nativeFork.id,
+      sessionFile,
+      gate,
+      workflowId,
+    );
+    await record("native-fork-own-workflow-after-repeated-hydration", forkOwnership);
     await record("restart-replay", {
       descriptors: descriptorState(replayed),
       timelineCounts: liveTimelines.map(({ key, items }) => ({ key, count: items.length })),

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { Split } from "lucide-react-native";
@@ -7,6 +7,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -15,7 +17,9 @@ import { ICON_SIZE, type Theme } from "@/styles/theme";
 export type AssistantForkTarget = "tab" | "workspace";
 
 interface AssistantForkMenuProps {
-  onFork: (target: AssistantForkTarget) => Promise<void> | void;
+  onCopyChat: (target: AssistantForkTarget) => Promise<void> | void;
+  onForkSession?: () => Promise<void>;
+  forkSessionDisabledReason?: string;
   testID?: string;
 }
 
@@ -25,13 +29,16 @@ const foregroundColorMapping = (theme: Theme) => ({ color: theme.colors.foregrou
 const foregroundMutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 
 export const AssistantForkMenu = memo(function AssistantForkMenu({
-  onFork,
+  onCopyChat,
+  onForkSession,
+  forkSessionDisabledReason,
   testID = "assistant-fork-menu",
 }: AssistantForkMenuProps) {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [pendingTarget, setPendingTarget] = useState<AssistantForkTarget | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<AssistantForkTarget | "session" | null>(null);
   const isLocked = pendingTarget !== null;
+  const pending = useRef(false);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -42,17 +49,21 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
   );
 
   const handleSelect = useCallback(
-    (target: AssistantForkTarget) => async () => {
-      if (isLocked) return;
+    (target: AssistantForkTarget | "session") => async () => {
+      if (pending.current) return;
+      if (target === "session" && forkSessionDisabledReason) return;
+      pending.current = true;
       setPendingTarget(target);
       try {
-        await onFork(target);
+        if (target === "session") await onForkSession?.();
+        else await onCopyChat(target);
       } finally {
+        pending.current = false;
         setPendingTarget(null);
         setIsOpen(false);
       }
     },
-    [isLocked, onFork],
+    [onCopyChat, onForkSession, forkSessionDisabledReason],
   );
 
   const triggerStyle = useCallback(
@@ -98,25 +109,43 @@ export const AssistantForkMenu = memo(function AssistantForkMenu({
         {tooltipContent}
       </Tooltip>
       <DropdownMenuContent align="start" minWidth={220} side="bottom" testID={`${testID}-content`}>
+        {onForkSession ? (
+          <>
+            <DropdownMenuLabel>{t("message.actions.forkSessionSection")}</DropdownMenuLabel>
+            <DropdownMenuItem
+              closeOnSelect={false}
+              disabled={isLocked || Boolean(forkSessionDisabledReason)}
+              tooltip={forkSessionDisabledReason}
+              leading={forkIcon}
+              onSelect={handleSelect("session")}
+              status={pendingTarget === "session" ? "pending" : undefined}
+              testID={`${testID}-fork-session`}
+            >
+              {t("message.actions.forkSessionFromHere")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        <DropdownMenuLabel>{t("message.actions.copyChatSection")}</DropdownMenuLabel>
         <DropdownMenuItem
           closeOnSelect={false}
-          disabled={isLocked && pendingTarget !== "tab"}
+          disabled={isLocked}
           leading={forkIcon}
           onSelect={handleSelect("tab")}
           status={pendingTarget === "tab" ? "pending" : undefined}
           testID={`${testID}-new-tab`}
         >
-          {t("message.actions.forkInNewTab")}
+          {t("message.actions.copyChatToNewTab")}
         </DropdownMenuItem>
         <DropdownMenuItem
           closeOnSelect={false}
-          disabled={isLocked && pendingTarget !== "workspace"}
+          disabled={isLocked}
           leading={forkIcon}
           onSelect={handleSelect("workspace")}
           status={pendingTarget === "workspace" ? "pending" : undefined}
           testID={`${testID}-new-workspace`}
         >
-          {t("message.actions.forkInNewWorkspace")}
+          {t("message.actions.copyChatToNewWorkspace")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

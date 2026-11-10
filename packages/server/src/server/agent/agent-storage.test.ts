@@ -150,6 +150,32 @@ describe("AgentStorage", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  test("retains native run provenance and unrelated metadata through atomic snapshot save and fresh storage load", async () => {
+    const metadata = {
+      customSetting: { keep: true },
+      nativeSessionForkFraming: {
+        sourceSessionId: "source",
+        sourceNativeHandle: "/native/source",
+        startEntryId: null,
+        observedLeafId: "leaf",
+        valid: true,
+        boundaries: [{ entryId: "trigger", kind: "trigger" }],
+      },
+    };
+    const agent = createManagedAgent({
+      cwd: tmpDir,
+      persistence: {
+        provider: "pi",
+        sessionId: "source",
+        nativeHandle: "/native/source",
+        metadata,
+      },
+    });
+    await storage.applySnapshot(agent);
+    const fresh = new AgentStorage(storagePath, createTestLogger());
+    expect((await fresh.get(agent.id))?.persistence?.metadata).toEqual(metadata);
+  });
+
   test("workspace and active queries follow updates, removal, and reload", async () => {
     const base = {
       provider: "codex",

@@ -43,6 +43,8 @@ export type AssistantTurnForkHandler = (input: {
  * Kept separate from `AssistantTurnForkHandler` (whose `boundary` stays
  * required) so the compiler keeps enforcing that completed turns always pin one.
  */
+export type NativeSessionForkHandler = (boundary: AssistantTurnForkBoundary) => Promise<void>;
+
 export type InFlightTurnForkHandler = (target: AssistantForkTarget) => Promise<void> | void;
 
 export const TurnFooter = memo(function TurnFooter({
@@ -52,6 +54,8 @@ export const TurnFooter = memo(function TurnFooter({
   strategy,
   supportsTimelineCursor,
   onForkAssistantTurn,
+  onForkSession,
+  forkSessionDisabledReason,
   onForkInFlightTurn,
 }: {
   isRunning: boolean;
@@ -60,6 +64,8 @@ export const TurnFooter = memo(function TurnFooter({
   strategy: TurnContentStrategy;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
+  onForkSession?: NativeSessionForkHandler;
+  forkSessionDisabledReason?: string;
   onForkInFlightTurn?: InFlightTurnForkHandler;
 }) {
   if (isRunning) {
@@ -83,6 +89,8 @@ export const TurnFooter = memo(function TurnFooter({
       startIndex={host.startIndex}
       supportsTimelineCursor={supportsTimelineCursor}
       onForkAssistantTurn={onForkAssistantTurn}
+      onForkSession={onForkSession}
+      forkSessionDisabledReason={forkSessionDisabledReason}
     />
   );
 });
@@ -94,6 +102,8 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   startIndex,
   supportsTimelineCursor,
   onForkAssistantTurn,
+  onForkSession,
+  forkSessionDisabledReason,
 }: {
   strategy: TurnContentStrategy;
   items: StreamItem[];
@@ -101,6 +111,8 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
+  onForkSession?: NativeSessionForkHandler;
+  forkSessionDisabledReason?: string;
 }) {
   return (
     <TurnFooterRow>
@@ -111,6 +123,8 @@ export const CompletedTurnFooterRow = memo(function CompletedTurnFooterRow({
         startIndex={startIndex}
         supportsTimelineCursor={supportsTimelineCursor}
         onForkAssistantTurn={onForkAssistantTurn}
+        onForkSession={onForkSession}
+        forkSessionDisabledReason={forkSessionDisabledReason}
       />
     </TurnFooterRow>
   );
@@ -130,7 +144,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
         <ThemedSyncedLoader size={14} uniProps={workingIndicatorColorMapping} />
       </View>
       {/* Match the completed-turn footer: actions precede timing metadata. */}
-      {onForkInFlightTurn ? <AssistantForkMenu onFork={onForkInFlightTurn} /> : null}
+      {onForkInFlightTurn ? <AssistantForkMenu onCopyChat={onForkInFlightTurn} /> : null}
       {inFlightTurnStartedAt ? (
         <LiveElapsed
           startedAt={inFlightTurnStartedAt}
@@ -167,6 +181,8 @@ function CompletedTurnFooter({
   startIndex,
   supportsTimelineCursor,
   onForkAssistantTurn,
+  onForkSession,
+  forkSessionDisabledReason,
 }: {
   strategy: TurnContentStrategy;
   items: StreamItem[];
@@ -174,6 +190,8 @@ function CompletedTurnFooter({
   startIndex: number;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
+  onForkSession?: NativeSessionForkHandler;
+  forkSessionDisabledReason?: string;
 }) {
   const getContent = useCallback(
     () =>
@@ -198,6 +216,9 @@ function CompletedTurnFooter({
     },
     [boundary, onForkAssistantTurn],
   );
+  const handleNativeFork = useCallback(async () => {
+    if (boundary) await onForkSession?.(boundary);
+  }, [boundary, onForkSession]);
   return (
     <View style={stylesheet.turnFooterSlot}>
       <AssistantTurnFooter
@@ -205,6 +226,8 @@ function CompletedTurnFooter({
         completedAt={timing?.completedAt}
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}
+        onForkSession={boundary && onForkSession ? handleNativeFork : undefined}
+        forkSessionDisabledReason={forkSessionDisabledReason}
       />
     </View>
   );

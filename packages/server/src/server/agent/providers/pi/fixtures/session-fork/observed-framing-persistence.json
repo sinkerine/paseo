@@ -1,0 +1,35 @@
+{
+  "provider": "pi",
+  "sessionId": "01a1c51c-cfe0-76f4-b477-a1529ad349d2",
+  "nativeHandle": "/home/sinkerine/.local/share/workspace-dispatch/repos/wks_71ede35524036ad0/.git/worktrees/workspace-dispatch-wks-71ede35524036ad0/e2e-feature/pi-native-session-fork/g3/fix-r2/identity-state/sessions/2026-11-10T10-59-22-209Z_01a1c51c-cfe0-76f4-b477-a1529ad349d2.jsonl",
+  "metadata": {
+    "nativeSessionForkFraming": {
+      "sourceSessionId": "01a1c51c-cfe0-76f4-b477-a1529ad349d2",
+      "sourceNativeHandle": "/home/sinkerine/.local/share/workspace-dispatch/repos/wks_71ede35524036ad0/.git/worktrees/workspace-dispatch-wks-71ede35524036ad0/e2e-feature/pi-native-session-fork/g3/fix-r2/identity-state/sessions/2026-11-10T10-59-22-209Z_01a1c51c-cfe0-76f4-b477-a1529ad349d2.jsonl",
+      "startEntryId": "a192ec09",
+      "observedLeafId": "bca8feaa",
+      "valid": true,
+      "boundaries": [
+        {
+          "entryId": "87fcb2af",
+          "kind": "trigger"
+        },
+        {
+          "entryId": "16177708",
+          "kind": "trigger"
+        },
+        {
+          "entryId": "ff89add3",
+          "kind": "unknown"
+        },
+        {
+          "entryId": "79a44f31",
+          "kind": "trigger"
+        }
+      ]
+    },
+    "cwd": "/home/sinkerine/.local/share/workspace-dispatch/repos/wks_71ede35524036ad0/.git/worktrees/workspace-dispatch-wks-71ede35524036ad0/e2e-feature/pi-native-session-fork/g3/fix-r2/identity-state/cwd",
+    "model": "g3-scripted/boundary",
+    "thinkingOptionId": "off"
+  }
+}

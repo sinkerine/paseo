@@ -10,14 +10,15 @@ export function resolveAssistantTurnForkBoundary(input: {
   supportsTimelineCursor: boolean;
 }): AssistantTurnForkBoundary | undefined {
   const item = input.items[input.startIndex];
-  if (item?.kind !== "assistant_message") {
+  if (item?.kind !== "assistant_message" && item?.kind !== "tool_call") {
     return undefined;
   }
+  const messageId = item.kind === "assistant_message" ? item.messageId : undefined;
   if (input.supportsTimelineCursor && item.timelineCursor) {
     return {
       boundaryCursor: item.timelineCursor,
-      ...(item.messageId ? { boundaryMessageId: item.messageId } : {}),
+      ...(messageId ? { boundaryMessageId: messageId } : {}),
     };
   }
-  return item.messageId ? { boundaryMessageId: item.messageId } : undefined;
+  return messageId ? { boundaryMessageId: messageId } : undefined;
 }

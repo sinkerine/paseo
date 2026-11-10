@@ -8,6 +8,7 @@ import {
   forkMostRecentAssistantTurnToNewTab,
   forkMostRecentAssistantTurnToNewWorkspace,
   observeForkAttachment,
+  openMostRecentAssistantForkMenu,
 } from "../support/helpers/assistant-fork";
 import { expectComposerVisible, submitMessage } from "../support/helpers/composer";
 import { getE2EDaemonPort } from "../support/helpers/daemon-port";
@@ -55,7 +56,10 @@ test.describe("Assistant fork menu", () => {
       timeout: 30_000,
     });
 
-    await forkMostRecentAssistantTurnToNewTab(page);
+    await openMostRecentAssistantForkMenu(page);
+    await expect(page.getByTestId("assistant-fork-menu-fork-session")).toHaveCount(0);
+    await expect(page.getByText("Copy chat", { exact: true })).toBeVisible();
+    await page.getByTestId("assistant-fork-menu-new-tab").click();
     await expectChatHistoryAttachment(page);
   });
 

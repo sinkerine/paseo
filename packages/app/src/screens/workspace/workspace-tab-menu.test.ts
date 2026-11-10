@@ -367,3 +367,71 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(terminalSeparator?.key).toBe("rename-separator");
   });
 });
+
+describe("native session clone entries", () => {
+  it.each(["desktop", "mobile"] as const)(
+    "shows the source-owned clone action on the %s surface and blocks pending/running submissions",
+    (surface) => {
+      const onSelect = vi.fn(async () => {});
+      const base = {
+        surface,
+        tab: createAgentTab(),
+        index: 0,
+        tabCount: 1,
+        menuTestIDBase: "native-tab",
+        onCopyResumeCommand: vi.fn(),
+        onCopyAgentId: vi.fn(),
+        onCopyTerminalId: vi.fn(),
+        onCopyFilePath: vi.fn(),
+        onReloadAgent: vi.fn(),
+        onRenameTab: vi.fn(),
+        onCloseTab: vi.fn(),
+        onCloseTabsBefore: vi.fn(),
+        onCloseTabsAfter: vi.fn(),
+        onCloseOtherTabs: vi.fn(),
+      };
+      expect(
+        buildWorkspaceTabMenuEntries(base).some((entry) => entry.key === "clone-session"),
+      ).toBe(false);
+      const entries = buildWorkspaceTabMenuEntries({
+        ...base,
+        cloneSession: { onSelect, disabled: false, pending: false },
+      });
+      const clone = entries.find((entry) => entry.key === "clone-session");
+      expect(clone).toMatchObject({
+        kind: "item",
+        label: "Clone session",
+        icon: "split",
+        testID: "native-tab-clone-session",
+        disabled: false,
+      });
+      if (clone?.kind !== "item") throw new Error("Missing clone session menu item");
+      clone.onSelect();
+      expect(onSelect).toHaveBeenCalledOnce();
+      const blocked = buildWorkspaceTabMenuEntries({
+        ...base,
+        cloneSession: { onSelect, disabled: true, pending: true },
+      }).find((entry) => entry.key === "clone-session");
+      expect(blocked).toMatchObject({ disabled: true, pending: true });
+      if (blocked?.kind !== "item") throw new Error("Missing pending clone session menu item");
+      blocked.onSelect();
+      expect(onSelect).toHaveBeenCalledOnce();
+      const readOnly = {
+        ...createAgentTab(),
+        kind: "provider_subagent" as const,
+        target: {
+          kind: "provider_subagent" as const,
+          parentAgentId: "parent",
+          subagentId: "child",
+        },
+      };
+      expect(
+        buildWorkspaceTabMenuEntries({
+          ...base,
+          tab: readOnly,
+          cloneSession: { onSelect, disabled: false, pending: false },
+        }).some((entry) => entry.key === "clone-session"),
+      ).toBe(false);
+    },
+  );
+});

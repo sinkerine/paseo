@@ -475,6 +475,7 @@ export function wrapSessionProvider(provider: AgentProvider, inner: AgentSession
     setModel: inner.setModel?.bind(inner),
     setThinkingOption: inner.setThinkingOption?.bind(inner),
     setFeature: inner.setFeature?.bind(inner),
+    getNativeForkLeaf: inner.getNativeForkLeaf?.bind(inner),
     revertConversation: inner.revertConversation?.bind(inner),
     revertFiles: inner.revertFiles?.bind(inner),
     revertBoth: inner.revertBoth?.bind(inner),
@@ -492,6 +493,7 @@ function wrapClientProvider(
 ): AgentClient {
   const listImportableSessions = inner.listImportableSessions?.bind(inner);
   const importSession = inner.importSession?.bind(inner);
+  const forkSession = inner.forkSession?.bind(inner);
   const listFeatures = inner.listFeatures?.bind(inner);
   const archiveNativeSession = inner.archiveNativeSession?.bind(inner);
   const unarchiveNativeSession = inner.unarchiveNativeSession?.bind(inner);
@@ -568,6 +570,35 @@ function wrapClientProvider(
       : undefined,
     listImportableSessions: listImportableSessions
       ? async (options) => await listImportableSessions({ ...options, providerOptions })
+      : undefined,
+    forkSession: forkSession
+      ? async (input, context) => {
+          const imported = await forkSession(
+            { ...input, source: { ...input.source, provider: inner.provider } },
+            {
+              ...context,
+              config: {
+                ...context.config,
+                provider: inner.provider,
+                providerOptions: mergeProviderOptions(
+                  providerOptions,
+                  context.config.providerOptions,
+                ),
+              },
+              storedConfig: { ...context.storedConfig, provider: inner.provider },
+            },
+          );
+          return {
+            ...imported,
+            session: wrapSessionProvider(provider, imported.session),
+            config: {
+              ...imported.config,
+              provider,
+              providerOptions: context.storedConfig.providerOptions,
+            },
+            persistence: { ...imported.persistence, provider },
+          };
+        }
       : undefined,
     importSession: importSession
       ? async (input, context) => {

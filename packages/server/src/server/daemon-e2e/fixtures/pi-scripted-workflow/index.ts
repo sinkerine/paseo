@@ -34,8 +34,8 @@ function reply(context: TranscriptContext): ToolCall | string {
   const childKey = /PASEO_SCRIPTED_CHILD:([\w.-]+)/.exec(userText)?.[1];
   const latestUser = context.messages.findLast((message) => message.role === "user");
   const latestText = latestUser?.content;
-  const stopText = typeof latestText === "string" ? latestText : JSON.stringify(latestText);
-  const stopId = /STOP_WORKFLOW:([\w-]+)/.exec(stopText ?? "")?.[1];
+  const stopText = typeof latestText === "string" ? latestText : (JSON.stringify(latestText) ?? "");
+  const stopId = /STOP_WORKFLOW:([\w-]+)/.exec(stopText)?.[1];
   const lastMessage = context.messages.at(-1);
   if (stopId && lastMessage?.role === "user")
     return {
@@ -44,6 +44,14 @@ function reply(context: TranscriptContext): ToolCall | string {
       name: "subagent",
       arguments: { action: "stop", id: stopId },
     };
+  if (stopText.includes("RUN_FORK_WORKFLOW") && lastMessage?.role === "user") {
+    return {
+      type: "toolCall",
+      id: "scripted-fork-workflow-direct",
+      name: "subagent",
+      arguments: { workflow: "./paseo-scripted-workflow.js", async: true },
+    };
+  }
   const toolResults = context.messages.filter((message) => message.role === "toolResult");
   if (childKey) {
     if (toolResults.some((message) => message.toolName === "bash")) {

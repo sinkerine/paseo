@@ -249,6 +249,7 @@ async function walkJsonlFiles(root: string): Promise<string[]> {
     entries.map(async (entry) => {
       const entryPath = path.join(root, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === ".paseo-fork-staging") return [];
         return await walkJsonlFiles(entryPath);
       }
       return entry.isFile() && entry.name.endsWith(".jsonl") ? [entryPath] : [];

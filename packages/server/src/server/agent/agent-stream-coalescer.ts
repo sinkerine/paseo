@@ -21,6 +21,8 @@ export interface AgentStreamCoalescerFlush {
   item: CoalescableTimelineItem;
   provider: AgentProvider;
   turnId?: string;
+  providerMessageId?: string;
+  providerMessageKey?: string;
 }
 
 export interface AgentStreamCoalescerOptions {
@@ -36,6 +38,8 @@ interface PendingTextEntry {
   text: string;
   provider: AgentProvider;
   turnId?: string;
+  providerMessageId?: string;
+  providerMessageKey?: string;
 }
 
 interface PendingToolCallEntry {
@@ -43,6 +47,8 @@ interface PendingToolCallEntry {
   item: Extract<AgentTimelineItem, { type: "tool_call" }>;
   provider: AgentProvider;
   turnId?: string;
+  providerMessageId?: string;
+  providerMessageKey?: string;
 }
 
 type PendingAgentStreamEntry = PendingTextEntry | PendingToolCallEntry;
@@ -179,11 +185,19 @@ export class AgentStreamCoalescer {
         text: event.item.text,
         provider: event.provider,
         ...(event.turnId !== undefined ? { turnId: event.turnId } : {}),
+        ...(event.providerMessageId ? { providerMessageId: event.providerMessageId } : {}),
+        ...(event.providerMessageKey ? { providerMessageKey: event.providerMessageKey } : {}),
       });
       return;
     }
 
-    const existingIndex = buffer.toolCallEntryIndexes.get(event.item.callId);
+    const toolEntryKey = JSON.stringify([
+      event.item.callId,
+      event.providerMessageId,
+      event.providerMessageKey,
+      event.turnId,
+    ]);
+    const existingIndex = buffer.toolCallEntryIndexes.get(toolEntryKey);
     const existing = existingIndex !== undefined ? buffer.entries[existingIndex] : undefined;
     // Merge rather than replace, so an update that carries less (an unknown detail after a
     // labeled one) cannot erase what the timeline would have kept had both been flushed.
@@ -196,6 +210,8 @@ export class AgentStreamCoalescer {
       item,
       provider: event.provider,
       ...(event.turnId !== undefined ? { turnId: event.turnId } : {}),
+      ...(event.providerMessageId ? { providerMessageId: event.providerMessageId } : {}),
+      ...(event.providerMessageKey ? { providerMessageKey: event.providerMessageKey } : {}),
     };
 
     if (existingIndex !== undefined) {
@@ -203,7 +219,7 @@ export class AgentStreamCoalescer {
       return;
     }
 
-    buffer.toolCallEntryIndexes.set(event.item.callId, buffer.entries.length);
+    buffer.toolCallEntryIndexes.set(toolEntryKey, buffer.entries.length);
     buffer.entries.push(entry);
   }
 
@@ -259,6 +275,8 @@ export class AgentStreamCoalescer {
               : entry.item,
           provider: entry.provider,
           ...(entry.turnId !== undefined ? { turnId: entry.turnId } : {}),
+          ...(entry.providerMessageId ? { providerMessageId: entry.providerMessageId } : {}),
+          ...(entry.providerMessageKey ? { providerMessageKey: entry.providerMessageKey } : {}),
         });
       }
     } finally {
@@ -277,7 +295,9 @@ export class AgentStreamCoalescer {
         entry.kind === "text" &&
         isSameTextStream(previous, entry) &&
         previous.provider === entry.provider &&
-        previous.turnId === entry.turnId
+        previous.turnId === entry.turnId &&
+        previous.providerMessageId === entry.providerMessageId &&
+        previous.providerMessageKey === entry.providerMessageKey
       ) {
         previous.text += entry.text;
         continue;

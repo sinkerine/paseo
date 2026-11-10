@@ -175,6 +175,7 @@ const AgentCapabilitiesSchema = z.strictObject({
   supportsStreaming: z.boolean(),
   supportsSessionPersistence: z.boolean(),
   supportsSessionListing: z.boolean().optional(),
+  supportsNativeSessionFork: z.boolean().optional(),
   supportsDynamicModes: z.boolean(),
   supportsMcpServers: z.boolean(),
   supportsReasoningStream: z.boolean(),
@@ -625,6 +626,9 @@ function serializeAgentCapabilities(
   return {
     supportsStreaming: capabilities.supportsStreaming,
     supportsSessionPersistence: capabilities.supportsSessionPersistence,
+    ...(capabilities.supportsNativeSessionFork !== undefined
+      ? { supportsNativeSessionFork: capabilities.supportsNativeSessionFork }
+      : {}),
     ...(capabilities.supportsSessionListing !== undefined
       ? { supportsSessionListing: capabilities.supportsSessionListing }
       : {}),

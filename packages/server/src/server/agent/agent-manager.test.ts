@@ -36,6 +36,8 @@ import type {
   AgentTimelineStore,
 } from "./agent-timeline-store-types.js";
 import type {
+  ForkProviderSessionInput,
+  ForkedProviderSession,
   AgentClient,
   AgentCreateSessionOptions,
   AgentFeature,
@@ -13643,4 +13645,209 @@ test("turns keep distinct identities across an idle runtime collection and resum
     await storage.flush();
     rmSync(workdir, { recursive: true, force: true });
   }
+});
+
+class NativeForkTestSession extends TestAgentSession {
+  override readonly capabilities = { ...TEST_CAPABILITIES, supportsNativeSessionFork: true };
+  leafOverride: string | null = null;
+  async getNativeForkLeaf() {
+    return this.leafOverride;
+  }
+}
+
+class NativeForkTestClient extends TestAgentClient {
+  override readonly capabilities = { ...TEST_CAPABILITIES, supportsNativeSessionFork: true };
+  source: NativeForkTestSession | undefined;
+  forkInput: ForkProviderSessionInput | undefined;
+  discard = vi.fn(async () => {});
+  holdFork: ((signal: AbortSignal) => Promise<void>) | undefined;
+  failRuntimeInfo = false;
+  holdRegistration: ((signal: AbortSignal) => Promise<void>) | undefined;
+  forkConfig: AgentSessionConfig | undefined;
+  override async createSession(config: AgentSessionConfig) {
+    this.source = new NativeForkTestSession(config);
+    return this.source;
+  }
+  async forkSession(
+    input: ForkProviderSessionInput,
+    context: ImportProviderSessionContext,
+  ): Promise<ForkedProviderSession> {
+    this.forkInput = input;
+    this.forkConfig = context.storedConfig;
+    await this.holdFork?.(input.signal);
+    const destination = new NativeForkTestSession(context.config);
+    if (this.holdRegistration) {
+      const readRuntimeInfo = destination.getRuntimeInfo.bind(destination);
+      destination.getRuntimeInfo = async () => {
+        await this.holdRegistration!(input.signal);
+        return readRuntimeInfo();
+      };
+    }
+    if (this.failRuntimeInfo)
+      destination.getRuntimeInfo = async () => {
+        throw new Error("resume failure");
+      };
+    return {
+      session: destination,
+      config: context.storedConfig,
+      persistence: {
+        provider: "codex",
+        sessionId: destination.id,
+        nativeHandle: "destination.jsonl",
+      },
+      timeline: [
+        {
+          item: { type: "assistant_message", text: "native response", messageId: "native-ui-id" },
+          providerMessageId: "native-entry-id",
+        },
+      ],
+      providerSubagentEvents: [
+        {
+          type: "provider_subagent",
+          provider: "codex",
+          event: {
+            type: "upsert",
+            id: "source-workflow",
+            title: "Source workflow",
+            status: "running",
+          },
+        },
+      ],
+      origin: {
+        sourceSessionId: input.source.sessionId,
+        sourceNativeHandle: "source.jsonl",
+        targetEntryId: "native-entry-id",
+        inheritedLeafEntryId: "native-entry-id",
+      },
+      discard: this.discard,
+    };
+  }
+}
+
+async function nativeForkManager() {
+  const root = mkdtempSync(join(tmpdir(), "native-fork-manager-"));
+  onTestFinished(() => rmSync(root, { recursive: true, force: true }));
+  const storage = new AgentStorage(join(root, "agents"), logger);
+  const client = new NativeForkTestClient();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  const source = await manager.createAgent(
+    {
+      provider: "codex",
+      cwd: root,
+      title: "Source",
+      model: "chosen-model",
+      thinkingOptionId: "high",
+    },
+    undefined,
+    {
+      workspaceId: "source-workspace",
+      labels: { [PARENT_AGENT_ID_LABEL]: "another-agent", custom: "source-only" },
+    },
+  );
+  return { manager, client, source, storage };
+}
+
+test("forkAgentSession registers an independent top-level agent and retains native replay identity", async () => {
+  const { manager, client, source, storage } = await nativeForkManager();
+  const fork = await manager.forkAgentSession({ sourceAgentId: source.id, target: "latest" });
+  expect(fork.id).not.toBe(source.id);
+  expect(fork.labels).toEqual({});
+  expect(fork.workspaceId).toBe(source.workspaceId);
+  expect(fork.cwd).toBe(source.cwd);
+  expect(fork.config.model).toBe("chosen-model");
+  expect(manager.listProviderSubagents(fork.id)).toEqual([]);
+  expect((await manager.getTimelineRows(fork.id))[0]?.providerMessageId).toBe("native-entry-id");
+  const record = await storage.get(fork.id);
+  expect(record?.title).toBe("Source (fork)");
+  expect(record?.persistence?.metadata?.forkOrigin).toMatchObject({ sourceAgentId: source.id });
+  expect(client.discard).not.toHaveBeenCalled();
+  await source.session?.close();
+  await fork.session?.close();
+});
+
+test("forkAgentSession honors a clone rewind override and refuses a running latest source", async () => {
+  const { manager, client, source } = await nativeForkManager();
+  client.source!.leafOverride = "rewound-leaf";
+  await manager.forkAgentSession({ sourceAgentId: source.id, target: "latest" });
+  expect(client.forkInput?.target).toEqual({ kind: "latest", leafEntryId: "rewound-leaf" });
+  client.source!.pushEvent({ type: "turn_started", provider: "codex", turnId: "autonomous-run" });
+  await vi.waitFor(() => expect(manager.hasInFlightRun(source.id)).toBe(true));
+  await expect(
+    manager.forkAgentSession({ sourceAgentId: source.id, target: "latest" }),
+  ).rejects.toMatchObject({ code: "source_running" });
+});
+
+test("forkAgentSession removes the destination after registration failure", async () => {
+  const { manager, client, source, storage } = await nativeForkManager();
+  client.failRuntimeInfo = true;
+  await expect(
+    manager.forkAgentSession({ sourceAgentId: source.id, target: "latest" }),
+  ).rejects.toThrow("resume failure");
+  expect(client.discard).toHaveBeenCalledOnce();
+  expect(manager.listAgents().map((agent) => agent.id)).toEqual([source.id]);
+  expect((await storage.listAll()).map((agent) => agent.id)).toEqual([source.id]);
+});
+
+test("forkAgentSession shutdown aborts materialization before registration and flush waits for cleanup", async () => {
+  const { manager, client, source, storage } = await nativeForkManager();
+  const started = deferred<void>();
+  client.holdFork = (signal) =>
+    new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      started.resolve();
+    });
+  const operation = manager.forkAgentSession({ sourceAgentId: source.id, target: "latest" });
+  const refused = expect(operation).rejects.toMatchObject({ code: "canceled" });
+  await started.promise;
+  manager.prepareForShutdown();
+  await manager.flush();
+  await refused;
+  expect(client.forkInput?.signal.aborted).toBe(true);
+  expect((await storage.listAll()).map((agent) => agent.id)).toEqual([source.id]);
+});
+
+test("forkAgentSession inherits effective model and thinking after a provider-side change", async () => {
+  const { manager, client, source } = await nativeForkManager();
+  client.source!.pushEvent({
+    type: "model_changed",
+    provider: "codex",
+    runtimeInfo: {
+      provider: "codex",
+      sessionId: client.source!.id,
+      model: "provider-selected-model",
+      thinkingOptionId: "low",
+    },
+  });
+  await vi.waitFor(() =>
+    expect(manager.getAgent(source.id)?.runtimeInfo?.model).toBe("provider-selected-model"),
+  );
+  await manager.forkAgentSession({ sourceAgentId: source.id, target: "latest" });
+  expect(client.forkConfig).toMatchObject({
+    model: "provider-selected-model",
+    thinkingOptionId: "low",
+  });
+});
+
+test("forkAgentSession abort during destination registration closes and discards the unpublished branch", async () => {
+  const { manager, client, source, storage } = await nativeForkManager();
+  const started = deferred<void>();
+  const abort = new AbortController();
+  client.holdRegistration = (signal) =>
+    new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      started.resolve();
+    });
+  const operation = manager.forkAgentSession({
+    sourceAgentId: source.id,
+    target: "latest",
+    signal: abort.signal,
+  });
+  const refused = expect(operation).rejects.toMatchObject({ code: "canceled" });
+  await started.promise;
+  abort.abort();
+  await refused;
+  await manager.flush();
+  expect(client.discard).toHaveBeenCalledOnce();
+  expect((await storage.listAll()).map((agent) => agent.id)).toEqual([source.id]);
+  expect(manager.listAgents().map((agent) => agent.id)).toEqual([source.id]);
 });

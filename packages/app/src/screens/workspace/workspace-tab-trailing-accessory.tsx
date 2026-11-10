@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type ReactElement } from "react";
+import { Fragment, useCallback, useMemo, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Text } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -10,6 +10,7 @@ import {
   Ellipsis,
   Pencil,
   RotateCw,
+  Split,
   X,
 } from "lucide-react-native";
 import {
@@ -18,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  useDropdownMenuClose,
 } from "@/components/ui/dropdown-menu";
 import type { FilePanelOpenWithMenu } from "@/file-panels";
 import type { WorkspaceTabMenuEntry } from "@/screens/workspace/workspace-tab-menu";
@@ -25,6 +27,7 @@ import type { Theme } from "@/styles/theme";
 
 const ThemedEllipsis = withUnistyles(Ellipsis);
 const ThemedCopy = withUnistyles(Copy);
+const ThemedSplit = withUnistyles(Split);
 const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
@@ -46,10 +49,21 @@ function MobileTabDropdownMenuItem({
 }: {
   entry: Extract<WorkspaceTabMenuEntry, { kind: "item" }>;
 }) {
+  const close = useDropdownMenuClose();
+  const isClone = entry.key === "clone-session";
+  const handleClone = useCallback(async () => {
+    try {
+      await entry.onSelect();
+    } finally {
+      close();
+    }
+  }, [entry, close]);
   const leading = useMemo(() => {
     switch (entry.icon) {
       case "copy":
         return <ThemedCopy size={16} uniProps={mutedColorMapping} />;
+      case "split":
+        return <ThemedSplit size={16} uniProps={mutedColorMapping} />;
       case "rotate-cw":
         return <ThemedRotateCw size={16} uniProps={mutedColorMapping} />;
       case "arrow-left-to-line":
@@ -74,8 +88,10 @@ function MobileTabDropdownMenuItem({
     <DropdownMenuItem
       testID={entry.testID}
       disabled={entry.disabled}
+      status={entry.pending ? "pending" : undefined}
       destructive={entry.destructive}
-      onSelect={entry.onSelect}
+      onSelect={isClone ? handleClone : entry.onSelect}
+      closeOnSelect={!isClone}
       tooltip={entry.tooltip}
       leading={leading}
       trailing={trailing}

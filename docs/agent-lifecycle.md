@@ -119,6 +119,10 @@ Accepting new work after an ambiguous interruption would create a split-brain se
 
 ## Relationships
 
+**Fork session** and **Clone session** create independent top-level agents in the source workspace. They inherit cwd and provider configuration, and receive the source title with ` (fork)` appended. They inherit no labels, parent link, schedules, heartbeats, attention, archive state, or live provider-subagent tree. They archive independently. Origin is recorded in private persistence metadata. Its destination-native copied boundary prevents later replay or restart from reassigning source child ownership. New work started in the fork still has its own track; reading copied history does not require the source file.
+
+Native history retains extension/tool entries, but ownership stays with the source's native session identity. goal-x and pi-subagents must not claim or resume source work in the new session; copied tool rows confer no controls over source runs. The provider contract and Pi worker constraints live in [providers](providers.md#direct).
+
 Agents can launch other agents via the agent-scoped `create_agent` MCP tool. Agent-scoped creation is always asynchronous and always stamps `paseo.parent-agent-id`, pointing back at the caller. Omit `workspaceId` to use the caller's workspace, or pass an existing workspace ID returned by `create_workspace`. Placement never changes parentage.
 
 - **Subagents** — exist as part of the creating agent's work, appear in that agent's subagent track, and are archived with it.

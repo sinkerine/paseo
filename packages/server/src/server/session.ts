@@ -1,3 +1,4 @@
+import { NativeSessionForkError } from "./agent/agent-sdk-types.js";
 import { DiffSession } from "./diff/index.js";
 import { type WorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import type { AgentMessageDelivery } from "./agent/agent-messages/index.js";
@@ -3041,6 +3042,8 @@ export class Session {
         );
         return undefined;
       }
+      case "agent.fork_session.request":
+        return this.handleAgentForkSessionRequest(msg);
       case "agent.fork_context.request":
         return this.handleAgentForkContextRequest(msg);
       default:
@@ -8673,6 +8676,40 @@ export class Session {
         },
         source,
       );
+    }
+  }
+
+  private async handleAgentForkSessionRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.fork_session.request" }>,
+  ): Promise<void> {
+    try {
+      const agent = await this.agentManager.forkAgentSession({
+        sourceAgentId: msg.agentId,
+        target: msg.target,
+        ...(msg.target === "turn"
+          ? { boundary: { cursor: msg.boundaryCursor, messageId: msg.boundaryMessageId } }
+          : {}),
+      });
+      this.emit({
+        type: "agent.fork_session.response",
+        payload: {
+          requestId: msg.requestId,
+          sourceAgentId: msg.agentId,
+          agent: await this.buildAgentPayload(agent),
+          error: null,
+        },
+      });
+    } catch (error) {
+      this.emit({
+        type: "agent.fork_session.response",
+        payload: {
+          requestId: msg.requestId,
+          sourceAgentId: msg.agentId,
+          agent: null,
+          error: error instanceof Error ? error.message : String(error),
+          errorCode: error instanceof NativeSessionForkError ? error.code : "materialize_failed",
+        },
+      });
     }
   }
 

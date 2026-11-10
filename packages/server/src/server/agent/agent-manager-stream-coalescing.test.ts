@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
+import { AgentStorage } from "./agent-storage.js";
 import { AgentManager, type AgentManagerEvent } from "./agent-manager.js";
 import { AGENT_STREAM_COALESCE_DEFAULT_WINDOW_MS } from "./agent-stream-coalescer.js";
 import { limitAgentTimelineItemContent } from "./agent-timeline-content.js";
@@ -88,6 +89,7 @@ function toolCall(options?: {
 class TestAgentSession implements AgentSession {
   readonly capabilities = TEST_CAPABILITIES;
   readonly id: string;
+  persistenceMetadata: Record<string, unknown> = {};
   private historyEvents: AgentStreamEvent[] = [];
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private turnIdCounter = 0;
@@ -167,6 +169,9 @@ class TestAgentSession implements AgentSession {
     return {
       provider: this.provider,
       sessionId: this.id,
+      ...(Object.keys(this.persistenceMetadata).length
+        ? { metadata: this.persistenceMetadata }
+        : {}),
     };
   }
 
@@ -243,10 +248,13 @@ interface Harness {
   cleanup: () => void;
 }
 
-function createHarness(options?: { provider?: AgentProvider }): Harness {
+function createHarness(options?: { provider?: AgentProvider; persist?: boolean }): Harness {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-stream-coalescing-"));
   const client = new TestAgentClient(options?.provider ?? "codex");
   const manager = new AgentManager({
+    ...(options?.persist
+      ? { registry: new AgentStorage(join(workdir, "records"), createTestLogger()) }
+      : {}),
     clients: { [client.provider]: client },
     idFactory: createIdFactory(),
     logger: createTestLogger(),
@@ -1405,4 +1413,135 @@ describe("target coalesced behavior", () => {
       harness.cleanup();
     }
   });
+});
+
+test("late native identity survives live chunk coalescing and id-less image projection without reaching clients", async () => {
+  const harness = createHarness();
+  try {
+    const { agentId, session } = await createManagedSession(harness);
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      providerMessageKey: "assistant-A",
+      item: { type: "assistant_message", messageId: "A", text: "one " },
+    });
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      providerMessageKey: "assistant-A",
+      item: { type: "assistant_message", messageId: "A", text: "run" },
+    });
+    session.pushEvent({
+      type: "timeline_identity",
+      provider: "codex",
+      providerMessageKey: "assistant-A",
+      providerMessageId: "native-A",
+    });
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      providerMessageKey: "tool:B",
+      item: toolCall({ status: "completed" }),
+    });
+    session.pushEvent({
+      type: "timeline",
+      provider: "codex",
+      providerMessageKey: "tool:B",
+      item: { type: "assistant_message", text: "![Image](file:///image.png)" },
+    });
+    session.pushEvent({
+      type: "timeline_identity",
+      provider: "codex",
+      providerMessageKey: "tool:B",
+      providerMessageId: "native-B-result",
+    });
+    await waitForSessionEventQueue();
+    const rows = await harness.manager.getTimelineRows(agentId);
+    expect(rows.map((row) => ({ type: row.item.type, id: row.providerMessageId }))).toEqual([
+      { type: "assistant_message", id: "native-A" },
+      { type: "tool_call", id: "native-B-result" },
+      { type: "assistant_message", id: "native-B-result" },
+    ]);
+    expect(JSON.stringify(harness.events)).not.toContain("timeline_identity");
+    const events = getTimelineStreamEvents(harness.events, agentId);
+    expect(
+      events.map((event) => event.type === "agent_stream" && "providerMessageKey" in event.event),
+    ).toEqual([false, false, false, false]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("native replay identities survive manager hydration and keep distinct reasoning entries apart", async () => {
+  const harness = createHarness();
+  try {
+    const { agentId, session } = await createManagedSession(harness);
+    session.setHistory([
+      {
+        type: "timeline",
+        provider: "codex",
+        providerMessageId: "native-a",
+        item: { type: "reasoning", text: "same" },
+      },
+      {
+        type: "timeline",
+        provider: "codex",
+        providerMessageId: "native-b",
+        item: { type: "reasoning", text: "same" },
+      },
+    ]);
+    await harness.manager.hydrateTimelineFromProvider(agentId, {
+      force: true,
+      broadcastTimeline: true,
+    });
+    expect(
+      (await harness.manager.getTimelineRows(agentId)).map((row) => row.providerMessageId),
+    ).toEqual(["native-a", "native-b"]);
+    expect(
+      getTimelineStreamEvents(harness.events, agentId).map(
+        (event) => event.type === "agent_stream" && "providerMessageId" in event.event,
+      ),
+    ).toEqual([false, false]);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test("persists provider provenance through the existing registry and hides internal metadata events", async () => {
+  const harness = createHarness({ persist: true });
+  try {
+    const { agentId, session } = await createManagedSession(harness);
+    session.persistenceMetadata = { unrelated: "keep", nativeSessionForkFraming: { valid: false } };
+    session.pushEvent({ type: "persistence_updated", provider: "codex" });
+    await waitForSessionEventQueue();
+    await harness.manager.flush();
+    const fresh = new AgentStorage(join(harness.workdir, "records"), createTestLogger());
+    expect((await fresh.get(agentId))?.persistence?.metadata).toEqual({
+      ...session.persistenceMetadata,
+      cwd: harness.workdir,
+    });
+    expect(
+      harness.events.some(
+        (event) => event.type === "agent_stream" && event.event.type === "persistence_updated",
+      ),
+    ).toBe(false);
+    session.pushEvent({
+      type: "turn_failed",
+      provider: "codex",
+      error: "native error",
+      providerMessageId: "native-error",
+    });
+    await waitForSessionEventQueue();
+    expect((await harness.manager.getTimelineRows(agentId)).at(-1)?.providerMessageId).toBe(
+      "native-error",
+    );
+    const failed = harness.events.filter(
+      (event) => event.type === "agent_stream" && event.event.type === "turn_failed",
+    );
+    expect(
+      failed.map((event) => event.type === "agent_stream" && "providerMessageId" in event.event),
+    ).toEqual([false]);
+  } finally {
+    harness.cleanup();
+  }
 });

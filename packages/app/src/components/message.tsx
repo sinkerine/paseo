@@ -553,6 +553,8 @@ interface AssistantTurnFooterProps {
   completedAt?: Date;
   durationMs?: number | null;
   onFork?: (target: AssistantForkTarget) => Promise<void> | void;
+  onForkSession?: () => Promise<void>;
+  forkSessionDisabledReason?: string;
 }
 
 const assistantTurnFooterStylesheet = StyleSheet.create((theme) => ({
@@ -610,6 +612,8 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
   completedAt,
   durationMs,
   onFork,
+  onForkSession,
+  forkSessionDisabledReason,
 }: AssistantTurnFooterProps) {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
@@ -658,7 +662,7 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
     },
     [onFork],
   );
-  const canFork = Boolean(onFork);
+  const canFork = Boolean(onFork || onForkSession);
 
   return (
     <View style={assistantTurnFooterStylesheet.container}>
@@ -670,7 +674,13 @@ export const AssistantTurnFooter = memo(function AssistantTurnFooter({
               containerStyle={assistantTurnFooterStylesheet.copyButton}
             />
           ) : null}
-          {canFork ? <AssistantForkMenu onFork={handleFork} /> : null}
+          {canFork ? (
+            <AssistantForkMenu
+              onCopyChat={handleFork}
+              onForkSession={onForkSession}
+              forkSessionDisabledReason={forkSessionDisabledReason}
+            />
+          ) : null}
         </View>
       ) : null}
       {primaryLabel ? (

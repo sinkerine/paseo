@@ -150,3 +150,13 @@ describe("SessionAuthorization", () => {
     expect(() => parseDaemonPermissions(["hub.execution.*"])).toThrow("Invalid daemon permission");
   });
 });
+
+test("native session fork requires workspace.write while transcript copying remains workspace.read", () => {
+  const reader = new SessionAuthorization(["workspace.read"]);
+  const writer = new SessionAuthorization(["workspace.write"]);
+  expect(reader.allowsInbound(inboundMessage("agent.fork_context.request"))).toBe(true);
+  expect(reader.allowsInbound(inboundMessage("agent.fork_session.request"))).toBe(false);
+  expect(reader.allowsOutbound(outboundMessage("agent.fork_session.response"))).toBe(false);
+  expect(writer.allowsInbound(inboundMessage("agent.fork_session.request"))).toBe(true);
+  expect(writer.allowsOutbound(outboundMessage("agent.fork_session.response"))).toBe(true);
+});

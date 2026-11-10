@@ -1,3 +1,5 @@
+import { useNativeForkTabActions } from "@/hooks/use-native-fork-agent";
+import type { WorkspaceTabCloneAction } from "../workspace-tab-menu";
 import { workspaceTabSwitcherPopoverLayout } from "../workspace-tab-layout";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Keyboard, Pressable, Text, View } from "react-native";
@@ -147,6 +149,7 @@ interface MobileWorkspaceTabSwitcherProps {
 
 function MobileWorkspaceTabOption({
   tab,
+  cloneSession,
   tabIndex,
   tabCount,
   normalizedServerId,
@@ -166,6 +169,7 @@ function MobileWorkspaceTabOption({
   onCloseOtherTabs,
 }: {
   tab: WorkspaceTabDescriptor;
+  cloneSession?: WorkspaceTabCloneAction;
   tabIndex: number;
   tabCount: number;
   normalizedServerId: string;
@@ -197,6 +201,7 @@ function MobileWorkspaceTabOption({
       closeLeft: t("workspace.tabs.menu.closeLeft"),
       closeRight: t("workspace.tabs.menu.closeRight"),
       closeOthers: t("workspace.tabs.menu.closeOthers"),
+      cloneSession: t("workspace.tabs.menu.cloneSession"),
       reloadAgent: t("workspace.tabs.menu.reloadAgent"),
       reloadAgentTooltip: t("workspace.tabs.menu.reloadAgentTooltip"),
       close: t("workspace.tabs.menu.close"),
@@ -215,6 +220,7 @@ function MobileWorkspaceTabOption({
     onCopyTerminalId,
     onCopyFilePath,
     onReloadAgent,
+    cloneSession,
     onRenameTab,
     onCloseTab,
     onCloseTabsBefore: onCloseTabsAbove,
@@ -329,6 +335,12 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
   const tabByKey = useMemo(() => new Map(tabs.map((tab) => [tab.key, tab])), [tabs]);
   const triggerStyle = useIconButtonChromeStyle({ size: "large" });
   const [isOpen, setIsOpen] = useState(false);
+  const closeSwitcher = useCallback(() => setIsOpen(false), []);
+  const getCloneSessionAction = useNativeForkTabActions(
+    normalizedServerId,
+    normalizedWorkspaceId,
+    closeSwitcher,
+  );
   const anchorRef = useRef<View>(null);
   const tabIndexByKey = useMemo(() => {
     const map = new Map<string, number>();
@@ -415,6 +427,9 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
           onCopyTerminalId={onCopyTerminalId}
           onCopyFilePath={onCopyFilePath}
           onReloadAgent={onReloadAgent}
+          cloneSession={
+            tab.target.kind === "agent" ? getCloneSessionAction(tab.target.agentId) : undefined
+          }
           onRenameTab={onRenameTab}
           onCloseTab={onCloseTab}
           onCloseTabsAbove={onCloseTabsAbove}
@@ -434,6 +449,7 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
       onCopyTerminalId,
       onCopyFilePath,
       onReloadAgent,
+      getCloneSessionAction,
       onRenameTab,
       onCloseTab,
       onCloseTabsAbove,

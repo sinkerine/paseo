@@ -58,7 +58,7 @@ function inFlightTurn(page: Page) {
 
 async function openForkMenu(page: Page, trigger: ReturnType<Page["getByRole"]>): Promise<void> {
   await trigger.click();
-  await expect(page.getByRole("menuitem", { name: "Fork in a new tab" })).toBeVisible({
+  await expect(page.getByRole("menuitem", { name: "Copy chat to a new tab" })).toBeVisible({
     timeout: 10_000,
   });
 }
@@ -68,36 +68,36 @@ export async function openMostRecentAssistantForkMenu(page: Page): Promise<void>
     .poll(
       async () => {
         await scrollAgentChatToBottom(page);
-        return page.getByRole("button", { name: "Fork chat" }).count();
+        return page.getByTestId("assistant-fork-menu-trigger").count();
       },
       { timeout: 30_000 },
     )
     .toBeGreaterThan(0);
-  const trigger = page.getByRole("button", { name: "Fork chat" }).last();
+  const trigger = page.getByTestId("assistant-fork-menu-trigger").last();
   await expect(trigger).toBeVisible({ timeout: 30_000 });
   await openForkMenu(page, trigger);
 }
 
 export async function forkMostRecentAssistantTurnToNewTab(page: Page): Promise<void> {
   await openMostRecentAssistantForkMenu(page);
-  await page.getByRole("menuitem", { name: "Fork in a new tab" }).click();
+  await page.getByRole("menuitem", { name: "Copy chat to a new tab" }).click();
 }
 
 export async function expectInFlightForkAvailable(page: Page): Promise<void> {
-  const trigger = inFlightTurn(page).getByRole("button", { name: "Fork chat" });
+  const trigger = inFlightTurn(page).getByTestId("assistant-fork-menu-trigger");
   await expect(trigger).toHaveCount(1, { timeout: 30_000 });
   await expect(trigger).toBeVisible();
 }
 
 export async function forkInFlightTurnToNewTab(page: Page): Promise<void> {
-  const trigger = inFlightTurn(page).getByRole("button", { name: "Fork chat" });
+  const trigger = inFlightTurn(page).getByTestId("assistant-fork-menu-trigger");
   await openForkMenu(page, trigger);
-  await page.getByRole("menuitem", { name: "Fork in a new tab" }).click();
+  await page.getByRole("menuitem", { name: "Copy chat to a new tab" }).click();
 }
 
 export async function forkMostRecentAssistantTurnToNewWorkspace(page: Page): Promise<void> {
   await openMostRecentAssistantForkMenu(page);
-  await page.getByRole("menuitem", { name: "Fork in a new workspace" }).click();
+  await page.getByRole("menuitem", { name: "Copy chat to a new workspace" }).click();
 }
 
 export async function expectChatHistoryAttachment(page: Page): Promise<void> {

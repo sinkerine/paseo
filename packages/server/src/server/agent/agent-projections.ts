@@ -455,6 +455,7 @@ function projectPersistenceHandleForWire(
     return projected;
   }
   delete projected.metadata.mcpServers;
+  delete projected.metadata.nativeSessionForkFraming;
   if (Object.keys(projected.metadata).length === 0) {
     delete projected.metadata;
   }

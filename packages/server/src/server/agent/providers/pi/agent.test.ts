@@ -186,7 +186,10 @@ async function applyPaseoExtensionSystemPrompt(
   systemPrompt: string,
 ): Promise<string | undefined> {
   const listeners = await loadPaseoExtensionListeners(extensionPath);
-  const result = await listeners.get("before_agent_start")?.({ systemPrompt });
+  const result = await listeners.get("before_agent_start")?.(
+    { systemPrompt },
+    { sessionManager: { getSessionFile: () => undefined } },
+  );
   return (result as { systemPrompt?: string } | undefined)?.systemPrompt;
 }
 
@@ -1825,7 +1828,7 @@ describe("PiRpcAgentSession", () => {
     ];
     const notifications: string[] = [];
     const context = {
-      sessionManager: { getEntries: () => entries },
+      sessionManager: { getEntries: () => entries, getSessionFile: () => undefined },
       ui: { notify: (message: string) => notifications.push(message) },
     };
 
@@ -1841,7 +1844,9 @@ describe("PiRpcAgentSession", () => {
       context,
     );
 
-    expect(notifications).toEqual([
+    expect(
+      notifications.filter((message) => message.startsWith("PASEO_SUBMITTED_USER_ENTRY")),
+    ).toEqual([
       'PASEO_SUBMITTED_USER_ENTRY {"entry":{"id":"entry-new","parentId":"entry-old-assistant","text":"new prompt"}}',
     ]);
 
@@ -1865,6 +1870,7 @@ describe("PiRpcAgentSession", () => {
     const notifications: string[] = [];
     const context = {
       sessionManager: {
+        getSessionFile: () => undefined,
         getEntries: () => entries,
       },
       ui: { notify: (message: string) => notifications.push(message) },
@@ -4191,4 +4197,89 @@ test("Pi image rendering preserves turn ownership across an interrupt and follow
   expect(imageEvent).toMatchObject({ turnId: first.turnId });
   native.finishTurn();
   await events.nextTurnCompletion();
+});
+
+test("the existing capture bridge associates persisted assistant and tool entries without text matching", async () => {
+  const pi = new FakePi();
+  const session = await createClient(pi).createSession(createConfig());
+  onTestFinished(() => session.close());
+  const listeners = await loadPaseoExtensionListeners(pi.recordedLaunches[0]!.extensionPaths[0]!);
+  const notifications: string[] = [];
+  const ctx = {
+    sessionManager: { getEntries: () => [], getSessionFile: () => undefined },
+    ui: { notify: (text: string) => notifications.push(text) },
+  };
+  const message = { role: "assistant", content: [] };
+  await listeners.get("message_start")?.({ message }, ctx);
+  const start = JSON.parse(notifications[0]!.slice("PASEO_ENTRY_CAPTURE ".length));
+  await listeners.get("message_end")?.({ message }, ctx);
+  await listeners.get("turn_end")?.(
+    {
+      message,
+      messageEntryId: "persisted-assistant",
+      toolResults: [{ toolCallId: "read-1" }],
+      toolResultEntryIds: ["persisted-result"],
+    },
+    ctx,
+  );
+  expect(JSON.parse(notifications.at(-1)!.slice("PASEO_ENTRY_CAPTURE ".length))).toEqual({
+    associations: [
+      { key: start.assistantKey, id: "persisted-assistant" },
+      { key: "tool:read-1", id: "persisted-result" },
+    ],
+  });
+  await listeners.get("turn_end")?.(
+    {
+      message,
+      messageEntryId: "persisted-assistant",
+      toolResults: [{ toolCallId: "missing" }, { toolCallId: "read-1" }],
+      toolResultEntryIds: ["persisted-result"],
+    },
+    ctx,
+  );
+  expect(JSON.parse(notifications.at(-1)!.slice("PASEO_ENTRY_CAPTURE ".length))).toEqual({
+    associations: [{ key: start.assistantKey, id: "persisted-assistant" }],
+  });
+});
+
+test("observes the actual trigger object across an identical passive append after it", async () => {
+  const pi = new FakePi();
+  const session = await createClient(pi).createSession(createConfig());
+  onTestFinished(() => session.close());
+  const listeners = await loadPaseoExtensionListeners(pi.recordedLaunches[0]!.extensionPaths[0]!);
+  const branch = [{ id: "anchor", type: "message" }];
+  const notifications: string[] = [];
+  const ctx = {
+    sessionManager: {
+      getEntries: () => [],
+      getBranch: () => branch,
+      getLeafId: () => branch.at(-1)!.id,
+      getSessionFile: () => "/native/fixture",
+      getSessionId: () => "fixture",
+    },
+    ui: { notify: (text: string) => notifications.push(text) },
+  };
+  const actual = { role: "custom", customType: "identical", content: "same", display: false };
+  const passive = { ...actual };
+  await listeners.get("before_agent_start")?.({ messageType: "custom", message: actual }, ctx);
+  await listeners.get("message_end")?.({ message: actual }, ctx);
+  branch.push({ id: "actual", type: "custom_message" });
+  await listeners.get("message_start")?.({ message: passive }, ctx);
+  await listeners.get("message_end")?.({ message: passive }, ctx);
+  branch.push({ id: "passive-after", type: "custom_message" });
+  await listeners.get("message_start")?.({ message: { role: "assistant", content: [] } }, ctx);
+  const captures = notifications
+    .map((text) => JSON.parse(text.slice("PASEO_ENTRY_CAPTURE ".length)))
+    .filter((payload) => payload.forkFraming?.boundary);
+  expect(captures.map((payload) => payload.forkFraming.boundary)).toEqual([
+    { entryId: "actual", kind: "trigger" },
+    { entryId: "passive-after", kind: "unknown" },
+  ]);
+  await listeners.get("message_end")?.({ message: passive }, ctx);
+  branch.push(
+    { id: "unobserved-one", type: "custom_message" },
+    { id: "unobserved-two", type: "custom_message" },
+  );
+  await listeners.get("message_start")?.({ message: { role: "assistant", content: [] } }, ctx);
+  expect(notifications.some((text) => text.includes('"invalid":true'))).toBe(true);
 });

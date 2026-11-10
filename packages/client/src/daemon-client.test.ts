@@ -9496,3 +9496,52 @@ test("routed channels inherit an origin without drain support", async () => {
   expect(route.supportsDrain).toBe(false);
   route.close();
 });
+
+test("forkAgentSession sends native boundaries, waits for the worker, and preserves host error codes", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "native-fork",
+    transportFactory: () => mock.transport,
+    reconnect: { enabled: false },
+  });
+  clients.push(client);
+  const connecting = client.connect();
+  mock.triggerOpen({ features: { agentNativeSessionFork: true } });
+  await connecting;
+  vi.useFakeTimers();
+  try {
+    const request = client.forkAgentSession("source", {
+      target: "turn",
+      boundaryCursor: { epoch: "source-epoch", seq: 3 },
+      requestId: "fork-native-1",
+    });
+    const rejected = expect(request).rejects.toMatchObject({
+      message: "Select an earlier turn",
+      code: "source_running",
+    });
+    expect(JSON.parse(assertStr(mock.sent.at(-1))).message).toMatchObject({
+      type: "agent.fork_session.request",
+      agentId: "source",
+      target: "turn",
+      boundaryCursor: { epoch: "source-epoch", seq: 3 },
+      requestId: "fork-native-1",
+    });
+    await vi.advanceTimersByTimeAsync(125_000);
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "agent.fork_session.response",
+        payload: {
+          requestId: "fork-native-1",
+          sourceAgentId: "source",
+          agent: null,
+          error: "Select an earlier turn",
+          errorCode: "source_running",
+        },
+      }),
+    );
+    await rejected;
+  } finally {
+    vi.useRealTimers();
+  }
+});

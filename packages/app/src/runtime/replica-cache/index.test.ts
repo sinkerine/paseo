@@ -1207,3 +1207,24 @@ it("retains semantic agent messages across disk-cache reconstruction", async () 
   await writer.flush();
   expect(await createCache(storage).readTimeline(SERVER_ID, "agent-1")).toEqual(value);
 });
+
+it.each([undefined, false, true])(
+  "round-trips the optional native session fork capability (%s) through cached agent snapshots",
+  async (supportsNativeSessionFork) => {
+    const storage = new MemoryStorage();
+    const writer = createCache(storage);
+    const baseline = directory();
+    const cached = baseline.agents.get("agent-1");
+    if (!cached) throw new Error("Missing cache agent fixture");
+    cached.capabilities = {
+      ...cached.capabilities,
+      ...(supportsNativeSessionFork === undefined ? {} : { supportsNativeSessionFork }),
+    };
+    commitDirectory(writer, SERVER_ID, baseline);
+    await writer.flush();
+    const restored = await createCache(storage).readDirectory(SERVER_ID);
+    expect(restored.agents.get("agent-1")?.capabilities?.supportsNativeSessionFork).toBe(
+      supportsNativeSessionFork,
+    );
+  },
+);

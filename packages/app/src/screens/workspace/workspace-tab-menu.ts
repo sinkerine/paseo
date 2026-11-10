@@ -6,6 +6,7 @@ import { buildDeterministicWorkspaceTabId } from "@/workspace-tabs/identity";
 export type WorkspaceTabMenuSurface = "desktop" | "mobile";
 
 export interface WorkspaceTabMenuLabels {
+  cloneSession: string;
   copyResumeCommand: string;
   copyAgentId: string;
   copyTerminalId: string;
@@ -22,6 +23,7 @@ export interface WorkspaceTabMenuLabels {
 }
 
 export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
+  cloneSession: i18n.t("workspace.tabs.menu.cloneSession"),
   copyResumeCommand: i18n.t("workspace.tabs.menu.copyResumeCommand"),
   copyAgentId: i18n.t("workspace.tabs.menu.copyAgentId"),
   copyTerminalId: i18n.t("workspace.tabs.menu.copyTerminalId"),
@@ -43,6 +45,7 @@ export type WorkspaceTabMenuEntry =
       key: string;
       label: string;
       icon?:
+        | "split"
         | "copy"
         | "rotate-cw"
         | "arrow-left-to-line"
@@ -53,9 +56,10 @@ export type WorkspaceTabMenuEntry =
       hint?: string;
       tooltip?: string;
       disabled?: boolean;
+      pending?: boolean;
       destructive?: boolean;
       testID: string;
-      onSelect: () => void;
+      onSelect: () => Promise<void> | void;
     }
   | {
       kind: "separator";
@@ -66,6 +70,13 @@ export type WorkspaceTabMenuEntry =
       kind: "file-panel-open-with";
       key: string;
     };
+
+export interface WorkspaceTabCloneAction {
+  onSelect: () => Promise<void>;
+  disabled: boolean;
+  pending: boolean;
+  tooltip?: string;
+}
 
 interface BuildWorkspaceTabMenuEntriesInput {
   surface: WorkspaceTabMenuSurface;
@@ -78,6 +89,7 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  cloneSession?: WorkspaceTabCloneAction;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsBefore: (tabId: string) => Promise<void> | void;
@@ -95,6 +107,7 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
   onReloadAgent: (agentId: string) => Promise<void> | void;
+  cloneSession?: WorkspaceTabCloneAction;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   onCloseTabsToLeft: (tabId: string) => Promise<void> | void;
@@ -196,6 +209,22 @@ export function buildWorkspaceTabMenuEntries(
 
   if (tab.target.kind === "agent") {
     const { agentId } = tab.target;
+    if (input.cloneSession) {
+      const clone = input.cloneSession;
+      entries.push({
+        kind: "item",
+        key: "clone-session",
+        label: labels.cloneSession,
+        icon: "split",
+        testID: `${menuTestIDBase}-clone-session`,
+        disabled: clone.disabled,
+        pending: clone.pending,
+        tooltip: clone.tooltip,
+        onSelect: () => {
+          if (!clone.disabled) return clone.onSelect();
+        },
+      });
+    }
     entries.push({
       kind: "item",
       key: "copy-resume-command",
@@ -344,6 +373,7 @@ export function buildWorkspaceDesktopTabActions(
       onCopyTerminalId: input.onCopyTerminalId,
       onCopyFilePath: input.onCopyFilePath,
       onReloadAgent: input.onReloadAgent,
+      cloneSession: input.cloneSession,
       onRenameTab: input.onRenameTab,
       onCloseTab: input.onCloseTab,
       onCloseTabsBefore: input.onCloseTabsToLeft,

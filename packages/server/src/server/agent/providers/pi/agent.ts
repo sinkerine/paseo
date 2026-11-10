@@ -1,3 +1,18 @@
+import {
+  hasNoUnobservedNativeMessages,
+  NativeSessionForkFramingSchema,
+  NATIVE_FORK_BOUNDARY_LIMIT,
+  type NativeSessionForkFraming,
+} from "../../native-fork-framing.js";
+import {
+  materializePiBranch,
+  readPiSessionPath,
+  readPiForkSource,
+  resolvePiSessionForkTransaction,
+  rebindPiForkFraming,
+  resolvePiInheritedForkEntries,
+} from "./session-fork.js";
+import { rm } from "node:fs/promises";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,6 +23,9 @@ import stripAnsi from "strip-ansi";
 import { z } from "zod";
 
 import {
+  NativeSessionForkError,
+  type ForkProviderSessionInput,
+  type ForkedProviderSession,
   type AgentCapabilityFlags,
   type AgentClient,
   type AgentFeature,
@@ -61,6 +79,7 @@ import {
   toDiagnosticErrorMessage,
 } from "../diagnostic-utils.js";
 import {
+  formatPiErrorMessage,
   getUserMessageText,
   streamPiHistory,
   type PiCapturedUserMessageEntry,
@@ -252,6 +271,7 @@ interface PiRpcAgentSessionOptions {
   capabilities: AgentCapabilityFlags;
   currentModeId?: string | null;
   persistedSessionFile?: string;
+  persistenceMetadata?: AgentMetadata;
   cleanup?: () => void;
   closeAfterHistory?: boolean;
   extensionTimeoutMs?: number;
@@ -649,6 +669,7 @@ function createPiPaseoExtensionFile({
   writeFileSync(
     filePath,
     `
+  import { randomUUID } from "node:crypto";
 	function decodePayload(encoded) {
 	  return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
 	}
@@ -705,6 +726,35 @@ function createPiPaseoExtensionFile({
 	    pi.registerMcpServer(name, config);
 	  }
 	  const submittedUserMessages = [];
+    const assistantKeys = new WeakMap();
+    let assistantKey;
+    const triggerMessages = new WeakSet();
+    let pendingCustom;
+    function emitForkFraming(ctx, boundary, invalid = false) {
+      const file = ctx.sessionManager.getSessionFile();
+      if (!file) return;
+      ctx.ui.notify("${PASEO_PI_ENTRY_CAPTURE_MARKER} " + JSON.stringify({forkFraming:{
+        sourceSessionId:ctx.sessionManager.getSessionId(),sourceNativeHandle:file,
+        observedLeafId:ctx.sessionManager.getLeafId(),
+        ancestry:ctx.sessionManager.getBranch().map(entry=>({id:entry.id,type:entry.type})),
+        boundary,invalid,
+      }}),"info");
+    }
+    function resolveCustomEntry(ctx) {
+      if (!pendingCustom) return;
+      const pending = pendingCustom;
+      pendingCustom = undefined;
+      const branch = ctx.sessionManager.getBranch();
+      const anchor = pending.parent === null ? -1 : branch.findIndex(entry=>entry.id===pending.parent);
+      const candidates = branch.slice(anchor+1).filter(entry=>entry.type==="custom_message");
+      // Pi 1.4 persists each active custom after message_end and before the next event.
+      // More than one candidate or a lost anchor supplies no exact association.
+      if ((pending.parent !== null && anchor < 0) || candidates.length !== 1) {
+        emitForkFraming(ctx, undefined, true);
+        return;
+      }
+      emitForkFraming(ctx,{entryId:candidates[0].id,kind:pending.trigger ? "trigger" : "unknown"});
+    }
 	  ${piExtensionRuntimeBridge}
 
 	  function emitSubmittedUserEntries(ctx) {
@@ -726,42 +776,73 @@ function createPiPaseoExtensionFile({
 	          JSON.stringify({ entry: toCapturedUserEntry(entry) }),
 	        "info",
 	      );
+      emitForkFraming(ctx,{entryId:entry.id,kind:"trigger"});
 	    }
 	  }
 
-	  ${
-      systemPrompt
-        ? `pi.on("before_agent_start", async (event) => ({
-	    systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
-	  }));`
-        : ""
-    }
+    pi.on("before_agent_start", async (event,ctx) => {
+      resolveCustomEntry(ctx);
+      emitForkFraming(ctx);
+      if (event.messageType === "custom") triggerMessages.add(event.message);
+      ${systemPrompt ? `return {systemPrompt:event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)}};` : ""}
+    });
 
 	  pi.on("session_start", async (_event, ctx) => {
 	    emitEntryCapture(ctx, "session_start");
+      emitForkFraming(ctx);
 	  });
 
-	  pi.on("message_end", async (event) => {
+	  pi.on("message_end", async (event,ctx) => {
+      if (event.message?.role === "custom") {
+        if (pendingCustom) emitForkFraming(ctx,undefined,true);
+        pendingCustom={parent:ctx.sessionManager.getLeafId(),trigger:triggerMessages.has(event.message)};
+      }
 	    if (event.message?.role === "user") {
 	      submittedUserMessages.push(event.message);
 	    }
+      if (event.message?.role === "assistant" && assistantKey) {
+        assistantKeys.set(event.message, assistantKey);
+        assistantKey = undefined;
+      }
 	  });
 
 	  pi.on("message_start", async (event, ctx) => {
+      resolveCustomEntry(ctx);
 	    if (event.message?.role === "assistant") {
 	      emitSubmittedUserEntries(ctx);
+        assistantKey = randomUUID();
+        ctx.ui.notify("${PASEO_PI_ENTRY_CAPTURE_MARKER} " + JSON.stringify({ assistantKey }), "info");
 	    }
 	  });
 
-	  pi.on("turn_end", async (_event, ctx) => {
+	  pi.on("turn_end", async (event, ctx) => {
+      resolveCustomEntry(ctx);
 	    emitSubmittedUserEntries(ctx);
 	    emitEntryCapture(ctx, "turn_end");
+      // These IDs are supplied by Pi after persistence; message objects retain exact identity.
+      const key = assistantKeys.get(event.message);
+      const associations = [];
+      if (key && event.messageEntryId) associations.push({ key, id: event.messageEntryId });
+      if (event.toolResults?.length === event.toolResultEntryIds?.length) {
+        for (const [index, result] of (event.toolResults ?? []).entries()) {
+          const id = event.toolResultEntryIds[index];
+          if (id && result.toolCallId) associations.push({ key: "tool:" + result.toolCallId, id });
+        }
+      }
+      ctx.ui.notify("${PASEO_PI_ENTRY_CAPTURE_MARKER} " + JSON.stringify({ associations }), "info");
 	  });
+    for (const name of ["agent_end","agent_settled","session_compact"]) pi.on(name,async (_event,ctx)=>{
+      resolveCustomEntry(ctx);
+      emitSubmittedUserEntries(ctx);
+      emitForkFraming(ctx);
+    });
 
 	  pi.registerCommand("${PASEO_PI_CAPTURE_EXTENSION_COMMAND}", {
 	    description: "Internal Paseo entry capture bridge",
 	    handler: async (args, ctx) => {
 	      const payload = decodePayload(args.trim());
+      resolveCustomEntry(ctx);
+      emitForkFraming(ctx);
 	      emitEntryCapture(ctx, "command", payload.requestId);
 	    },
 	  });
@@ -827,6 +908,7 @@ function isPiBuiltinMcpCommand(command: PiRpcSlashCommand): boolean {
 function withPiCapabilities(supportsMcpServers: boolean): AgentCapabilityFlags {
   return {
     ...PI_CAPABILITIES,
+    supportsNativeSessionFork: true,
     supportsMcpServers,
   };
 }
@@ -841,37 +923,6 @@ function isPiRequestAbortError(error: unknown): boolean {
 
 function modelToId(model: PiModel | null | undefined): string | null {
   return model?.provider && model.id ? `${model.provider}/${model.id}` : null;
-}
-
-function piAssistantText(message: Extract<PiAgentMessage, { role: "assistant" }>): string | null {
-  const text = message.content
-    .flatMap((part) => {
-      if (part.type === "text") {
-        return [part.text];
-      }
-      if (part.type === "thinking") {
-        return [part.thinking];
-      }
-      return [];
-    })
-    .join("\n\n")
-    .trim();
-  return text.length > 0 ? text : null;
-}
-
-function formatPiErrorMessage(message: Extract<PiAgentMessage, { role: "assistant" }>): string {
-  const headline = message.errorMessage?.trim() || "Pi turn failed";
-  const details = [
-    message.stopReason ? `stopReason=${message.stopReason}` : null,
-    message.provider && message.model ? `model=${message.provider}/${message.model}` : null,
-    message.responseModel ? `responseModel=${message.responseModel}` : null,
-    message.responseId ? `responseId=${message.responseId}` : null,
-  ].filter((detail): detail is string => detail !== null);
-  const partialText = piAssistantText(message);
-  if (partialText) {
-    details.push(`partial=${JSON.stringify(partialText.slice(0, 500))}`);
-  }
-  return details.length > 0 ? `${headline} (${details.join(", ")})` : headline;
 }
 
 function latestPiErrorMessage(messages: PiAgentMessage[]): string | null {
@@ -1202,6 +1253,11 @@ export class PiRpcAgentSession implements AgentSession {
   private activeTurnId: string | null = null;
   private activeClientMessageId: string | null = null;
   private activeAssistantMessageId: string | null = null;
+  private activeNativeMessageKey: string | null = null;
+  private lastAssistantNativeEntryId: string | undefined;
+  private nativeForkFraming: NativeSessionForkFraming | undefined;
+  private observedFraming = false;
+  private readonly persistenceMetadata: AgentMetadata;
   private activeTurnStarted = false;
   private activeTurnStartedEmitted = false;
   private pendingSettledMessages: PiAgentMessage[] | null = null;
@@ -1248,6 +1304,11 @@ export class PiRpcAgentSession implements AgentSession {
     this.runtimeSession = options.runtimeSession;
     this.config = options.config;
     this.state = options.initialState;
+    this.persistenceMetadata = options.persistenceMetadata ?? {};
+    const framing = NativeSessionForkFramingSchema.safeParse(
+      this.persistenceMetadata.nativeSessionForkFraming,
+    );
+    if (framing.success) this.nativeForkFraming = framing.data;
     this.config.thinkingOptionId = this.state.thinkingLevel;
     this.capabilities = options.capabilities;
     this.provider = PI_PROVIDER;
@@ -1461,14 +1522,31 @@ export class PiRpcAgentSession implements AgentSession {
     try {
       await this.requestEntryCapture("history");
       const history = await this.runtimeSession.getHistory();
+      const origin = this.persistenceMetadata.forkOrigin;
+      const createReplayHost = () =>
+        createPiExtensionHost(this.logger, undefined, 16 * 1024 * 1024);
+      let inheritedSession: import("./history-mapper.js").PiHistoryMapperHooks["inheritedSession"];
+      if (origin !== undefined) {
+        const ownFile = this.persistedSessionFile ?? this.state.sessionFile;
+        if (!ownFile)
+          throw new NativeSessionForkError(
+            "boundary_mismatch",
+            "The native fork has no file for validating inherited ownership.",
+          );
+        inheritedSession = {
+          entryIds: resolvePiInheritedForkEntries(await readPiSessionPath(ownFile, null), origin),
+          createOwnedExtensionHost: createReplayHost,
+        };
+      }
       yield* streamPiHistory(
         this.provider,
         history.messages,
         history.userEntries,
-        {},
+        { inheritedSession, compactions: history.compactions },
         // At most eight 2 MiB child files per replay; later cards retain their summaries.
-        createPiExtensionHost(this.logger, undefined, 16 * 1024 * 1024),
+        createReplayHost(),
         this.closeController.signal,
+        history.messageEntryIds,
       );
     } finally {
       if (this.closeAfterHistory) await this.close();
@@ -1524,12 +1602,18 @@ export class PiRpcAgentSession implements AgentSession {
     });
   }
 
+  async getNativeForkLeaf(): Promise<string | null> {
+    return this.currentLeafOverrideId ?? null;
+  }
+
   describePersistence(): AgentPersistenceHandle | null {
     return {
       provider: this.provider,
       sessionId: this.state.sessionId,
       nativeHandle: this.persistedSessionFile ?? this.state.sessionFile,
       metadata: {
+        ...this.persistenceMetadata,
+        ...(this.nativeForkFraming ? { nativeSessionForkFraming: this.nativeForkFraming } : {}),
         cwd: this.config.cwd,
         ...(this.config.model ? { model: this.config.model } : {}),
         ...(this.config.thinkingOptionId ? { thinkingOptionId: this.config.thinkingOptionId } : {}),
@@ -1726,6 +1810,14 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private emit(event: AgentStreamEvent): void {
+    if (
+      event.type === "timeline" &&
+      this.activeNativeMessageKey &&
+      (event.item.type === "reasoning" || event.item.type === "assistant_message") &&
+      !event.providerMessageKey
+    ) {
+      event = { ...event, providerMessageKey: this.activeNativeMessageKey };
+    }
     if (this.pendingOutput) {
       this.emitAsync(() => Promise.resolve([event]));
       return;
@@ -2054,12 +2146,87 @@ export class PiRpcAgentSession implements AgentSession {
     return true;
   }
 
+  private handleForkFraming(raw: unknown): void {
+    const parsed = z
+      .object({
+        sourceSessionId: z.string(),
+        sourceNativeHandle: z.string(),
+        observedLeafId: z.string().nullable(),
+        ancestry: z.array(z.object({ id: z.string(), type: z.string() })),
+        boundary: NativeSessionForkFramingSchema.shape.boundaries.element.optional(),
+        invalid: z.boolean(),
+      })
+      .safeParse(raw);
+    if (!parsed.success) return;
+    const capture = parsed.data;
+    const handle = this.persistedSessionFile ?? this.state.sessionFile;
+    if (capture.sourceSessionId !== this.state.sessionId || capture.sourceNativeHandle !== handle)
+      return;
+    const previous = this.nativeForkFraming;
+    const framing = previous
+      ? { ...previous, boundaries: [...previous.boundaries] }
+      : {
+          sourceSessionId: capture.sourceSessionId,
+          sourceNativeHandle: capture.sourceNativeHandle,
+          startEntryId: capture.observedLeafId,
+          observedLeafId: capture.observedLeafId,
+          valid: this.persistenceMetadata.nativeSessionForkFraming === undefined,
+          boundaries: [],
+        };
+    if (
+      framing.sourceSessionId !== capture.sourceSessionId ||
+      framing.sourceNativeHandle !== capture.sourceNativeHandle
+    )
+      framing.valid = false;
+    if (!this.observedFraming && previous) {
+      if (!hasNoUnobservedNativeMessages(previous, capture.ancestry)) framing.valid = false;
+    }
+    this.observedFraming = true;
+    if (capture.invalid) framing.valid = false;
+    if (capture.boundary) {
+      const boundary = capture.boundary;
+      const prior = framing.boundaries.find((entry) => entry.entryId === boundary.entryId);
+      if (prior && prior.kind !== boundary.kind) framing.valid = false;
+      if (!prior && framing.valid) {
+        if (framing.boundaries.length >= NATIVE_FORK_BOUNDARY_LIMIT) {
+          framing.valid = false;
+          framing.boundaries = [];
+        } else framing.boundaries.push(boundary);
+      }
+    }
+    framing.observedLeafId = capture.observedLeafId;
+    if (JSON.stringify(framing) === JSON.stringify(previous)) return;
+    this.nativeForkFraming = framing;
+    this.emit({ type: "persistence_updated", provider: this.provider });
+  }
+
   private handleEntryCaptureMarker(message: string): boolean {
     const payload = parseExtensionMarkerPayload(message, PASEO_PI_ENTRY_CAPTURE_MARKER);
     if (!payload) {
       return false;
     }
-    this.recordCapturedUserEntries(parseCapturedEntries(payload.treeEntries));
+    if (payload.forkFraming) this.handleForkFraming(payload.forkFraming);
+    if (Array.isArray(payload.treeEntries))
+      this.recordCapturedUserEntries(parseCapturedEntries(payload.treeEntries));
+    if (typeof payload.assistantKey === "string")
+      this.activeNativeMessageKey = payload.assistantKey;
+    if (Array.isArray(payload.associations)) {
+      for (const association of payload.associations) {
+        if (
+          !isRecord(association) ||
+          typeof association.key !== "string" ||
+          typeof association.id !== "string"
+        )
+          continue;
+        if (!association.key.startsWith("tool:")) this.lastAssistantNativeEntryId = association.id;
+        this.emit({
+          type: "timeline_identity",
+          provider: this.provider,
+          providerMessageKey: association.key,
+          providerMessageId: association.id,
+        });
+      }
+    }
     if (typeof payload.requestId === "string") {
       this.resolveExtensionResult(payload.requestId, undefined);
     }
@@ -2236,6 +2403,7 @@ export class PiRpcAgentSession implements AgentSession {
         });
         return;
       case "agent_start":
+        this.lastAssistantNativeEntryId = undefined;
         this.activeTurnStarted = true;
         this.clearNoTurnBuffers();
         this.emit({
@@ -2387,12 +2555,13 @@ export class PiRpcAgentSession implements AgentSession {
     this.emitToolCallEvent(event.toolCallId, toolCall, status, result, error);
     if (images.length === 0) return;
     const turnId = this.currentTurnIdForEvent();
-    this.emitAsync(() => this.renderToolResultImages(images, turnId));
+    this.emitAsync(() => this.renderToolResultImages(images, turnId, `tool:${event.toolCallId}`));
   }
 
   private async renderToolResultImages(
     images: ProviderImageOutput[],
     turnId: string | undefined,
+    providerMessageKey: string,
   ): Promise<AgentStreamEvent[]> {
     const events: AgentStreamEvent[] = [];
     for (const image of images) {
@@ -2405,6 +2574,7 @@ export class PiRpcAgentSession implements AgentSession {
           provider: this.provider,
           turnId,
           item: imageItem,
+          providerMessageKey,
         });
       }
     }
@@ -2479,6 +2649,7 @@ export class PiRpcAgentSession implements AgentSession {
 
   private handleMessageStart(event: Extract<PiAgentSessionEvent, { type: "message_start" }>): void {
     if (event.message.role === "assistant") {
+      this.lastAssistantNativeEntryId = undefined;
       this.activeAssistantMessageId = event.message.responseId || null;
     }
   }
@@ -2489,6 +2660,7 @@ export class PiRpcAgentSession implements AgentSession {
   ): void {
     if (event.message.role === "assistant") {
       this.activeAssistantMessageId = null;
+      this.activeNativeMessageKey = null;
       return;
     }
     if (event.message.role === "custom") {
@@ -2546,6 +2718,7 @@ export class PiRpcAgentSession implements AgentSession {
       provider: this.provider,
       turnId,
       item,
+      providerMessageKey: `tool:${toolCallId}`,
     });
     this.emitExtensionOutput(mapping, turnId);
     return true;
@@ -2577,6 +2750,9 @@ export class PiRpcAgentSession implements AgentSession {
         provider: this.provider,
         turnId,
         error: errorMessage,
+        ...(this.lastAssistantNativeEntryId
+          ? { providerMessageId: this.lastAssistantNativeEntryId }
+          : {}),
       });
       return;
     }
@@ -2596,6 +2772,30 @@ export class PiRpcAgentSession implements AgentSession {
 
   private async refreshAfterTurn(finalUsage: Promise<void>): Promise<void> {
     await Promise.all([this.refreshState().catch(() => undefined), finalUsage]);
+  }
+}
+
+async function initializePiResume<T>(
+  runtimeSession: PiRuntimeSession,
+  signal: AbortSignal | undefined,
+  cleanup: () => void,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const onAbort = () => {
+    void runtimeSession.close().catch(() => undefined);
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    signal?.throwIfAborted();
+    const session = await operation();
+    signal?.throwIfAborted();
+    return session;
+  } catch (error) {
+    await runtimeSession.close().catch(() => undefined);
+    cleanup();
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -2716,8 +2916,8 @@ export class PiRpcAgentClient implements AgentClient {
         sessionCopy = await createPiSessionCopy(sessionFile, processCwd);
         tempFiles.push(sessionCopy);
       }
-      runtimeSession = await runtime.startSession(
-        buildResumeStartInput({
+      runtimeSession = await runtime.startSession({
+        ...buildResumeStartInput({
           resumeConfig,
           processCwd,
           sessionFile: sessionCopy?.path ?? sessionFile,
@@ -2725,33 +2925,37 @@ export class PiRpcAgentClient implements AgentClient {
           mcpConfigFile,
           paseoExtension,
         }),
-      );
-    } catch (error) {
-      cleanupTempFiles();
-      throw error;
-    }
-    try {
-      const initialState = await this.applyResumeModel(runtimeSession, resumeConfig.model);
-      return new PiRpcAgentSession({
-        runtimeSession,
-        config: {
-          ...resumeConfig.config,
-          model: modelToId(initialState.model) ?? resumeConfig.config.model,
-        },
-        initialState,
-        capabilities: capabilitiesForSession(mcp !== null),
-        persistedSessionFile: sessionCopy ? sessionFile : undefined,
-        cleanup: cleanupTempFiles,
-        closeAfterHistory: options?.purpose === "history",
-        extensionTimeoutMs: providerOptions.extensionTimeoutMs,
-        logger: this.logger,
-        usagePollScheduler: this.usagePollScheduler,
+        signal: options?.signal,
       });
     } catch (error) {
-      await runtimeSession.close().catch(() => undefined);
       cleanupTempFiles();
       throw error;
     }
+    return initializePiResume(runtimeSession, options?.signal, cleanupTempFiles, async () => {
+      try {
+        const initialState = await this.applyResumeModel(runtimeSession, resumeConfig.model);
+        return new PiRpcAgentSession({
+          runtimeSession,
+          config: {
+            ...resumeConfig.config,
+            model: modelToId(initialState.model) ?? resumeConfig.config.model,
+          },
+          initialState,
+          capabilities: capabilitiesForSession(mcp !== null),
+          persistedSessionFile: sessionCopy ? sessionFile : undefined,
+          persistenceMetadata: handle.metadata,
+          cleanup: cleanupTempFiles,
+          closeAfterHistory: options?.purpose === "history",
+          extensionTimeoutMs: providerOptions.extensionTimeoutMs,
+          logger: this.logger,
+          usagePollScheduler: this.usagePollScheduler,
+        });
+      } catch (error) {
+        await runtimeSession.close().catch(() => undefined);
+        cleanupTempFiles();
+        throw error;
+      }
+    });
   }
 
   // Pi resumes a session on the model it recorded, or on its default when that model
@@ -2856,6 +3060,107 @@ export class PiRpcAgentClient implements AgentClient {
       resumeSession: this.resumeSession.bind(this),
       config: importConfig,
     });
+  }
+
+  async forkSession(
+    input: ForkProviderSessionInput,
+    context: ImportProviderSessionContext,
+  ): Promise<ForkedProviderSession> {
+    const signal = AbortSignal.any([input.signal, AbortSignal.timeout(135_000)]);
+    signal.throwIfAborted();
+    const sourceFile = input.source.nativeHandle;
+    if (!sourceFile)
+      throw new NativeSessionForkError("boundary_not_found", "The source has no Pi session file.");
+    const source = await readPiForkSource({
+      file: sourceFile,
+      leafId: input.target.kind === "latest" ? input.target.leafEntryId : null,
+      sessionId: input.source.sessionId,
+      cwd: input.cwd,
+    });
+    const { targetEntryId, framingSource } = resolvePiSessionForkTransaction(
+      source,
+      input.target,
+      input.sourceRunning === true,
+    );
+    const runtime = this.resolveRuntime(
+      PiProviderOptionsSchema.parse(context.config.providerOptions ?? {}).rpcTimeoutMs,
+    );
+    const branch = await materializePiBranch({
+      runtime,
+      cwd: input.cwd,
+      sourceFile,
+      targetEntryId,
+      signal,
+      logger: this.logger,
+      env: context.launchContext?.env,
+    });
+    let imported: Awaited<ReturnType<typeof importSessionFromPersistence>> | undefined;
+    try {
+      signal.throwIfAborted();
+      const branchPath = await readPiSessionPath(branch.sessionFile, null);
+      const persistedSource =
+        input.target.kind === "latest" && input.target.leafEntryId
+          ? await readPiSessionPath(sourceFile, null)
+          : framingSource;
+      const framing = rebindPiForkFraming(persistedSource, input.source, branchPath);
+      const config = await readPiImportSessionConfig(branch.sessionFile);
+      imported = await importSessionFromPersistence({
+        provider: this.provider,
+        request: { providerHandleId: branch.sessionFile, cwd: input.cwd },
+        context,
+        signal,
+        config: {
+          ...config,
+          model: context.storedConfig.model ?? config.model,
+          thinkingOptionId: context.storedConfig.thinkingOptionId ?? config.thinkingOptionId,
+        },
+        persistence: {
+          provider: this.provider,
+          sessionId: branch.sessionId,
+          nativeHandle: branch.sessionFile,
+          metadata: {
+            ...context.storedConfig,
+            ...(framing ? { nativeSessionForkFraming: framing } : {}),
+          },
+        },
+        resumeSession: (handle, overrides, launchContext) =>
+          this.resumeSession(handle, overrides, launchContext, { signal }),
+      });
+      signal.throwIfAborted();
+      const session = imported.session;
+      return {
+        ...imported,
+        origin: {
+          sourceSessionId: source.header.id,
+          sourceNativeHandle: sourceFile,
+          targetEntryId,
+          inheritedLeafEntryId: branchPath.path.at(-1)!.id,
+        },
+        discard: async () => {
+          try {
+            await session.close();
+          } finally {
+            await rm(branch.sessionFile, { force: true });
+          }
+        },
+      };
+    } catch (error) {
+      try {
+        await imported?.session.close();
+      } finally {
+        await rm(branch.sessionFile, { force: true });
+      }
+      if (signal.aborted)
+        throw new NativeSessionForkError(
+          input.signal.aborted ? "canceled" : "timeout",
+          "Session fork canceled or timed out. Retry the operation.",
+        );
+      if (error instanceof NativeSessionForkError) throw error;
+      throw new NativeSessionForkError(
+        "resume_failed",
+        `Could not load the new Pi branch: ${toDiagnosticErrorMessage(error)}`,
+      );
+    }
   }
 
   async isAvailable(): Promise<boolean> {

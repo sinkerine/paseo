@@ -4099,6 +4099,39 @@ export class DaemonClient {
     );
   }
 
+  async forkAgentSession(
+    agentId: string,
+    options: {
+      target: "turn" | "latest";
+      boundaryCursor?: FetchAgentTimelineCursor;
+      boundaryMessageId?: string;
+      requestId?: string;
+    },
+  ): Promise<AgentSnapshotPayload> {
+    const requestId = this.createRequestId(options.requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "agent.fork_session.request",
+      agentId,
+      ...options,
+      requestId,
+    });
+    const payload = await this.sendRequest({
+      requestId,
+      message,
+      timeout: 150_000,
+      options: { skipQueue: true },
+      select: (msg) =>
+        msg.type === "agent.fork_session.response" && msg.payload.requestId === requestId
+          ? msg.payload
+          : null,
+    });
+    if (payload.error || !payload.agent)
+      throw Object.assign(new Error(payload.error ?? "The host did not return a forked session."), {
+        code: payload.errorCode,
+      });
+    return payload.agent;
+  }
+
   async buildAgentForkContext(
     agentId: string,
     options: AgentForkContextOptions = {},

@@ -806,3 +806,21 @@ describe("AgentStreamCoalescer", () => {
     ]);
   });
 });
+
+test("keeps native identities distinct while batching repeated text and tool calls", () => {
+  const { coalescer, flushes } = createHarness();
+  primeLeadingEdge(coalescer, flushes);
+  coalescer.handle("agent-1", { ...reasoning("same"), providerMessageId: "native-a" });
+  coalescer.handle("agent-1", { ...reasoning("same"), providerMessageId: "native-b" });
+  coalescer.handle("agent-1", { ...toolCall({ output: "a" }), providerMessageKey: "tool-a" });
+  coalescer.handle("agent-1", { ...toolCall({ output: "b" }), providerMessageKey: "tool-b" });
+  coalescer.flushFor("agent-1");
+  expect(
+    flushes.map((flush) => [flush.providerMessageId ?? null, flush.providerMessageKey ?? null]),
+  ).toEqual([
+    ["native-a", null],
+    ["native-b", null],
+    [null, "tool-a"],
+    [null, "tool-b"],
+  ]);
+});

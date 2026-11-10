@@ -17,6 +17,46 @@ async function writeSession(root: string, lines: unknown[]): Promise<string> {
   return filePath;
 }
 
+test("Pi import discovery hides fork staging while retaining ordinary session directories", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-fork-staging-"));
+  onTestFinished(() => rm(root, { recursive: true, force: true }));
+  const sessionsDir = path.join(root, "sessions");
+  const visibleFiles = [
+    path.join(sessionsDir, "project", "source.jsonl"),
+    path.join(sessionsDir, "sibling", "session.jsonl"),
+    path.join(sessionsDir, "project", "nested", "session.jsonl"),
+    path.join(sessionsDir, ".ordinary", "session.jsonl"),
+    path.join(sessionsDir, ".paseo-fork-staging-backup", "session.jsonl"),
+  ];
+  const stagedFiles = [
+    path.join(sessionsDir, "project", ".paseo-fork-staging", "worker", "session.jsonl"),
+    path.join(sessionsDir, ".paseo-fork-staging", "worker", "session.jsonl"),
+  ];
+  for (const file of [...visibleFiles, ...stagedFiles]) {
+    await mkdir(path.dirname(file), { recursive: true });
+    const entries = [
+      {
+        type: "session",
+        version: 3,
+        id: file,
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd: root,
+      },
+      {
+        type: "message",
+        id: "user-1",
+        timestamp: "2026-06-09T00:00:01.000Z",
+        message: { role: "user", content: "hello" },
+      },
+    ];
+    await writeFile(file, `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
+  }
+
+  const sessions = await listPiImportableSessions({ sessionDir: sessionsDir });
+  const discoveredFiles = sessions.map((session) => session.providerHandleId).sort();
+  expect(discoveredFiles).toEqual(visibleFiles.sort());
+});
+
 test("Pi cwd filtering continues past the global candidate overscan", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-cwd-limit-"));
   const sessionsDir = path.join(root, "sessions");

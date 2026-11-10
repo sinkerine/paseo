@@ -11,6 +11,7 @@ import type {
 import type { AgentMessage } from "@getpaseo/protocol/agent-message";
 import type { AgentAttachment } from "@getpaseo/protocol/messages";
 import type { PaseoToolCatalog } from "./tools/types.js";
+import type { NativeSessionForkFraming } from "./native-fork-framing.js";
 
 export type {
   AgentFeature,
@@ -21,6 +22,36 @@ export type {
 };
 
 export type AgentProvider = string;
+
+export type NativeSessionForkTarget =
+  | { kind: "latest"; leafEntryId: string | null }
+  | {
+      kind: "turn";
+      entryId: string;
+      framing?: NativeSessionForkFraming;
+    };
+
+export type NativeSessionForkErrorCode =
+  | "unsupported"
+  | "source_running"
+  | "source_not_loaded"
+  | "boundary_not_found"
+  | "boundary_mismatch"
+  | "source_needs_migration"
+  | "materialize_failed"
+  | "resume_failed"
+  | "canceled"
+  | "timeout";
+
+export class NativeSessionForkError extends Error {
+  constructor(
+    readonly code: NativeSessionForkErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "NativeSessionForkError";
+  }
+}
 
 export interface AgentMetadata {
   [key: string]: unknown;
@@ -171,6 +202,7 @@ export interface AgentCapabilityFlags {
   supportsStreaming: boolean;
   supportsSessionPersistence: boolean;
   supportsSessionListing?: boolean;
+  supportsNativeSessionFork?: boolean;
   supportsDynamicModes: boolean;
   supportsMcpServers: boolean;
   supportsNativePaseoTools?: boolean;
@@ -432,6 +464,7 @@ export type AgentStreamEvent =
   | {
       type: "turn_failed";
       provider: AgentProvider;
+      providerMessageId?: string;
       error: string;
       code?: string;
       diagnostic?: string;
@@ -444,6 +477,19 @@ export type AgentStreamEvent =
       provider: AgentProvider;
       turnId?: string;
       timestamp?: string;
+      providerMessageId?: string;
+      /** Daemon-only correlation; never part of the client timeline. */
+      providerMessageKey?: string;
+    }
+  | {
+      type: "persistence_updated";
+      provider: AgentProvider;
+    }
+  | {
+      type: "timeline_identity";
+      provider: AgentProvider;
+      providerMessageKey: string;
+      providerMessageId: string;
     }
   | {
       type: "permission_requested";
@@ -588,6 +634,8 @@ export interface ImportProviderSessionContext {
 }
 
 export interface ImportedTimelineEntry {
+  turnId?: string;
+  providerMessageId?: string;
   item: AgentTimelineItem;
   timestamp?: string;
 }
@@ -598,6 +646,29 @@ export interface ImportedProviderSession {
   persistence: AgentPersistenceHandle;
   timeline: ImportedTimelineEntry[];
   providerSubagentEvents?: Extract<AgentStreamEvent, { type: "provider_subagent" }>[];
+}
+
+export interface ForkProviderSessionInput {
+  sourceRunning?: boolean;
+  source: AgentPersistenceHandle;
+  cwd: string;
+  target: NativeSessionForkTarget;
+  signal: AbortSignal;
+}
+
+export interface NativeSessionForkOrigin {
+  sourceAgentId: string;
+  sourceSessionId: string;
+  sourceNativeHandle: string;
+  targetEntryId: string;
+  inheritedLeafEntryId: string;
+  createdAt: string;
+}
+
+export interface ForkedProviderSession extends ImportedProviderSession {
+  origin: Omit<NativeSessionForkOrigin, "sourceAgentId" | "createdAt">;
+  /** Discard an unpublished registration, closing its runtime before deleting its file. */
+  discard(): Promise<void>;
 }
 
 export interface AgentSessionConfig {
@@ -659,6 +730,7 @@ export type AgentResumePurpose = "interactive" | "history";
 
 /** Runtime-only intent for a persisted-session resume. Never persist this option. */
 export interface AgentResumeSessionOptions {
+  signal?: AbortSignal;
   /** Defaults to interactive. History loading may be read-only for archived native sessions. */
   purpose?: AgentResumePurpose;
   /** See AgentCreateSessionOptions.configuredModelIds. */
@@ -726,6 +798,7 @@ export interface AgentSession {
   setModel?(modelId: string | null): Promise<void | { model: string | null }>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
   setFeature?(featureId: string, value: unknown): Promise<void>;
+  getNativeForkLeaf?(): Promise<string | null>;
   revertConversation?(input: { messageId: string }): Promise<void>;
   revertFiles?(input: { messageId: string }): Promise<void>;
   revertBoth?(input: { messageId: string }): Promise<void>;
@@ -812,6 +885,10 @@ export interface AgentClient {
   listImportableSessions?(
     options?: ListImportableSessionsOptions,
   ): Promise<ImportableProviderSession[]>;
+  forkSession?(
+    input: ForkProviderSessionInput,
+    context: ImportProviderSessionContext,
+  ): Promise<ForkedProviderSession>;
   importSession?(
     input: ImportProviderSessionInput,
     context: ImportProviderSessionContext,

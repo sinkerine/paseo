@@ -1,5 +1,11 @@
+import type { PiTranscriptCompaction } from "./transcript.js";
 import { mapCustomMessageToToolCall } from "../custom-message.js";
-import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
+import {
+  NativeSessionForkError,
+  type AgentStreamEvent,
+  type AgentTimelineItem,
+  type ToolCallDetail,
+} from "../../agent-sdk-types.js";
 import {
   materializeProviderImage,
   renderProviderImageOutputAsAssistantMarkdown,
@@ -26,6 +32,11 @@ export interface PiCapturedUserMessageEntry {
 }
 
 export interface PiHistoryMapperHooks {
+  compactions?: readonly PiTranscriptCompaction[];
+  inheritedSession?: {
+    entryIds: ReadonlySet<string>;
+    createOwnedExtensionHost: () => PiExtensionHost;
+  };
   mapCustomMessage?: (
     text: string,
     provider: string,
@@ -68,18 +79,24 @@ export class PiHistoryMapper {
   private userIndex = 0;
   private assistantIndex = 0;
   private customIndex = 0;
+  private messageIndex = 0;
+  private includeProviderSubagents = true;
 
   constructor(
     private readonly provider: string,
     private readonly userEntries: readonly PiCapturedUserMessageEntry[] = [],
     private readonly hooks: PiHistoryMapperHooks = {},
-    private readonly extensionHost: PiExtensionHost = createPiExtensionHost(),
+    private extensionHost: PiExtensionHost = createPiExtensionHost(),
+    private readonly messageEntryIds: readonly (string | null)[] = [],
   ) {}
 
   async mapMessages(messages: readonly PiAgentMessage[]): Promise<AgentStreamEvent[]> {
     const events: AgentStreamEvent[] = [];
 
     for (const message of messages) {
+      const start = events.length;
+      const providerMessageId = this.messageEntryIds[this.messageIndex++];
+      this.setEntryOwnership(providerMessageId);
       switch (message.role) {
         case "user":
           events.push(...this.mapUserMessage(message));
@@ -98,9 +115,31 @@ export class PiHistoryMapper {
           events.push(this.mapBashExecutionMessage(message));
           break;
       }
+      if (providerMessageId) {
+        for (let index = start; index < events.length; index++) {
+          const event = events[index]!;
+          if (event.type === "timeline") events[index] = { ...event, providerMessageId };
+        }
+      }
     }
 
     return events;
+  }
+
+  private setEntryOwnership(entryId: string | null | undefined): void {
+    const inherited = this.hooks.inheritedSession;
+    if (!inherited) return;
+    if (!entryId)
+      throw new NativeSessionForkError(
+        "boundary_mismatch",
+        "A native fork history entry has no identity for establishing child ownership.",
+      );
+    const allowed = !inherited.entryIds.has(entryId ?? "");
+    if (!this.includeProviderSubagents && allowed) {
+      this.extensionHost.close();
+      this.extensionHost = inherited.createOwnedExtensionHost();
+    }
+    this.includeProviderSubagents = allowed;
   }
 
   async hydrate(): Promise<AgentStreamEvent[]> {
@@ -209,6 +248,15 @@ export class PiHistoryMapper {
         events.push(...this.extensionEvents(mapping));
       }
     }
+    if (message.errorMessage?.trim())
+      events.push({
+        type: "timeline",
+        provider: this.provider,
+        item: {
+          type: "assistant_message",
+          text: "[System Error] " + formatPiErrorMessage(message),
+        },
+      });
     return events;
   }
 
@@ -260,8 +308,11 @@ export class PiHistoryMapper {
 
   private extensionEvents(mapping: PiExtensionEventOutput | undefined): AgentStreamEvent[] {
     if (!mapping) return [];
-    this.hydrations.push(mapping.hydration);
-    return mapping.events;
+    const includeSubagents = this.includeProviderSubagents;
+    const filter = (events: AgentStreamEvent[]) =>
+      includeSubagents ? events : events.filter((event) => event.type !== "provider_subagent");
+    this.hydrations.push(mapping.hydration.then(filter));
+    return filter(mapping.events);
   }
 
   private mapBashExecutionMessage(
@@ -312,10 +363,29 @@ export async function* streamPiHistory(
   // Child transcripts share 16 MiB per replay, at most 2 MiB each; later cards keep their summaries.
   extensionHost: PiExtensionHost = createPiExtensionHost(undefined, undefined, 16 * 1024 * 1024),
   signal?: AbortSignal,
+  messageEntryIds: readonly (string | null)[] = [],
 ): AsyncGenerator<AgentStreamEvent> {
-  const mapper = new PiHistoryMapper(provider, userEntries, hooks, extensionHost);
-  for (const message of messages) {
+  const mapper = new PiHistoryMapper(provider, userEntries, hooks, extensionHost, messageEntryIds);
+  const compactions = hooks.compactions ?? [];
+  let compactionIndex = 0;
+  for (let messageIndex = 0; messageIndex <= messages.length; messageIndex += 1) {
     if (signal?.aborted) return;
+    while (compactions[compactionIndex]?.beforeMessageIndex === messageIndex) {
+      const compacted = compactions[compactionIndex++]!;
+      yield {
+        type: "timeline",
+        provider,
+        providerMessageId: compacted.entryId,
+        ...(compacted.timestamp ? { timestamp: compacted.timestamp } : {}),
+        item: {
+          type: "compaction",
+          status: "completed",
+          ...(compacted.tokensBefore === undefined ? {} : { preTokens: compacted.tokensBefore }),
+        },
+      };
+    }
+    const message = messages[messageIndex];
+    if (!message) break;
     for (const event of await mapper.mapMessages([message])) {
       if (signal?.aborted) return;
       yield event;
@@ -352,4 +422,37 @@ function toToolResultTimelineItem(input: {
     detail: input.detail,
     error: null,
   };
+}
+
+function piAssistantText(message: Extract<PiAgentMessage, { role: "assistant" }>): string | null {
+  const text = message.content
+    .flatMap((part) => {
+      if (part.type === "text") {
+        return [part.text];
+      }
+      if (part.type === "thinking") {
+        return [part.thinking];
+      }
+      return [];
+    })
+    .join("\n\n")
+    .trim();
+  return text.length > 0 ? text : null;
+}
+
+export function formatPiErrorMessage(
+  message: Extract<PiAgentMessage, { role: "assistant" }>,
+): string {
+  const headline = message.errorMessage?.trim() || "Pi turn failed";
+  const details = [
+    message.stopReason ? `stopReason=${message.stopReason}` : null,
+    message.provider && message.model ? `model=${message.provider}/${message.model}` : null,
+    message.responseModel ? `responseModel=${message.responseModel}` : null,
+    message.responseId ? `responseId=${message.responseId}` : null,
+  ].filter((detail): detail is string => detail !== null);
+  const partialText = piAssistantText(message);
+  if (partialText) {
+    details.push(`partial=${JSON.stringify(partialText.slice(0, 500))}`);
+  }
+  return details.length > 0 ? `${headline} (${details.join(", ")})` : headline;
 }

@@ -548,3 +548,22 @@ it("omits unknown background work and preserves known summary in list items", ()
     backgroundWork: { count: 2 },
   });
 });
+
+it("keeps daemon-only native framing in storage while excluding it from live and stored wire payloads", () => {
+  const metadata = {
+    unrelated: "keep",
+    nativeSessionForkFraming: { valid: false, boundaries: [] },
+  };
+  const agent = createManagedAgent({
+    provider: "pi",
+    config: { provider: "pi" },
+    persistence: { provider: "pi", sessionId: "native", nativeHandle: "/native/file", metadata },
+  });
+  const record = toStoredAgentRecord(agent);
+  expect(record.persistence?.metadata).toEqual(metadata);
+  expect(toAgentPayload(agent).persistence?.metadata).toEqual({ unrelated: "keep" });
+  expect(buildStoredAgentPayload(record, ["pi"]).persistence?.metadata).toEqual({
+    unrelated: "keep",
+  });
+  expect(agent.persistence?.metadata).toEqual(metadata);
+});

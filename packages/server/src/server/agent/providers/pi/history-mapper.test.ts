@@ -1,3 +1,5 @@
+import { createPiExtensionHost } from "./extensions/index.js";
+import type { PiExtension } from "./extensions/contract.js";
 import { buildAgentForkContextAttachment } from "../../activity-curator.js";
 import { readPiTranscript } from "./transcript.js";
 import { describe, expect, test } from "vitest";
@@ -495,6 +497,7 @@ test("traverses native system and summary messages without displaying private co
   expect(readPiTranscript(rows.map((row) => JSON.stringify(row)).join("\n"))).toEqual({
     messages: [{ role: "user", content: "question" }],
     userEntries: [{ id: "1", text: "question" }],
+    messageEntryIds: ["1"],
   });
 });
 
@@ -526,4 +529,213 @@ test("restores surrounding chat when native system content uses text blocks", as
     { type: "user_message", text: "question", messageId: "u" },
     { type: "assistant_message", text: "answer", messageId: "pi-history-assistant-1" },
   ]);
+});
+
+test("threads exact native message identities through replay without conflating repeated text", async () => {
+  const transcript = readPiTranscript(
+    [
+      { type: "session", version: 3 },
+      { type: "message", id: "u", parentId: null, message: { role: "user", content: "prompt" } },
+      {
+        type: "message",
+        id: "a",
+        parentId: "u",
+        message: { role: "assistant", content: [{ type: "text", text: "same" }] },
+      },
+      {
+        type: "custom_message",
+        id: "hidden",
+        parentId: "a",
+        customType: "notice",
+        display: false,
+        content: "hidden",
+      },
+      {
+        type: "message",
+        id: "b",
+        parentId: "hidden",
+        message: { role: "assistant", content: [{ type: "text", text: "same" }] },
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join("\n"),
+  );
+  const events: AgentStreamEvent[] = [];
+  for await (const event of streamPiHistory(
+    "pi",
+    transcript.messages,
+    transcript.userEntries,
+    {},
+    undefined,
+    undefined,
+    transcript.messageEntryIds,
+  ))
+    events.push(event);
+  expect(
+    events.filter((event) => event.type === "timeline").map((event) => event.providerMessageId),
+  ).toEqual(["u", "a", "b"]);
+});
+
+test("replays an error-only native assistant as the same identified system error row", async () => {
+  const events: AgentStreamEvent[] = [];
+  for await (const event of streamPiHistory(
+    "pi",
+    [{ role: "assistant", content: [], stopReason: "error", errorMessage: "failure" }],
+    [],
+    {},
+    undefined,
+    undefined,
+    ["error-entry"],
+  ))
+    events.push(event);
+  expect(events).toEqual([
+    {
+      type: "timeline",
+      provider: "pi",
+      providerMessageId: "error-entry",
+      item: { type: "assistant_message", text: "[System Error] failure (stopReason=error)" },
+    },
+  ]);
+});
+
+test("inherited native entries retain timeline rows but cannot replay child ownership or contaminate later own extension state", async () => {
+  const extension: PiExtension = {
+    id: "fork-ownership-fixture",
+    createSession: () => {
+      const known = new Set<string>();
+      return {
+        mapCustomMessage(message) {
+          if (message.customType === "launch" && typeof message.content === "string")
+            known.add(message.content);
+          return {
+            subagents: [...known].map((id) => ({
+              type: "upsert",
+              id,
+              title: id,
+              status: "completed",
+            })),
+          };
+        },
+      };
+    },
+  };
+  const createHost = () => createPiExtensionHost(undefined, [extension]);
+  const messages: PiAgentMessage[] = [
+    { role: "custom", customType: "launch", content: "source-child", display: true },
+    { role: "custom", customType: "status", content: "source child status", display: true },
+    { role: "custom", customType: "status", content: "owned session begins", display: true },
+    { role: "custom", customType: "launch", content: "fork-child", display: true },
+  ];
+  const events: AgentStreamEvent[] = [];
+  for await (const event of streamPiHistory(
+    "pi",
+    messages,
+    [],
+    {
+      inheritedSession: {
+        entryIds: new Set(["source-entry-1", "source-entry-2"]),
+        createOwnedExtensionHost: createHost,
+      },
+    },
+    createHost(),
+    undefined,
+    ["source-entry-1", "source-entry-2", "own-entry-1", "own-entry-2"],
+  ))
+    events.push(event);
+  expect(events.filter((event) => event.type === "timeline")).toHaveLength(4);
+  const children = events.filter((event) => event.type === "provider_subagent");
+  expect(children).toEqual([
+    {
+      type: "provider_subagent",
+      provider: "pi",
+      event: { type: "upsert", id: "fork-child", title: "fork-child", status: "completed" },
+    },
+  ]);
+});
+
+test("replays multiple and leaf native compactions in exact order across hidden context without shifting message identity", async () => {
+  const records = [
+    { type: "session", version: 3, id: "native-compactions" },
+    {
+      type: "message",
+      id: "system",
+      parentId: null,
+      message: { role: "system", content: "hidden system" },
+    },
+    {
+      type: "message",
+      id: "user",
+      parentId: "system",
+      message: { role: "user", content: "question" },
+    },
+    {
+      type: "compaction",
+      id: "compact-1",
+      parentId: "user",
+      summary: "one",
+      firstKeptEntryId: "user",
+      tokensBefore: 100,
+      timestamp: "2026-11-10T00:00:01.000Z",
+    },
+    {
+      type: "custom_message",
+      id: "hidden",
+      parentId: "compact-1",
+      customType: "private-context",
+      content: "hidden context",
+      display: false,
+    },
+    {
+      type: "compaction",
+      id: "compact-2",
+      parentId: "hidden",
+      summary: "two",
+      firstKeptEntryId: "user",
+    },
+    {
+      type: "message",
+      id: "answer",
+      parentId: "compact-2",
+      message: { role: "assistant", content: [{ type: "text", text: "answer" }] },
+    },
+    {
+      type: "compaction",
+      id: "compact-3",
+      parentId: "answer",
+      summary: "three",
+      firstKeptEntryId: "answer",
+      tokensBefore: 300,
+    },
+  ];
+  const history = readPiTranscript(records.map((record) => JSON.stringify(record)).join("\n"));
+  expect(history.messageEntryIds).toEqual(["user", "hidden", "answer"]);
+  const events: AgentStreamEvent[] = [];
+  for await (const event of streamPiHistory(
+    "pi",
+    history.messages,
+    history.userEntries,
+    { compactions: history.compactions },
+    undefined,
+    undefined,
+    history.messageEntryIds,
+  ))
+    events.push(event);
+  const timeline = events.filter((event) => event.type === "timeline");
+  expect(timeline.map((event) => [event.item.type, event.providerMessageId])).toEqual([
+    ["user_message", "user"],
+    ["compaction", "compact-1"],
+    ["compaction", "compact-2"],
+    ["assistant_message", "answer"],
+    ["compaction", "compact-3"],
+  ]);
+  expect(timeline[1]).toMatchObject({
+    timestamp: "2026-11-10T00:00:01.000Z",
+    item: { status: "completed", preTokens: 100 },
+  });
+  const rewound = readPiTranscript(
+    [...records, { type: "custom", id: "rewind", parentId: null }]
+      .map((record) => JSON.stringify(record))
+      .join("\n"),
+  );
+  expect(rewound.compactions).toBeUndefined();
 });

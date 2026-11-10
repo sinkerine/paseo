@@ -154,6 +154,7 @@ function mergeIdentityEntries(existing: WorkingEntry, entry: WorkingEntry): Work
         ...existing,
         item: mergeToolCallItems(existing.item, entry.item),
         timestamp: entry.timestamp,
+        ...(entry.providerMessageId ? { providerMessageId: entry.providerMessageId } : {}),
         seqEnd: Math.max(existing.seqEnd, entry.seqEnd),
         ...mergeIdentityMetadata(existing, entry, "tool_lifecycle"),
       };
@@ -210,7 +211,8 @@ function mergeReasoningChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
       previous.item.type === "reasoning" &&
       entry.item.type === "reasoning" &&
       previous.seqEnd + 1 === entry.seqStart &&
-      previous.turnId === entry.turnId;
+      previous.turnId === entry.turnId &&
+      previous.providerMessageId === entry.providerMessageId;
 
     if (!shouldMerge || !previous) {
       output.push(entry);
@@ -251,7 +253,8 @@ function mergeAssistantChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
       previous.item.type === "assistant_message" &&
       entry.item.type === "assistant_message" &&
       previous.seqEnd + 1 === entry.seqStart &&
-      previous.turnId === entry.turnId;
+      previous.turnId === entry.turnId &&
+      previous.providerMessageId === entry.providerMessageId;
 
     if (!shouldMerge || !previous) {
       output.push(entry);
@@ -525,6 +528,40 @@ export class TimelineProjection {
   getLastAssistantMessage(): string | null {
     const row = this.lastAssistantRowIndex === null ? null : this.rows[this.lastAssistantRowIndex];
     return row?.item.type === "assistant_message" ? row.item.text : null;
+  }
+
+  enrichProviderMessage(
+    seqs: ReadonlySet<number>,
+    providerMessageId: string,
+  ): ProjectedTimelineRow[] {
+    const updated: ProjectedTimelineRow[] = [];
+    const indexes = new Set<number>();
+    for (const seq of seqs) {
+      let low = 0;
+      let high = this.sourceRanges.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (this.sourceRanges[middle].endSeq < seq) low = middle + 1;
+        else high = middle;
+      }
+      const source = this.sourceRanges[low];
+      if (source && source.startSeq <= seq) indexes.add(source.rowIndex);
+    }
+    for (const index of indexes) {
+      const row = this.rows[index];
+      const sources = row.sourceSeqRanges.flatMap((range) => {
+        const values: number[] = [];
+        for (let seq = range.startSeq; seq <= range.endSeq; seq++) values.push(seq);
+        return values;
+      });
+      if (!sources.length || !sources.every((seq) => seqs.has(seq))) continue;
+      // A merged row with mixed, unresolved origins cannot be assigned one native identity.
+      if (row.providerMessageId && row.providerMessageId !== providerMessageId) continue;
+      const enriched = { ...row, providerMessageId };
+      this.rows[index] = enriched;
+      updated.push({ ...enriched });
+    }
+    return updated;
   }
 
   enrichSubmittedUserMessage(

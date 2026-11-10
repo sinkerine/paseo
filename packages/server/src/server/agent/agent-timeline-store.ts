@@ -21,6 +21,7 @@ interface AgentTimelineState {
   projection: TimelineProjection;
   minSeq: number;
   nextSeq: number;
+  providerMessageRows: Map<string, AgentTimelineRow[]>;
 }
 const DEFAULT_TIMELINE_FETCH_LIMIT = 200;
 function cloneRow<T extends AgentTimelineRow>(row: T): T {
@@ -42,6 +43,7 @@ export class InMemoryAgentTimelineStore {
     const nextSeq = rows.reduce((next, row) => Math.max(next, row.seq + 1), options?.nextSeq ?? 1);
     const projection = new TimelineProjection(rows);
     this.states.set(agentId, {
+      providerMessageRows: new Map(),
       epoch: options?.epoch ?? randomUUID(),
       projection,
       minSeq: projection.getRows()[0]?.seqStart ?? 0,
@@ -83,6 +85,29 @@ export class InMemoryAgentTimelineStore {
       clientMessageId,
       providerMessageId,
     );
+  }
+
+  enrichProviderMessage(
+    agentId: string,
+    key: string,
+    providerMessageId: string,
+  ): AgentTimelineRow[] {
+    const state = this.requireState(agentId);
+    const rows = state.providerMessageRows.get(key);
+    if (!rows) return [];
+    state.providerMessageRows.delete(key);
+    const seqs = new Set(rows.map((row) => row.seq));
+    const enriched = state.projection.enrichProviderMessage(seqs, providerMessageId);
+    // Durable updates use original canonical chunks, never a merged presentation row.
+    return rows
+      .filter((row) =>
+        enriched.some((entry) =>
+          entry.sourceSeqRanges.some(
+            (range) => row.seq >= range.startSeq && row.seq <= range.endSeq,
+          ),
+        ),
+      )
+      .map((row) => Object.assign({}, row, { providerMessageId }));
   }
 
   getEpoch(agentId: string): string {
@@ -133,7 +158,12 @@ export class InMemoryAgentTimelineStore {
   append(
     agentId: string,
     item: AgentTimelineItem,
-    options?: { timestamp?: string; providerMessageId?: string; turnId?: string },
+    options?: {
+      timestamp?: string;
+      providerMessageId?: string;
+      providerMessageKey?: string;
+      turnId?: string;
+    },
   ): AgentTimelineRow {
     const state = this.requireState(agentId);
     const row: AgentTimelineRow = {
@@ -146,6 +176,11 @@ export class InMemoryAgentTimelineStore {
     state.nextSeq += 1;
     if (state.minSeq === 0) state.minSeq = row.seq;
     state.projection.append(row);
+    if (options?.providerMessageKey) {
+      const rows = state.providerMessageRows.get(options.providerMessageKey) ?? [];
+      rows.push(row);
+      state.providerMessageRows.set(options.providerMessageKey, rows);
+    }
     return cloneRow(row);
   }
 

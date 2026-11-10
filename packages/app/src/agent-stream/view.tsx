@@ -1,3 +1,8 @@
+import {
+  useNativeForkAgent,
+  useNativeForkPending,
+  useNativeSessionForkAvailable,
+} from "@/hooks/use-native-fork-agent";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
@@ -171,6 +176,8 @@ function renderStreamItemWithTurnFooter(input: {
   strategy: TurnContentStrategy;
   supportsTimelineCursor: boolean;
   onForkAssistantTurn?: AssistantTurnForkHandler;
+  onForkSession?: (boundary: import("./turn-boundary").AssistantTurnForkBoundary) => Promise<void>;
+  forkSessionDisabledReason?: string;
 }): ReactNode {
   if (!input.content) {
     return null;
@@ -185,6 +192,8 @@ function renderStreamItemWithTurnFooter(input: {
       startIndex={footerHost.startIndex}
       supportsTimelineCursor={input.supportsTimelineCursor}
       onForkAssistantTurn={input.onForkAssistantTurn}
+      onForkSession={input.onForkSession}
+      forkSessionDisabledReason={input.forkSessionDisabledReason}
     />
   ) : null;
   const content = (
@@ -395,6 +404,24 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
     const streamHead = providedStreamHead ?? sessionStreamHead;
     const forkAgent = useForkAgent({ serverId: resolvedServerId, toast, readOnly });
+    const nativeForkAgent = useNativeForkAgent({ serverId: resolvedServerId, toast });
+    const nativeForkAvailable = useNativeSessionForkAvailable(
+      resolvedServerId,
+      context.capabilities,
+      readOnly,
+    );
+    const nativeForkPending = useNativeForkPending(resolvedServerId, agentId);
+    const handleNativeFork = useStableEvent(
+      async (boundary: import("./turn-boundary").AssistantTurnForkBoundary) => {
+        if (!context.workspaceId) return;
+        await nativeForkAgent({
+          agentId,
+          workspaceId: context.workspaceId,
+          target: "turn",
+          boundary,
+        });
+      },
+    );
     const supportsAgentForkContextCursor = useSessionStore(
       (state) =>
         state.sessions[resolvedServerId]?.serverInfo?.features?.agentForkContextCursor === true,
@@ -954,6 +981,20 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       ],
     );
 
+    const latestTurnId =
+      (effectiveStreamHead ?? []).findLast((item) => item.turnId)?.turnId ??
+      effectiveStreamItems.findLast((item) => item.turnId)?.turnId;
+    const nativeForkDisabledReason = useCallback(
+      (host: import("./layout").TurnFooterHost | null) => {
+        if (nativeForkPending) return t("common.states.loading");
+        const item = host?.items[host.startIndex];
+        if (context.status === "running" && (!item?.turnId || item.turnId === latestTurnId))
+          return t("message.actions.forkSessionRunning");
+        return undefined;
+      },
+      [nativeForkPending, context.status, latestTurnId, t],
+    );
+
     const bottomTurnFooterHost = streamLayout.auxiliaryTurnFooter;
 
     const renderStreamItem = useCallback<RenderStreamItem>(
@@ -966,11 +1007,16 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           strategy: streamRenderStrategy,
           supportsTimelineCursor: supportsAgentForkContextCursor,
           onForkAssistantTurn: readOnly ? undefined : handleForkAssistantTurn,
+          onForkSession: nativeForkAvailable ? handleNativeFork : undefined,
+          forkSessionDisabledReason: nativeForkDisabledReason(layoutItem.completedFooter),
         });
       },
       [
         getTurnIndent,
         handleForkAssistantTurn,
+        handleNativeFork,
+        nativeForkAvailable,
+        nativeForkDisabledReason,
         readOnly,
         renderStreamItemContent,
         streamRenderStrategy,
@@ -1002,10 +1048,15 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
             supportsTimelineCursor={supportsAgentForkContextCursor}
             onForkAssistantTurn={readOnly ? undefined : handleForkAssistantTurn}
             onForkInFlightTurn={readOnly ? undefined : handleForkInFlightTurn}
+            onForkSession={nativeForkAvailable ? handleNativeFork : undefined}
+            forkSessionDisabledReason={nativeForkDisabledReason(bottomTurnFooterHost)}
           />
         ) : null,
       [
         handleForkAssistantTurn,
+        handleNativeFork,
+        nativeForkAvailable,
+        nativeForkDisabledReason,
         handleForkInFlightTurn,
         readOnly,
         isTurnActive,

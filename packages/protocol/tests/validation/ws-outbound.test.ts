@@ -9,6 +9,7 @@ import {
   ProviderSubagentDescriptorPayloadSchema,
   PluginRpcInvokeResponseSchema,
   WSOutboundMessageSchema,
+  SessionInboundMessageSchema,
 } from "../../src/messages.js";
 import { validateWSOutboundMessage } from "../../src/validation/ws-outbound.js";
 
@@ -441,10 +442,62 @@ const SourceSchema = z.object({
     expect(result.success && result.data).toMatchObject({
       message: { payload: { agent: { capabilities: { supportsRewindConversation: false } } } },
     });
+    Object.assign(envelope.message.payload.agent.capabilities, { supportsNativeSessionFork: true });
+    expect(validateWSOutboundMessage(envelope)).toMatchObject({
+      success: true,
+      data: {
+        message: { payload: { agent: { capabilities: { supportsNativeSessionFork: true } } } },
+      },
+    });
   });
 });
 
 it("accepts omitted RPC output so the receiving client can apply schema defaults", () => {
   const message = { type: "plugin.rpc.invoke.response", payload: { requestId: "default-output" } };
   expect(PluginRpcInvokeResponseSchema.safeParse(message).success).toBe(true);
+});
+
+it("parses additive native session fork replies and replies without the optional error code", () => {
+  for (const payload of [
+    { requestId: "fork-1", sourceAgentId: "source", agent: null, error: "Source running" },
+    {
+      requestId: "fork-1",
+      sourceAgentId: "source",
+      agent: null,
+      error: "Source running",
+      errorCode: "source_running",
+    },
+  ]) {
+    const reply = { type: "session", message: { type: "agent.fork_session.response", payload } };
+    expect(WSOutboundMessageSchema.safeParse(reply).success).toBe(true);
+    expect(validateWSOutboundMessage(reply).success).toBe(true);
+  }
+});
+
+it("accepts additive native fork requests and optional host capability advertisement", () => {
+  expect(
+    SessionInboundMessageSchema.safeParse({
+      type: "agent.fork_session.request",
+      agentId: "source",
+      target: "latest",
+      requestId: "clone",
+    }).success,
+  ).toBe(true);
+  for (const features of [{}, { agentNativeSessionFork: true }]) {
+    expect(
+      validateWSOutboundMessage({
+        type: "session",
+        message: {
+          type: "status",
+          payload: {
+            status: "server_info",
+            serverId: "native-host",
+            hostname: null,
+            version: null,
+            features,
+          },
+        },
+      }).success,
+    ).toBe(true);
+  }
 });

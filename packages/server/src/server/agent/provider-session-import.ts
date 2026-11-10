@@ -17,6 +17,7 @@ export async function importSessionFromPersistence(input: {
   resumeSession: AgentClient["resumeSession"];
   config?: Partial<AgentSessionConfig>;
   persistence?: AgentPersistenceHandle;
+  signal?: AbortSignal;
 }): Promise<ImportedProviderSession> {
   const config = {
     ...input.context.config,
@@ -33,7 +34,21 @@ export async function importSessionFromPersistence(input: {
   const persistence =
     input.persistence ?? buildImportPersistenceHandle(input.provider, input.request, storedConfig);
   const session = await input.resumeSession(persistence, config, input.context.launchContext);
-  const history = await collectImportedHistory(session.streamHistory());
+  const onAbort = () => {
+    void session.close().catch(() => undefined);
+  };
+  input.signal?.addEventListener("abort", onAbort, { once: true });
+  let history: Awaited<ReturnType<typeof collectImportedHistory>>;
+  try {
+    input.signal?.throwIfAborted();
+    history = await collectImportedHistory(session.streamHistory());
+    input.signal?.throwIfAborted();
+  } catch (error) {
+    await session.close();
+    throw error;
+  } finally {
+    input.signal?.removeEventListener("abort", onAbort);
+  }
 
   return {
     session,
@@ -77,6 +92,8 @@ async function collectImportedHistory(events: AsyncGenerator<AgentStreamEvent>):
     }
     timeline.push({
       item: event.item,
+      ...(event.turnId ? { turnId: event.turnId } : {}),
+      ...(event.providerMessageId ? { providerMessageId: event.providerMessageId } : {}),
       ...(event.timestamp ? { timestamp: event.timestamp } : {}),
     });
   }

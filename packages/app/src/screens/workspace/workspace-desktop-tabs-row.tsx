@@ -1,3 +1,5 @@
+import { useNativeForkTabActions } from "@/hooks/use-native-fork-agent";
+import type { WorkspaceTabCloneAction } from "./workspace-tab-menu";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
   Fragment,
@@ -21,6 +23,7 @@ import {
   Copy,
   Pencil,
   RotateCw,
+  Split,
   Columns2,
   Rows2,
   Ellipsis,
@@ -44,6 +47,7 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  useContextMenu,
 } from "@/components/ui/context-menu";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -130,6 +134,7 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
 const ThemedX = withUnistyles(X);
 const ThemedCopy = withUnistyles(Copy);
 
+const ThemedSplit = withUnistyles(Split);
 const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedArrowLeftToLine = withUnistyles(ArrowLeftToLine);
 const ThemedArrowRightToLine = withUnistyles(ArrowRightToLine);
@@ -425,10 +430,21 @@ function TabContextMenuItem({
 }: {
   entry: Extract<WorkspaceTabMenuEntry, { kind: "item" }>;
 }) {
+  const { setOpen } = useContextMenu();
+  const isClone = entry.key === "clone-session";
+  const handleClone = useCallback(async () => {
+    try {
+      await entry.onSelect();
+    } finally {
+      setOpen(false);
+    }
+  }, [entry, setOpen]);
   const leading = useMemo(() => {
     switch (entry.icon) {
       case "copy":
         return <ThemedCopy size={16} uniProps={mutedColorMapping} />;
+      case "split":
+        return <ThemedSplit size={16} uniProps={mutedColorMapping} />;
       case "rotate-cw":
         return <ThemedRotateCw size={16} uniProps={mutedColorMapping} />;
       case "arrow-left-to-line":
@@ -453,8 +469,10 @@ function TabContextMenuItem({
     <ContextMenuItem
       testID={entry.testID}
       disabled={entry.disabled}
+      status={entry.pending ? "pending" : undefined}
       destructive={entry.destructive}
-      onSelect={entry.onSelect}
+      onSelect={isClone ? handleClone : entry.onSelect}
+      closeOnSelect={!isClone}
       tooltip={entry.tooltip}
       leading={leading}
       trailing={trailing}
@@ -1106,6 +1124,7 @@ function ResolvedWorkspaceDesktopTabsRow({
   onExitFocusMode,
 }: ResolvedWorkspaceDesktopTabsRowProps) {
   const { t } = useTranslation();
+  const getCloneSessionAction = useNativeForkTabActions(normalizedServerId, normalizedWorkspaceId);
   const isCompact = useIsCompactFormFactor();
   const newTabKeys = useShortcutKeys("workspace-tab-new");
   const [tabsContainerWidth, setTabsContainerWidth] = useState<number>(0);
@@ -1178,6 +1197,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       closeLeft: t("workspace.tabs.menu.closeLeft"),
       closeRight: t("workspace.tabs.menu.closeRight"),
       closeOthers: t("workspace.tabs.menu.closeOthers"),
+      cloneSession: t("workspace.tabs.menu.cloneSession"),
       reloadAgent: t("workspace.tabs.menu.reloadAgent"),
       reloadAgentTooltip: t("workspace.tabs.menu.reloadAgentTooltip"),
       close: t("workspace.tabs.menu.close"),
@@ -1347,6 +1367,11 @@ function ResolvedWorkspaceDesktopTabsRow({
           onCopyTerminalId={onCopyTerminalId}
           onCopyFilePath={onCopyFilePath}
           onReloadAgent={onReloadAgent}
+          cloneSession={
+            item.tab.target.kind === "agent"
+              ? getCloneSessionAction(item.tab.target.agentId)
+              : undefined
+          }
           onRenameTab={onRenameTab}
           onCloseTabsToLeft={onCloseTabsToLeft}
           onCloseTabsToRight={onCloseTabsToRight}
@@ -1382,6 +1407,7 @@ function ResolvedWorkspaceDesktopTabsRow({
       onCopyResumeCommand,
       onNavigateTab,
       onReloadAgent,
+      getCloneSessionAction,
       onRenameTab,
       rail,
       setHoveredCloseTabKey,
@@ -1517,6 +1543,7 @@ function ResolvedDesktopTabChip({
   onNavigateTab,
   onCloseTab,
   labels,
+  cloneSession,
   dragHandleProps,
   showDropIndicatorBefore,
   showDropIndicatorAfter,
@@ -1545,6 +1572,7 @@ function ResolvedDesktopTabChip({
   onNavigateTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
   labels: WorkspaceTabMenuLabels;
+  cloneSession?: WorkspaceTabCloneAction;
   dragHandleProps: DraggableListDragHandleProps | undefined;
   showDropIndicatorBefore: boolean;
   showDropIndicatorAfter: boolean;
@@ -1562,6 +1590,7 @@ function ResolvedDesktopTabChip({
         onCopyTerminalId,
         onCopyFilePath,
         onReloadAgent,
+        cloneSession,
         onRenameTab,
         onCloseTab,
         onCloseTabsToLeft,
@@ -1582,6 +1611,7 @@ function ResolvedDesktopTabChip({
       onCopyResumeCommand,
       labels,
       onReloadAgent,
+      cloneSession,
       onRenameTab,
       tabCount,
     ],

@@ -2,9 +2,18 @@ import { z } from "zod";
 import { getUserMessageText, type PiCapturedUserMessageEntry } from "./history-mapper.js";
 import type { PiAgentMessage } from "./rpc-types.js";
 
+export interface PiTranscriptCompaction {
+  entryId: string;
+  beforeMessageIndex: number;
+  timestamp?: string;
+  tokensBefore?: number;
+}
+
 export interface PiTranscript {
+  compactions?: PiTranscriptCompaction[];
   messages: PiAgentMessage[];
   userEntries: PiCapturedUserMessageEntry[];
+  messageEntryIds?: (string | null)[];
 }
 
 const text = z.object({ type: z.literal("text"), text: z.string() }).passthrough();
@@ -31,6 +40,8 @@ const message = z.discriminatedUnion("role", [
   z
     .object({
       role: z.literal("assistant"),
+      errorMessage: z.string().nullable().optional(),
+      stopReason: z.string().optional(),
       content: z.array(
         z.union([
           text,
@@ -77,6 +88,12 @@ const record = z
   })
   .passthrough();
 
+const compactionEntry = z.object({
+  id: z.string(),
+  timestamp: z.string().optional(),
+  tokensBefore: z.number().finite().nonnegative().optional(),
+});
+
 /** Select the persisted active ancestry, retaining structural links across compaction. */
 export function readPiTranscript(contents: string): PiTranscript {
   const records = contents
@@ -87,8 +104,17 @@ export function readPiTranscript(contents: string): PiTranscript {
   if (header?.type !== "session") throw new Error("Pi transcript is missing its session header");
   const legacy = header.version === 1;
   const branch = legacy ? records : activeBranch(records);
-  const result: PiTranscript = { messages: [], userEntries: [] };
+  const result: PiTranscript = { messages: [], userEntries: [], messageEntryIds: [] };
   for (const entry of branch) {
+    if (entry.type === "compaction") {
+      const compacted = compactionEntry.parse(entry);
+      (result.compactions ??= []).push({
+        entryId: compacted.id,
+        beforeMessageIndex: result.messages.length,
+        ...(compacted.timestamp ? { timestamp: compacted.timestamp } : {}),
+        ...(compacted.tokensBefore === undefined ? {} : { tokensBefore: compacted.tokensBefore }),
+      });
+    }
     if (entry.type !== "message" && entry.type !== "custom_message") continue;
     const parsed = message.parse(
       entry.type === "custom_message" ? { ...entry, role: "custom" } : entry.message,
@@ -101,6 +127,7 @@ export function readPiTranscript(contents: string): PiTranscript {
     )
       continue;
     result.messages.push(parsed);
+    result.messageEntryIds!.push(entry.id ?? null);
     if (parsed.role === "user" && entry.id)
       result.userEntries.push({
         id: entry.id,
