@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
-import { seedSavedSettingsHosts } from "../support/helpers/settings";
+import { buildSeededHost } from "../support/helpers/daemon-registry";
 import { buildHostAgentDetailRoute } from "../../src/utils/host-routes";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import type { Page } from "@playwright/test";
@@ -291,6 +291,13 @@ async function journeyAsk(client: DaemonClient, agentId: string, prompt: string)
 
 async function openJourneyAgent(page: Page, serverId: string, agentId: string): Promise<void> {
   await page.goto(buildHostAgentDetailRoute(serverId, agentId), { waitUntil: "commit" });
+  const registeredHostIds = await page.evaluate(() => {
+    const registry: Array<{ serverId: string }> = JSON.parse(
+      localStorage.getItem("@paseo:daemon-registry") ?? "[]",
+    );
+    return registry.map((host) => host.serverId);
+  });
+  expect(registeredHostIds, "Journey host must survive every full navigation").toContain(serverId);
   await expectComposerVisible(page);
 }
 
@@ -312,13 +319,18 @@ test("native Pi journey preserves middle-turn cuts, real compaction and independ
     clientIdPrefix: "native-fork-journey",
   });
   try {
-    await seedSavedSettingsHosts(page, [
-      {
-        serverId: daemon.serverId,
-        label: "Native fork journey",
-        endpoint: `127.0.0.1:${daemon.port}`,
-      },
-    ]);
+    await page.goto("/");
+    const journeyHost = buildSeededHost({
+      serverId: daemon.serverId,
+      label: "Native fork journey",
+      endpoint: `127.0.0.1:${daemon.port}`,
+      nowIso: new Date().toISOString(),
+    });
+    // The fixture merges extra hosts into the registry on every navigation, including restart.
+    await page.evaluate(
+      (host) => localStorage.setItem("@paseo:e2e-extra-hosts", JSON.stringify([host])),
+      journeyHost,
+    );
     const workspace = await client.createWorkspace({ source: { kind: "directory", path: root } });
     if (!workspace.workspace) throw new Error(workspace.error ?? "Missing journey workspace");
     const source = await client.createAgent({
@@ -334,6 +346,27 @@ test("native Pi journey preserves middle-turn cuts, real compaction and independ
         "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQ0AAAzCMP5/un0CNkuZ41wybXsHAAAAAAAAAAAAxR4yw/wuPL6QkAAAAABJRU5ErkJggg==",
         "base64",
       ),
+    );
+    execFileSync("git", ["add", "--", "sample.png"], { cwd: root });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Paseo E2E",
+        "-c",
+        "user.email=e2e@paseo.test",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "Add journey PNG fixture",
+        "--",
+        "sample.png",
+      ],
+      { cwd: root },
+    );
+    expect(execFileSync("git", ["show", "HEAD:sample.png"], { cwd: root })).toEqual(
+      await readFile(path.join(root, "sample.png")),
     );
     await journeyAsk(
       client,
