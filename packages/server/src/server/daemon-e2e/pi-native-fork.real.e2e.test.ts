@@ -39,6 +39,66 @@ async function jsonl(file: string): Promise<Record<string, unknown>[]> {
     .map((line) => JSON.parse(line));
 }
 
+async function verifyRestartedBranches(
+  client: DaemonClient,
+  source: AgentSnapshotPayload,
+  fork: AgentSnapshotPayload,
+) {
+  const sourceFile = nativeFile(source);
+  const forkFile = nativeFile(fork);
+  const listed = await client.fetchAgents();
+  expect(listed.entries.map((entry) => entry.agent.id)).toEqual(
+    expect.arrayContaining([source.id, fork.id]),
+  );
+  const recovered = await client.fetchAgentTimeline(fork.id, { limit: 0 });
+  expect(nativeFile(recovered.agent!)).toBe(forkFile);
+  expect(JSON.stringify(recovered.entries)).toContain("FORK_ONLY");
+  expect(JSON.stringify(recovered.entries)).not.toContain("SOURCE_ONLY");
+  const recoveredSource = await client.fetchAgentTimeline(source.id, { limit: 0 });
+  expect(nativeFile(recoveredSource.agent!)).toBe(sourceFile);
+  expect(recoveredSource.agent?.persistence?.sessionId).toBe(source.persistence?.sessionId);
+  expect(recovered.agent?.persistence?.sessionId).toBe(fork.persistence?.sessionId);
+  expect(JSON.stringify(recoveredSource.entries)).toContain("SOURCE_BEFORE_RESTART");
+  expect(JSON.stringify(recoveredSource.entries)).toContain("TURN_THREE_AFTER_COMPACTION");
+  expect(JSON.stringify(recoveredSource.entries)).not.toContain("FORK_ONLY");
+  expect(JSON.stringify(recovered.entries)).not.toContain("SOURCE_BEFORE_RESTART");
+  await ask(client, fork.id, "Reply exactly FORK_AFTER_RESTART. Do not use any tools.");
+  await ask(client, source.id, "Reply exactly SOURCE_AFTER_RESTART. Do not use any tools.");
+  const continuedFork = await client.fetchAgentTimeline(fork.id, { limit: 0 });
+  const continuedSource = await client.fetchAgentTimeline(source.id, { limit: 0 });
+  expect(continuedFork.entries.map((row) => row.item)).toContainEqual(
+    expect.objectContaining({ type: "assistant_message", text: "FORK_AFTER_RESTART" }),
+  );
+  expect(continuedSource.entries.map((row) => row.item)).toContainEqual(
+    expect.objectContaining({ type: "assistant_message", text: "SOURCE_AFTER_RESTART" }),
+  );
+  const forkText = await readFile(forkFile, "utf8");
+  const sourceText = await readFile(sourceFile, "utf8");
+  for (const text of [forkText, JSON.stringify(continuedFork.entries)]) {
+    expect(text).toContain("FORK_ONLY");
+    expect(text).toContain("FORK_AFTER_RESTART");
+    expect(text).not.toContain("SOURCE_BEFORE_RESTART");
+    expect(text).not.toContain("SOURCE_AFTER_RESTART");
+  }
+  for (const text of [sourceText, JSON.stringify(continuedSource.entries)]) {
+    expect(text).toContain("SOURCE_BEFORE_RESTART");
+    expect(text).toContain("SOURCE_AFTER_RESTART");
+    expect(text).not.toContain("FORK_ONLY");
+    expect(text).not.toContain("FORK_AFTER_RESTART");
+  }
+  return {
+    listedAgentIds: listed.entries.map((entry) => entry.agent.id),
+    source: recoveredSource,
+    fork: recovered,
+    continuedSource,
+    continuedFork,
+    sourceFile,
+    forkFile,
+    sourceText,
+    forkText,
+  };
+}
+
 test("native Pi forks and clone retain independent native history across an isolated restart", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-real-native-fork-"));
   const cwd = path.join(root, "work");
@@ -238,19 +298,20 @@ test("native Pi forks and clone retain independent native history across an isol
     expect(await readFile(nativeFile(rewoundClone), "utf8")).not.toContain("SOURCE_ONLY");
     expect(await readFile(sourceFile, "utf8")).toContain("SOURCE_ONLY");
     expect(await integrity(sourceFile)).toEqual(rewindBaseline);
+    await ask(active, source.id, "Reply exactly SOURCE_BEFORE_RESTART. Do not use any tools.");
     await active.close();
     await daemon!.close();
     active = await start();
-    const recovered = await active.fetchAgentTimeline(fork.id, { limit: 0 });
-    expect(nativeFile(recovered.agent!)).toBe(forkFile);
-    expect(JSON.stringify(recovered.entries)).toContain("FORK_ONLY");
-    expect(JSON.stringify(recovered.entries)).not.toContain("SOURCE_ONLY");
-    await ask(active, fork.id, "Reply exactly AFTER_RESTART. Do not use any tools.");
-    expect(await readFile(forkFile, "utf8")).toContain("AFTER_RESTART");
-    expect(await readFile(sourceFile, "utf8")).not.toContain("AFTER_RESTART");
+    const { sourceText, forkText, ...restart } = await verifyRestartedBranches(
+      active,
+      beforeAgent.agent,
+      fork,
+    );
     const evidenceDir = process.env.PASEO_NATIVE_FORK_EVIDENCE_DIR;
     if (evidenceDir) {
       await mkdir(evidenceDir, { recursive: true });
+      await writeFile(path.join(evidenceDir, "restart-source-native.jsonl"), sourceText);
+      await writeFile(path.join(evidenceDir, "restart-fork-native.jsonl"), forkText);
       await writeFile(
         path.join(evidenceDir, "native-real-result.json"),
         JSON.stringify(
@@ -266,7 +327,7 @@ test("native Pi forks and clone retain independent native history across an isol
             sourcePid,
             runtimeEvents: eventsAfterFork,
             nativePrefixEqual: true,
-            restart: recovered.agent,
+            restart,
             isolatedRoot: root,
           },
           null,
