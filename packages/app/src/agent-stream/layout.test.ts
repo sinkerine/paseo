@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { projectPluginTimelineItems } from "@/plugins/timeline/projection";
+import { resolveAssistantTurnForkBoundary } from "./turn-boundary";
+import { deriveStreamTurnTiming } from "@/timeline/turn-time";
 import type { TurnTiming } from "@/timeline/turn-time";
 import type { StreamItem } from "@/types/stream";
 import {
@@ -147,7 +150,75 @@ function findLayoutItem(layout: StreamLayout, id: string): StreamLayoutItem {
   return item;
 }
 
+function replacementRows(source: StreamItem): StreamItem[] {
+  return projectPluginTimelineItems([source], () =>
+    ["first", "last"].map((id) => ({
+      type: "plugin",
+      id,
+      pluginId: "better-paseo",
+      kind: "assistant",
+      version: 1,
+      data: {},
+    })),
+  );
+}
+
 describe("layoutStream", () => {
+  it.each(["web", "android"] as const)(
+    "keeps transformed response boundaries and a single footer through history handoff on %s",
+    (platform) => {
+      const source = {
+        ...assistantMessage("source", 2, undefined, "turn-one"),
+        messageId: "native-message",
+        timelineCursor: { epoch: "epoch", seq: 4 },
+      };
+      const rows = replacementRows(source);
+      const prompt = { ...userMessage("prompt", 1), turnId: "turn-one" };
+      const strategy = strategyFor(platform);
+      const live = layoutFor({ platform, tail: [prompt], head: rows, isTurnActive: true });
+      expect(footerOwners(live)).toEqual([]);
+      for (const tail of [false, true]) {
+        const completed = layoutFor({
+          platform,
+          tail: tail ? [prompt, ...rows] : [prompt],
+          head: tail ? [] : rows,
+        });
+        const host = completed.auxiliaryTurnFooter;
+        expect(host?.itemId).toBe("better-paseo/last");
+        expect(footerOwners(completed)).toHaveLength(1);
+        if (!host) throw new Error("Missing completed footer");
+        expect(resolveAssistantTurnForkBoundary({ ...host, supportsTimelineCursor: true })).toEqual(
+          {
+            boundaryCursor: source.timelineCursor,
+            boundaryMessageId: source.messageId,
+          },
+        );
+        expect(
+          resolveAssistantTurnForkBoundary({ ...host, supportsTimelineCursor: false }),
+        ).toEqual({
+          boundaryMessageId: source.messageId,
+        });
+        expect(strategy.collectAssistantResponseContent(host.items, host.startIndex)).toBe(
+          source.text,
+        );
+      }
+      const running = layoutFor({
+        platform,
+        tail: [prompt, ...rows],
+        head: [{ ...userMessage("next", 3), turnId: "turn-two" }],
+        isTurnActive: true,
+      });
+      expect(footerOwners(running)).toHaveLength(1);
+      const timing = deriveStreamTurnTiming({
+        tail: [prompt, ...rows],
+        head: [],
+        isTurnActive: false,
+        activeTurnStartedAt: null,
+      });
+      expect(timing.byItemId.get("better-paseo/last")?.durationMs).toBe(1000);
+    },
+  );
+
   it("keeps separate footers for an assistant turn and an adjacent tool-only turn", () => {
     const priorAssistant = assistantMessage("prior", 1, undefined, "turn-1");
     const nextTool = toolCall("next-tool", 2, "turn-2");

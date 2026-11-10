@@ -816,6 +816,10 @@ export interface PluginTimelineStreamItem {
   sourceId?: string;
   /** The original row kind, retained by projection for turn folding. */
   sourceKind?: StreamItem["kind"];
+  /** Only the final replacement row owns the source assistant and its turn actions. */
+  sourceAssistant?: AssistantMessageItem;
+  /** Only the first replacement can retain a source turn trigger. */
+  sourceStartsTurn?: boolean;
   timelineCursor?: TimelinePosition;
   turnId?: string;
   timestamp: Date;

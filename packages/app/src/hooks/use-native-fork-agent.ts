@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/contexts/toast-api-context";
 import type { ForkAgentBoundary } from "./use-fork-agent";
 import { useStableEvent } from "./use-stable-event";
-import { useHostFeature } from "@/runtime/host-features";
 import { useSessionStore } from "@/stores/session-store";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { toErrorMessage } from "@/utils/error-messages";
@@ -33,17 +32,11 @@ export function useNativeForkPending(serverId: string, agentId: string): boolean
   return useSyncExternalStore(subscribe, () => pendingForks.has(forkKey(serverId, agentId)));
 }
 
-export function useNativeSessionForkAvailable(
-  serverId: string,
+export function isNativeSessionForkAvailable(
   capabilities: AgentCapabilityFlags | undefined,
   readOnly = false,
 ): boolean {
-  // COMPAT(agentNativeSessionFork): added in v0.15.4, remove gate after 2027-05-10.
-  return (
-    useHostFeature(serverId, "agentNativeSessionFork") &&
-    capabilities?.supportsNativeSessionFork === true &&
-    !readOnly
-  );
+  return capabilities?.supportsNativeSessionFork === true && !readOnly;
 }
 
 export interface NativeForkAgentRequest {
@@ -124,13 +117,12 @@ export function useNativeForkTabActions(
 ) {
   const { t } = useTranslation();
   const agents = useSessionStore((state) => state.sessions[serverId]?.agents);
-  const supported = useHostFeature(serverId, "agentNativeSessionFork");
   const pendingRequests = useSyncExternalStore(subscribe, () => pendingSnapshot);
   const fork = useNativeForkAgent({ serverId });
   return useCallback(
     (agentId: string) => {
       const agent = agents?.get(agentId);
-      if (!supported || !agent?.capabilities?.supportsNativeSessionFork) return undefined;
+      if (!agent || !isNativeSessionForkAvailable(agent.capabilities)) return undefined;
       const pending = pendingRequests.has(forkKey(serverId, agentId));
       return {
         pending,
@@ -142,6 +134,6 @@ export function useNativeForkTabActions(
         },
       };
     },
-    [agents, supported, pendingRequests, fork, serverId, workspaceId, t, onSettled],
+    [agents, pendingRequests, fork, serverId, workspaceId, t, onSettled],
   );
 }

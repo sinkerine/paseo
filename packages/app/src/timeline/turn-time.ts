@@ -70,7 +70,7 @@ function walkTurns(
       assistantIds = [];
     }
     lastItemAt = item.timestamp;
-    if (item.kind === "assistant_message") {
+    if (item.kind === "assistant_message" || (item.kind === "plugin" && item.sourceAssistant)) {
       assistantIds.push(item.id);
     }
     previousItem = item;

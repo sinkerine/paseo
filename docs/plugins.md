@@ -679,6 +679,13 @@ its Zod schema, and mounts the component inside the normal plugin runtime and er
 optional output `id` distinguishes several stable replacements from the same source item; its output
 index is the default.
 
+Assistant provenance stays host-owned on the final replacement row. Turn layout, timing, and fork
+boundaries must use that source identity across live/history handoffs. Renderers can place the
+[completed-turn action slot](../public-docs/plugins/reference.md#place-completed-turn-actions-inside-a-renderer)
+inside their footer; keep operation handlers in the host. The Pi native-fork browser regression
+uses an inline renderer fixture. Set `PASEO_BETTER_PASEO_SOURCE` to an editable Better Paseo checkout
+that uses the slot to exercise the same journey against that plugin.
+
 Transformers run synchronously and must be deterministic. When several transformers match, the
 first one that returns a result owns that source item. Plugin and registration ordering is stable.
 See `plugin-examples/timeline-items` for the complete contract.

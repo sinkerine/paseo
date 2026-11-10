@@ -70,11 +70,12 @@ const CLIENT_SOURCE = `import React, { useState } from "react";
 import { Text, View, Pressable } from "react-native";
 import { z } from "zod";
 
-function Card({ item }) {
+function Card({ item, turnActions }) {
   const [count, setCount] = useState(0);
   return <View>
     <Text accessibilityRole="header">{item.data.label + " " + item.data.phase}</Text>
     <Text>{item.data.text}</Text>
+    <View testID="plugin-turn-actions">{turnActions}</View>
     <Pressable accessibilityRole="button" onPress={() => setCount(count + 1)}>
       <Text>{"Card clicks " + count}</Text>
     </Pressable>
@@ -96,7 +97,7 @@ export default function contribute(client) {
     });
   }
   client.addTimelineRenderer({
-    kind: "card", version: 1,
+    kind: "card", version: 1, turnActions: "inline",
     schema: z.object({ label: z.string(), text: z.string(), phase: z.enum(["streaming", "complete"]) }),
     Component: Card,
   });

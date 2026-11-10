@@ -1,6 +1,6 @@
 import type { WorkspaceRef, AgentRef, ProjectRef, TerminalRef } from "../refs.js";
 import type { PluginText } from "../text.js";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { PluginPaseoApi } from "./reference-api.js";
 import type { AgentTimelineItem, JsonValue } from "@getpaseo/protocol/agent-types";
 import type { ZodType, input as ZodInput, output as ZodOutput } from "zod";
@@ -310,6 +310,8 @@ export type PluginTimelineTransformerContribution<
   : never;
 
 export interface PluginTimelineItemProps<Data = unknown> extends PluginHostProps {
+  /** Host-owned completed-turn menu. Render once when turnActions placement is inline. */
+  turnActions?: ReactNode;
   agentId: string;
   item: {
     type: "plugin";
@@ -321,6 +323,8 @@ export interface PluginTimelineItemProps<Data = unknown> extends PluginHostProps
 }
 
 export interface PluginTimelineRendererContribution<Schema extends ZodType = ZodType> {
+  /** Place the host-owned turnActions slot inside your renderer instead of below it. */
+  turnActions?: "inline";
   kind: string;
   version: number;
   schema: Schema;

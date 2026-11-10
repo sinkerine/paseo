@@ -497,6 +497,9 @@ export function runPluginClientBundle(
       if (!Number.isInteger(contribution.version) || contribution.version < 1) {
         throw new Error(`Timeline renderer ${kind} has invalid version`);
       }
+      if (contribution.turnActions !== undefined && contribution.turnActions !== "inline") {
+        throw new Error(`Timeline renderer ${kind} has invalid turnActions placement`);
+      }
       const rendererId = `${kind}/${contribution.version}`;
       if (timelineRendererIds.has(rendererId)) {
         throw new Error(`Duplicate timeline renderer: ${rendererId}`);

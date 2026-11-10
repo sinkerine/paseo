@@ -9,7 +9,8 @@ export function resolveAssistantTurnForkBoundary(input: {
   startIndex: number;
   supportsTimelineCursor: boolean;
 }): AssistantTurnForkBoundary | undefined {
-  const item = input.items[input.startIndex];
+  const projected = input.items[input.startIndex];
+  const item = projected?.kind === "plugin" ? projected.sourceAssistant : projected;
   if (item?.kind !== "assistant_message" && item?.kind !== "tool_call") {
     return undefined;
   }

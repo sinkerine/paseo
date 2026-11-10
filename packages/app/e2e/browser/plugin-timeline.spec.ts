@@ -1,4 +1,16 @@
-import { test } from "../support/fixtures";
+import type { Page } from "@playwright/test";
+import { expect, test } from "../support/fixtures";
+import { expectChatHistoryAttachment } from "../support/helpers/assistant-fork";
+
+async function expectTranscriptTurnActions(page: Page) {
+  const menu = page.getByTestId("plugin-turn-actions").getByTestId("assistant-fork-menu-trigger");
+  await expect(menu).toHaveCount(1);
+  await menu.click();
+  await expect(page.getByTestId("assistant-fork-menu-fork-session")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-fork-menu-new-tab")).toBeVisible();
+  await expect(page.getByTestId("assistant-fork-menu-new-workspace")).toBeVisible();
+  await page.keyboard.press("Escape");
+}
 import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
 import {
   withTimelinePlugin,
@@ -22,6 +34,7 @@ for (const width of [1100, 390]) {
       await interactWithStreamingCard(page);
       await agent.client.waitForFinish(agent.agentId, 30_000);
       await expectWholeCompletedCard(page);
+      await expectTranscriptTurnActions(page);
       // Local state is checked during growth; the viewport remounts on the history handoff.
       const recovery = trackPluginChatRecovery(page);
       gate.holdTimelineResponses(agent.agentId);
@@ -31,10 +44,18 @@ for (const width of [1100, 390]) {
       gate.releaseHeldTimelineResponses();
       await expectWholeCompletedCard(page);
       await recovery.expectRecoveredWithoutRetransmission();
+      await expectTranscriptTurnActions(page);
       recovery.reset();
       await reconnectPluginChat(page, gate);
       await recovery.expectRecoveredWithoutRetransmission();
       await expectWholeCompletedCard(page);
+      await expectTranscriptTurnActions(page);
+      await page
+        .getByTestId("plugin-turn-actions")
+        .getByTestId("assistant-fork-menu-trigger")
+        .click();
+      await page.getByTestId("assistant-fork-menu-new-tab").click();
+      await expectChatHistoryAttachment(page);
     });
   });
 }

@@ -1,7 +1,7 @@
 import { PluginClientStateProvider } from "@getpaseo/plugin/client/host";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
-import React, { type ComponentType, useMemo } from "react";
+import React, { type ComponentType, type ComponentProps, useMemo } from "react";
 import { Text } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -13,6 +13,9 @@ import { useInstalledPlugin } from "../registry";
 import { PluginInstallationProvider } from "../installation-provider";
 import { SurfaceErrorBoundary } from "../surface-error-boundary";
 import { toPluginTheme } from "../theme";
+import { CompletedTurnFooter } from "@/agent-stream/turn-footer";
+
+type TurnFooterProps = ComponentProps<typeof CompletedTurnFooter>;
 import { resolvePluginPlatform } from "../platform";
 
 const pluginThemeMapping = (theme: Theme) => ({ theme: toPluginTheme(theme) });
@@ -42,12 +45,22 @@ function PluginTimelineItemBody({
   item,
   serverId,
   theme,
+  turnFooterProps,
 }: {
   agentId: string;
   item: PluginTimelineStreamItem;
   serverId: string;
   theme: PluginTheme;
+  turnFooterProps?: TurnFooterProps | null;
 }) {
+  const turnActions = useMemo(
+    () => (turnFooterProps ? <CompletedTurnFooter {...turnFooterProps} actionsOnly /> : null),
+    [turnFooterProps],
+  );
+  const turnFooter = useMemo(
+    () => (turnFooterProps ? <CompletedTurnFooter {...turnFooterProps} /> : null),
+    [turnFooterProps],
+  );
   const plugin = useInstalledPlugin(serverId, item.pluginId);
   const renderer = plugin?.timelineRenderers.find(
     (candidate) => candidate.kind === item.itemKind && candidate.version === item.version,
@@ -62,11 +75,17 @@ function PluginTimelineItemBody({
   const stateSource = useMemo(() => createPluginClientStateSource(serverId), [serverId]);
 
   if (!plugin || !renderer || !parsed || !client) {
-    return <TimelineItemUnavailable />;
+    return (
+      <>
+        <TimelineItemUnavailable />
+        {turnFooter}
+      </>
+    );
   }
 
   const Component = renderer.Component as ComponentType<PluginTimelineItemProps>;
   const props: PluginTimelineItemProps = {
+    turnActions: renderer.turnActions === "inline" ? turnActions : undefined,
     agentId,
     theme,
     host,
@@ -84,6 +103,7 @@ function PluginTimelineItemBody({
       <PluginInstallationProvider plugin={plugin}>
         <PluginClientStateProvider source={stateSource}>
           <Component {...props} />
+          {renderer.turnActions === "inline" ? null : turnFooter}
         </PluginClientStateProvider>
       </PluginInstallationProvider>
     </SurfaceErrorBoundary>
@@ -96,6 +116,7 @@ export function PluginTimelineItemView(props: {
   agentId: string;
   item: PluginTimelineStreamItem;
   serverId: string;
+  turnFooterProps?: TurnFooterProps | null;
 }) {
   return <ThemedPluginTimelineItemBody {...props} uniProps={pluginThemeMapping} />;
 }

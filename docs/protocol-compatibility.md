@@ -28,15 +28,17 @@ If you can't answer both with yes, the change isn't done.
 
 Schemas live in `packages/protocol/src/messages.ts`. New RPC names follow [rpc-namespacing.md](rpc-namespacing.md).
 
-## The feature contract: per feature, gated once
+## The feature contract: enabled by default
 
-Features don't have to work across versions. A new feature usually needs a new daemon capability, and old daemons don't have it.
+Ship new features enabled by default. Add a host capability gate only when explicitly requested by the user. Checks for actual provider support, permissions, and valid operation state still apply.
 
-The app checks for the capability and either runs the feature or tells the user to update the host.
+Features don't have to work across versions. When an explicitly requested compatibility gate is needed, the app checks it once and either runs the feature or tells the user to update the host.
 
 - **No fallback paths.** Don't build a degraded version of the feature for old daemons. Don't fan out across legacy RPCs to simulate a capability that isn't there. The user updates or doesn't get the feature.
 - **No defensive branches spread through the feature.** Detection happens in one place, and everything downstream reads a clean shape.
-- Capability flags live in `features` on the `server_info` message (`packages/protocol/src/messages.ts`, the `server_info` schema).
+- Capability advertisements live in `features` on the `server_info` message (`packages/protocol/src/messages.ts`, the `server_info` schema). Advertising a capability does not require hiding its UI behind a flag.
+
+Native Pi session fork and clone use provider support and operation-state checks without a host feature gate. Keep the optional `agentNativeSessionFork` wire field for existing clients that still read it.
 
 Existing functionality keeps working across versions. Never gate an established request on a new enhancement: negotiate the optional enhancement at the client boundary and preserve the existing request for older hosts. Whole-turn pagination can require a capability; reading conversation history cannot.
 

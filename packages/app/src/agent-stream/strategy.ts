@@ -196,6 +196,8 @@ export function createStreamStrategy(config: StreamStrategyConfig): StreamStrate
         }
         if (currentItem.kind === "assistant_message") {
           messages.push(currentItem.text);
+        } else if (currentItem.kind === "plugin" && currentItem.sourceAssistant) {
+          messages.push(currentItem.sourceAssistant.text);
         }
         laterItem = currentItem;
       }

@@ -1,4 +1,5 @@
 import type { AgentTimelineItem, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
+import { isTimelineTurnTrigger } from "@getpaseo/protocol/timeline-turn";
 import type { AgentToolCallData, PluginTimelineStreamItem, StreamItem } from "@/types/stream";
 import type { TimelineItemTransform } from "./model";
 
@@ -102,12 +103,13 @@ function transformSourceItem(
     sourceId: item.id,
   });
   if (transformed === undefined) return [item];
-  return transformed.map((pluginItem) => {
+  return transformed.map((pluginItem, index) => {
     const projected: PluginTimelineStreamItem = {
       kind: "plugin",
       id: `${pluginItem.pluginId}/${pluginItem.id}`,
       sourceId: item.id,
       sourceKind: item.kind,
+      sourceStartsTurn: index === 0 && isTimelineTurnTrigger(source),
       timestamp: item.timestamp,
       pluginId: pluginItem.pluginId,
       pluginItemId: pluginItem.id,
@@ -115,6 +117,9 @@ function transformSourceItem(
       version: pluginItem.version,
       data: pluginItem.data,
     };
+    if (item.kind === "assistant_message" && index === transformed.length - 1) {
+      projected.sourceAssistant = item;
+    }
     if (item.timelineCursor) projected.timelineCursor = item.timelineCursor;
     if (item.turnId) projected.turnId = item.turnId;
     return projected;

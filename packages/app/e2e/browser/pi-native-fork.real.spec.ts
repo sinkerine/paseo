@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
+import { installDaemonWebSocketGate } from "../support/helpers/daemon-websocket-gate";
+import { reconnectPluginChat } from "../support/helpers/plugin-timeline";
+import { expectReconnectingToastGone } from "../support/helpers/workspace-ui";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
 import { buildSeededHost } from "../support/helpers/daemon-registry";
 import { buildHostAgentDetailRoute } from "../../src/utils/host-routes";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import type { Page } from "@playwright/test";
-import { createPiNativeForkRuntime } from "../support/helpers/pi-native-fork";
+import {
+  createPiNativeForkRuntime,
+  createNativeForkTimelinePlugin,
+} from "../support/helpers/pi-native-fork";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, writeFile, mkdir, rm, rename, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -32,6 +38,134 @@ const test = base.extend<
   ],
   e2eDaemonConfig: async ({ piNativeFork }, provide) => provide(piNativeFork.daemonConfig),
   e2eDaemonEnvironment: async ({ piNativeFork }, provide) => provide(piNativeFork.environment),
+});
+
+test("assistant plugin keeps native turn actions across completion and recovery", async ({
+  page,
+  piNativeFork,
+}, testInfo) => {
+  test.setTimeout(240_000);
+  page.setDefaultTimeout(15_000);
+  const gate = await installDaemonWebSocketGate(page);
+  const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "better-fork" });
+  const root = await mkdtemp(path.join(piNativeFork.root, "better-work-"));
+  const betterPaseoSource = process.env.PASEO_BETTER_PASEO_SOURCE;
+  const pluginSource =
+    betterPaseoSource ?? (await createNativeForkTimelinePlugin(piNativeFork.root));
+  const pluginId = betterPaseoSource ? "better-paseo" : "turn-actions-e2e";
+  const previous = await client.getDaemonConfig();
+  let projectId: string | undefined;
+  const logs: string[] = [];
+  page.on("console", (message) => logs.push(message.text()));
+  const requests: string[] = [];
+  page.on("websocket", (socket) =>
+    socket.on("framesent", ({ payload }) => {
+      if (String(payload).includes('"agent.fork_session.request"')) requests.push(String(payload));
+    }),
+  );
+  try {
+    await client.patchDaemonConfig({ pluginsEnabled: true });
+    await client.installDirectoryPlugin(pluginSource);
+    execFileSync("git", ["init", "-b", "main"], { cwd: root });
+    const result = await client.createWorkspace({ source: { kind: "directory", path: root } });
+    if (!result.workspace) throw new Error(result.error ?? "Missing workspace");
+    const workspace = result.workspace;
+    projectId = workspace.projectId;
+    const source = await client.createAgent({
+      provider: "pi",
+      cwd: root,
+      workspaceId: workspace.id,
+      title: "Better Paseo turn actions",
+      model: process.env.PI_REAL_TEST_MODEL ?? "magpie/group/luna-fast",
+    });
+    await openAgentRoute(page, { workspaceId: workspace.id, agentId: source.id });
+    await expectComposerVisible(page);
+    await submitMessage(page, "Reply exactly BETTER_FORK_READY. Do not use tools.");
+    expect((await client.waitForFinish(source.id, 120_000)).status).toBe("idle");
+    const footer = page.getByTestId("footer-toolbar").first();
+    const split = footer.getByTestId("assistant-fork-menu-trigger");
+    await expect(split).toHaveCount(1);
+    await expect(page.getByTestId("assistant-fork-menu-trigger")).toHaveCount(1);
+    for (const width of [1100, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.mouse.move(width - 20, 700);
+      await split.click();
+      await expect(page.getByTestId("assistant-fork-menu-fork-session")).toBeVisible();
+      await expect(page.getByTestId("assistant-fork-menu-new-tab")).toBeVisible();
+      await expect(page.getByTestId("assistant-fork-menu-new-workspace")).toBeVisible();
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: testInfo.outputPath(`better-footer-${width}.png`) });
+      await page.keyboard.press("Escape");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(split).toHaveCount(1);
+    }
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await page.mouse.move(1080, 700);
+    await reconnectPluginChat(page, gate);
+    await expectReconnectingToastGone(page);
+    await submitMessage(page, "Use bash to run sleep 8, then reply exactly BETTER_SECOND_TURN.");
+    await expect(page.getByTestId("turn-working-indicator")).toBeVisible();
+    await split.click();
+    await expect(page.getByTestId("assistant-fork-menu-fork-session")).toHaveAttribute(
+      "data-menu-disabled",
+      "false",
+    );
+    await page.keyboard.press("Escape");
+    await page
+      .getByTestId("turn-working-indicator")
+      .getByTestId("assistant-fork-menu-trigger")
+      .click();
+    await expect(page.getByTestId("assistant-fork-menu-fork-session")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    expect((await client.waitForFinish(source.id, 120_000)).status).toBe("idle");
+    await expect(
+      page.getByTestId("footer-toolbar").getByTestId("assistant-fork-menu-trigger"),
+    ).toHaveCount(2);
+    const timeline = await client.fetchAgentTimeline(source.id, { limit: 0 });
+    const file = timeline.agent?.persistence?.nativeHandle;
+    if (!file) throw new Error("Missing native source file");
+    await rename(file, `${file}.held`);
+    try {
+      await split.click();
+      await page.getByTestId("assistant-fork-menu-fork-session").click();
+      await expect(page.getByTestId("native-session-fork-error")).toBeVisible();
+      expect(await agentsInCwd(client, root)).toHaveLength(1);
+      await page.getByTestId("native-session-fork-error-dismiss").click();
+    } finally {
+      await rename(`${file}.held`, file);
+    }
+    const before = requests.length;
+    await split.click();
+    const action = page.getByTestId("assistant-fork-menu-fork-session");
+    await action.click();
+    await expect(action).toHaveAttribute("data-menu-disabled", "true");
+    await expect(page.getByTestId("assistant-fork-menu-new-tab")).toHaveAttribute(
+      "data-menu-disabled",
+      "true",
+    );
+    await expect.poll(async () => (await agentsInCwd(client, root)).length).toBe(2);
+    expect(requests).toHaveLength(before + 1);
+    const fork = (await agentsInCwd(client, root)).find((agent) => agent.id !== source.id);
+    if (!fork) throw new Error("Missing fork");
+    await expect(page.getByTestId(`workspace-tab-agent_${fork.id}`)).toBeVisible();
+    expect(fork.persistence?.nativeHandle).not.toBe(file);
+    expect(fork.persistence?.sessionId).not.toBe(timeline.agent?.persistence?.sessionId);
+    const forkHistory = await client.fetchAgentTimeline(fork.id, { limit: 0 });
+    expect(JSON.stringify(forkHistory)).toContain("BETTER_FORK_READY");
+    expect(JSON.stringify(forkHistory)).not.toContain("BETTER_SECOND_TURN");
+    await writeFile(
+      testInfo.outputPath("better-fork.json"),
+      JSON.stringify({ source, fork, requests }, null, 2),
+    );
+  } finally {
+    await mkdir(testInfo.outputDir, { recursive: true });
+    await writeFile(testInfo.outputPath("better-console.log"), logs.join("\n"));
+    if (projectId) await client.removeProject(projectId);
+    await client.removePlugin(pluginId);
+    await client.patchDaemonConfig({ pluginsEnabled: previous.config.pluginsEnabled ?? false });
+    await client.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("native Pi tool-only completion retains its Split boundary", async ({

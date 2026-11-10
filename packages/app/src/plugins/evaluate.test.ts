@@ -179,6 +179,7 @@ describe("evaluatePluginClientBundle", () => {
         plugin.addTimelineRenderer({
           kind: "test-report",
           version: 1,
+          turnActions: "inline",
           schema,
           Component: Card,
         });
@@ -188,9 +189,13 @@ describe("evaluatePluginClientBundle", () => {
     expect(plugin.timelineTransformers.map(({ id, query }) => ({ id, query }))).toEqual([
       { id: "test-report", query: { itemType } },
     ]);
-    expect(plugin.timelineRenderers.map(({ kind, version }) => ({ kind, version }))).toEqual([
-      { kind: "test-report", version: 1 },
-    ]);
+    expect(
+      plugin.timelineRenderers.map(({ kind, version, turnActions }) => ({
+        kind,
+        version,
+        turnActions,
+      })),
+    ).toEqual([{ kind: "test-report", version: 1, turnActions: "inline" }]);
   });
 
   it("rejects unknown timeline item types", () => {

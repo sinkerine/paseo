@@ -2,6 +2,38 @@ import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
+export async function createNativeForkTimelinePlugin(root: string): Promise<string> {
+  const directory = await mkdtemp(path.join(root, "turn-actions-plugin-"));
+  await writeFile(
+    path.join(directory, "paseo-plugin.json"),
+    JSON.stringify({
+      id: "turn-actions-e2e",
+      requirements: { paseo: ">=0.15.3" },
+    }),
+  );
+  await writeFile(
+    path.join(directory, "index.client.tsx"),
+    `
+import React from "react";
+import { Text, View } from "react-native";
+import { z } from "zod";
+function Assistant({ item, turnActions }) {
+  return <View><Text>{item.data.text}</Text><View testID="footer-toolbar">{turnActions}</View></View>;
+}
+export default function contribute(client) {
+  client.addTimelineTransformer({ id: "assistant", query: { itemType: "assistant_message" },
+    transform({ item }) { return { items: [{ type: "plugin", kind: "assistant", version: 1, data: { text: item.text } }] }; },
+  });
+  client.addTimelineRenderer({ kind: "assistant", version: 1, turnActions: "inline",
+    schema: z.object({ text: z.string() }), Component: Assistant,
+  });
+  return () => {};
+}
+`,
+  );
+  return directory;
+}
+
 export async function createPiNativeForkRuntime() {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-native-browser-"));
   const agentDir = path.join(root, "pi-agent");

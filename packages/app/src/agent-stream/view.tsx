@@ -1,7 +1,7 @@
 import {
   useNativeForkAgent,
   useNativeForkPending,
-  useNativeSessionForkAvailable,
+  isNativeSessionForkAvailable,
 } from "@/hooks/use-native-fork-agent";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -87,6 +87,7 @@ import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { planTimelineTailFetch } from "@/timeline/timeline-sync-plan";
 import {
   CompletedTurnFooterRow,
+  CompletedTurnFooter,
   TurnFooter,
   TURN_FOOTER_BOTTOM_SPACING,
   type AssistantTurnForkHandler,
@@ -184,18 +185,20 @@ function renderStreamItemWithTurnFooter(input: {
   }
 
   const footerHost = input.layoutItem.completedFooter;
-  const footer = footerHost ? (
-    <CompletedTurnFooterRow
-      strategy={input.strategy}
-      items={footerHost.items}
-      timing={footerHost.timing}
-      startIndex={footerHost.startIndex}
-      supportsTimelineCursor={input.supportsTimelineCursor}
-      onForkAssistantTurn={input.onForkAssistantTurn}
-      onForkSession={input.onForkSession}
-      forkSessionDisabledReason={input.forkSessionDisabledReason}
-    />
-  ) : null;
+  const pluginOwnsFooter = footerHost?.items[footerHost.startIndex]?.kind === "plugin";
+  const footer =
+    footerHost && !pluginOwnsFooter ? (
+      <CompletedTurnFooterRow
+        strategy={input.strategy}
+        items={footerHost.items}
+        timing={footerHost.timing}
+        startIndex={footerHost.startIndex}
+        supportsTimelineCursor={input.supportsTimelineCursor}
+        onForkAssistantTurn={input.onForkAssistantTurn}
+        onForkSession={input.onForkSession}
+        forkSessionDisabledReason={input.forkSessionDisabledReason}
+      />
+    ) : null;
   const content = (
     <StreamItemWrapper gapBelow={input.layoutItem.gapBelow} turnIndent={input.turnIndent}>
       {input.content}
@@ -405,11 +408,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const streamHead = providedStreamHead ?? sessionStreamHead;
     const forkAgent = useForkAgent({ serverId: resolvedServerId, toast, readOnly });
     const nativeForkAgent = useNativeForkAgent({ serverId: resolvedServerId, toast });
-    const nativeForkAvailable = useNativeSessionForkAvailable(
-      resolvedServerId,
-      context.capabilities,
-      readOnly,
-    );
+    const nativeForkAvailable = isNativeSessionForkAvailable(context.capabilities, readOnly);
     const nativeForkPending = useNativeForkPending(resolvedServerId, agentId);
     const handleNativeFork = useStableEvent(
       async (boundary: import("./turn-boundary").AssistantTurnForkBoundary) => {
@@ -929,6 +928,60 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       ],
     );
 
+    const latestTurnId =
+      (effectiveStreamHead ?? []).findLast((item) => item.turnId)?.turnId ??
+      effectiveStreamItems.findLast((item) => item.turnId)?.turnId;
+    const nativeForkDisabledReason = useCallback(
+      (host: import("./layout").TurnFooterHost | null) => {
+        if (nativeForkPending) return t("common.states.loading");
+        const item = host?.items[host.startIndex];
+        if (context.status === "running" && (!item?.turnId || item.turnId === latestTurnId))
+          return t("message.actions.forkSessionRunning");
+        return undefined;
+      },
+      [nativeForkPending, context.status, latestTurnId, t],
+    );
+
+    const bottomTurnFooterHost = streamLayout.auxiliaryTurnFooter;
+
+    const pluginFooterProps = useMemo(() => {
+      const hosts = new Map<string, import("./layout").TurnFooterHost>();
+      for (const row of [...streamLayout.history, ...streamLayout.liveHead]) {
+        if (row.completedFooter) hosts.set(row.completedFooter.itemId, row.completedFooter);
+      }
+      if (bottomTurnFooterHost && !isTurnActive) {
+        hosts.set(bottomTurnFooterHost.itemId, bottomTurnFooterHost);
+      }
+      const props = new Map<string, ComponentProps<typeof CompletedTurnFooter>>();
+      for (const [id, host] of hosts) {
+        if (host.items[host.startIndex]?.kind !== "plugin") continue;
+        props.set(id, {
+          strategy: streamRenderStrategy,
+          items: host.items,
+          timing: host.timing,
+          startIndex: host.startIndex,
+          supportsTimelineCursor: supportsAgentForkContextCursor,
+          onForkAssistantTurn: readOnly ? undefined : handleForkAssistantTurn,
+          onForkSession: nativeForkAvailable ? handleNativeFork : undefined,
+          forkSessionDisabledReason: nativeForkDisabledReason(host),
+        });
+      }
+      return props;
+    }, [
+      streamLayout,
+      bottomTurnFooterHost,
+      isTurnActive,
+      streamRenderStrategy,
+      supportsAgentForkContextCursor,
+      readOnly,
+      handleForkAssistantTurn,
+      nativeForkAvailable,
+      handleNativeFork,
+      nativeForkDisabledReason,
+    ]);
+
+    // Streaming text must not change the renderer identity of retained history rows.
+    const getPluginFooterProps = useStableEvent((id: string) => pluginFooterProps.get(id));
     const renderStreamItemContent = useCallback(
       (item: StreamItem, layoutItem: StreamLayoutItem) => {
         switch (item.kind) {
@@ -962,10 +1015,17 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
               />
             );
 
-          case "plugin":
+          case "plugin": {
+            const footerProps = getPluginFooterProps(item.id);
             return (
-              <PluginTimelineItemView agentId={agentId} item={item} serverId={resolvedServerId} />
+              <PluginTimelineItemView
+                agentId={agentId}
+                item={item}
+                serverId={resolvedServerId}
+                turnFooterProps={footerProps}
+              />
             );
+          }
 
           default:
             return null;
@@ -973,6 +1033,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       },
       [
         agentId,
+        getPluginFooterProps,
         renderUserMessageItem,
         renderAssistantMessageItem,
         renderToolCallItem,
@@ -980,22 +1041,6 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         resolvedServerId,
       ],
     );
-
-    const latestTurnId =
-      (effectiveStreamHead ?? []).findLast((item) => item.turnId)?.turnId ??
-      effectiveStreamItems.findLast((item) => item.turnId)?.turnId;
-    const nativeForkDisabledReason = useCallback(
-      (host: import("./layout").TurnFooterHost | null) => {
-        if (nativeForkPending) return t("common.states.loading");
-        const item = host?.items[host.startIndex];
-        if (context.status === "running" && (!item?.turnId || item.turnId === latestTurnId))
-          return t("message.actions.forkSessionRunning");
-        return undefined;
-      },
-      [nativeForkPending, context.status, latestTurnId, t],
-    );
-
-    const bottomTurnFooterHost = streamLayout.auxiliaryTurnFooter;
 
     const renderStreamItem = useCallback<RenderStreamItem>(
       (item, layoutItem) => {
@@ -1039,7 +1084,9 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     );
     const turnFooterNode = useMemo(
       () =>
-        isTurnActive || bottomTurnFooterHost ? (
+        isTurnActive ||
+        (bottomTurnFooterHost &&
+          bottomTurnFooterHost.items[bottomTurnFooterHost.startIndex]?.kind !== "plugin") ? (
           <TurnFooter
             isRunning={isTurnActive}
             inFlightTurnStartedAt={baseRenderModel.turnTiming.runningStartedAt}

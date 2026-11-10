@@ -174,7 +174,8 @@ function RunningTurnFooter({
   );
 }
 
-function CompletedTurnFooter({
+export function CompletedTurnFooter({
+  actionsOnly = false,
   strategy,
   items,
   timing,
@@ -184,6 +185,7 @@ function CompletedTurnFooter({
   onForkSession,
   forkSessionDisabledReason,
 }: {
+  actionsOnly?: boolean;
   strategy: TurnContentStrategy;
   items: StreamItem[];
   timing?: TurnTiming;
@@ -219,10 +221,23 @@ function CompletedTurnFooter({
   const handleNativeFork = useCallback(async () => {
     if (boundary) await onForkSession?.(boundary);
   }, [boundary, onForkSession]);
+  if (actionsOnly) {
+    if (!boundary || !onForkAssistantTurn) return null;
+    return (
+      <AssistantForkMenu
+        onCopyChat={handleFork}
+        onForkSession={onForkSession ? handleNativeFork : undefined}
+        forkSessionDisabledReason={forkSessionDisabledReason}
+      />
+    );
+  }
+  const source = items[startIndex];
+  const hasAssistantContent =
+    source?.kind === "assistant_message" || (source?.kind === "plugin" && source.sourceAssistant);
   return (
     <View style={stylesheet.turnFooterSlot}>
       <AssistantTurnFooter
-        getContent={items[startIndex]?.kind === "assistant_message" ? getContent : undefined}
+        getContent={hasAssistantContent ? getContent : undefined}
         completedAt={timing?.completedAt}
         durationMs={timing?.durationMs}
         onFork={boundary && onForkAssistantTurn ? handleFork : undefined}

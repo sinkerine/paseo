@@ -4,10 +4,12 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import { useSessionStore } from "@/stores/session-store";
+import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import {
   useNativeForkAgent,
   useNativeForkPending,
-  useNativeSessionForkAvailable,
+  isNativeSessionForkAvailable,
+  useNativeForkTabActions,
 } from "./use-native-fork-agent";
 
 const mocks = vi.hoisted(() => ({
@@ -70,30 +72,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-test("old hosts and read-only panes hide native actions while capable interactive hosts enable them", () => {
-  const hook = renderHook(
-    ({ readOnly, supportsNativeSessionFork }) =>
-      useNativeSessionForkAvailable(
-        "server",
-        { ...capabilities, supportsNativeSessionFork },
-        readOnly,
-      ),
-    { initialProps: { readOnly: false, supportsNativeSessionFork: true } },
+test("native actions are available by default for supported providers in interactive panes", () => {
+  expect(isNativeSessionForkAvailable(capabilities)).toBe(true);
+  expect(isNativeSessionForkAvailable(capabilities, true)).toBe(false);
+  expect(isNativeSessionForkAvailable({ ...capabilities, supportsNativeSessionFork: false })).toBe(
+    false,
   );
-  expect(hook.result.current).toBe(false);
-  act(() =>
-    useSessionStore.getState().updateSessionServerInfo("server", {
-      serverId: "server",
-      hostname: null,
-      version: null,
-      features: { agentNativeSessionFork: true },
-    }),
-  );
-  expect(hook.result.current).toBe(true);
-  hook.rerender({ readOnly: true, supportsNativeSessionFork: true });
-  expect(hook.result.current).toBe(false);
-  hook.rerender({ readOnly: false, supportsNativeSessionFork: false });
-  expect(hook.result.current).toBe(false);
+  expect(isNativeSessionForkAvailable(undefined)).toBe(false);
 });
 
 test("footer and tab callers share pending state and block duplicate native fork submissions", async () => {
@@ -106,17 +91,24 @@ test("footer and tab callers share pending state and block duplicate native fork
     fork: useNativeForkAgent({ serverId: "server" }),
     pending: useNativeForkPending("server", "source"),
   }));
+  useSessionStore
+    .getState()
+    .setAgents(
+      "server",
+      new Map([["source", normalizeAgentSnapshot({ ...snapshot, id: "source" }, "server")]]),
+    );
   const tab = renderHook(() => ({
-    fork: useNativeForkAgent({ serverId: "server" }),
+    actions: useNativeForkTabActions("server", "workspace")("source"),
     pending: useNativeForkPending("server", "source"),
   }));
+  expect(tab.result.current.actions).toBeDefined();
   let operation: Promise<void> = Promise.resolve();
   act(() => {
     operation = footer.result.current.fork(request);
   });
   expect(footer.result.current.pending).toBe(true);
   expect(tab.result.current.pending).toBe(true);
-  await act(async () => tab.result.current.fork(request));
+  await act(async () => tab.result.current.actions?.onSelect());
   expect(rpc).toHaveBeenCalledOnce();
   await act(async () => {
     finish(snapshot);

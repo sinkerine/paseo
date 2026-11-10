@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { StreamItem } from "@/types/stream";
 import type { TimelineItemTransform } from "./model";
 import { projectPluginTimelineItems } from "./projection";
+import { isTurnTrigger } from "@/agent-stream/turn-membership";
 
 function thought(text: string, status: "loading" | "ready" = "loading"): StreamItem {
   return {
@@ -14,6 +15,51 @@ function thought(text: string, status: "loading" | "ready" = "loading"): StreamI
 }
 
 describe("plugin timeline projection", () => {
+  it("retains a legacy prompt boundary only on the first exploded replacement", () => {
+    const prompt: StreamItem = {
+      kind: "user_message",
+      id: "prompt",
+      text: "Prompt",
+      timestamp: new Date(),
+    };
+    const replacements = ["first", "last"].map((id) => ({
+      type: "plugin" as const,
+      id,
+      pluginId: "cards",
+      kind: "prompt",
+      version: 1,
+      data: {},
+    }));
+    const rows = projectPluginTimelineItems([prompt], () => replacements);
+    expect(rows.map(isTurnTrigger)).toEqual([true, false]);
+  });
+  it("retains assistant identity on only the final replacement across live and history", () => {
+    const source: StreamItem = {
+      kind: "assistant_message",
+      id: "assistant-source",
+      text: "Original reply",
+      messageId: "native-message",
+      turnId: "turn-one",
+      timestamp: new Date(),
+      timelineCursor: { epoch: "epoch", seq: 4 },
+    };
+    const transform: TimelineItemTransform = () =>
+      ["first", "last"].map((id) => ({
+        type: "plugin",
+        id,
+        pluginId: "better-paseo",
+        kind: "assistant",
+        version: 1,
+        data: {},
+      }));
+    for (const phase of ["streaming", "complete"] as const) {
+      const rows = projectPluginTimelineItems([source], transform, phase);
+      expect(rows[0]).not.toHaveProperty("sourceAssistant");
+      expect(rows[1]).toMatchObject({ sourceAssistant: source, turnId: "turn-one" });
+      expect(rows.map((row) => row.id)).toEqual(["better-paseo/first", "better-paseo/last"]);
+    }
+  });
+
   it.each(["message", "finished", "errored", "permission-required", "closed"] as const)(
     "preserves immutable agent-message provenance for %s cards",
     (event) => {

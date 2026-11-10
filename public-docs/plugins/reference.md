@@ -1195,6 +1195,46 @@ Text added only by your renderer is not independently indexed. Matches stay with
 block, and find skips buttons, icons, and anything with `aria-hidden="true"`. Find only runs on
 the web and desktop apps.
 
+### Place completed-turn actions inside a renderer
+
+Paseo retains the original assistant identity, message ID, cursor, and turn membership when you
+replace an assistant message. A replacement keeps the host's completed-turn footer by default.
+To place its action menu beside your own Copy button and metadata, register the renderer with
+`turnActions: "inline"` and render the `turnActions` prop once:
+
+```tsx
+function AssistantCard({ item, turnActions }: PluginTimelineItemProps<{ text: string }>) {
+  return (
+    <View>
+      <Text>{item.data.text}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>{turnActions}</View>
+    </View>
+  );
+}
+
+client.addTimelineRenderer({
+  kind: "assistant-card",
+  version: 1,
+  schema,
+  turnActions: "inline",
+  Component: AssistantCard,
+});
+```
+
+The slot is a host-rendered React node. Paseo owns provider eligibility, native **Fork session
+from here**, transcript **Copy chat to a new tab/workspace**, pending and duplicate prevention,
+errors, and navigation. Plugins control surrounding layout; do not inspect the node, clone its
+handlers, or read private app state to recreate these operations. Include the slot in custom
+memo comparisons so eligibility and pending updates reach the renderer.
+
+The slot has no visible controls while its turn is active or in read-only panes. Unsupported
+providers receive only transcript actions. Earlier completed turns remain actionable while a
+later turn runs. If one assistant expands into multiple replacement rows, only its final output
+row can receive the slot, and only the final assistant in a completed turn owns the footer.
+Daemon-appended plugin rows do not acquire assistant identity or turn actions. Returning no rows
+hides the source and its footer. Set the plugin's minimum Paseo version to the release containing
+this API before distribution.
+
 ### Append a timeline row from the daemon
 
 A server handler can add a plugin-owned row to canonical history:
