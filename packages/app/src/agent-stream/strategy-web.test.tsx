@@ -564,7 +564,7 @@ describe("createWebStreamStrategy", () => {
     expect(unmounted).not.toHaveBeenCalled();
   });
 
-  it("reports the live-head row as the reading position", () => {
+  it("does not publish reading geometry for an unmeasurable surface", () => {
     const strategy = createWebStreamStrategy({ isMobileBreakpoint: false });
     const viewportRef = React.createRef<StreamViewportHandle>();
     const onReadingPositionChange = vi.fn();
@@ -606,7 +606,7 @@ describe("createWebStreamStrategy", () => {
       );
     });
 
-    expect(onReadingPositionChange).toHaveBeenLastCalledWith("message-2");
+    expect(onReadingPositionChange).toHaveBeenLastCalledWith(null);
   });
 
   it("keeps bottom anchoring through subpixel browser rounding", () => {
@@ -1078,7 +1078,7 @@ describe("createWebStreamStrategy", () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it("reattaches follow-output when a small scroll range returns to bottom", async () => {
+  it("stays resting when a small scroll range returns to bottom", async () => {
     const scrollTo = vi.fn(function (
       this: HTMLElement,
       options?: ScrollToOptions | number,
@@ -1177,7 +1177,7 @@ describe("createWebStreamStrategy", () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
 
-    expect(scrollTo).toHaveBeenCalled();
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it("keeps following output after geometry, nested-scroll, and zoom wheel events", () => {
@@ -1591,6 +1591,7 @@ describe("createWebStreamStrategy", () => {
     if (!(firstRow instanceof HTMLElement) || !(secondRow instanceof HTMLElement)) {
       throw new Error("Expected retained history rows");
     }
+    contentNode.getBoundingClientRect = () => ({ width: 500 }) as DOMRect;
     let rowsShifted = false;
     scrollContainer.getBoundingClientRect = () => ({ top: 0, height: 500, bottom: 500 }) as DOMRect;
     firstRow.getBoundingClientRect = () =>
@@ -1629,7 +1630,7 @@ describe("createWebStreamStrategy", () => {
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, behavior: "auto" });
+    expect(scrollTo).not.toHaveBeenCalled();
 
     act(() => root?.render(renderWithActivity(false)));
     scrollTo.mockClear();
@@ -1658,6 +1659,6 @@ describe("createWebStreamStrategy", () => {
       );
     });
     expect(container.querySelector('[data-testid="agent-chat-scroll"]')).toBe(scrollContainer);
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, behavior: "auto" });
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 });

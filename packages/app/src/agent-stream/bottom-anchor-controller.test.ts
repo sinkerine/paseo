@@ -144,6 +144,8 @@ function createDriverHarness(input?: {
     getMeasurementState: () => context.measurementState,
     isNearBottom: () => context.nearBottom,
     scrollToBottom,
+    onLandingAttempt() {},
+    onLandingCancelled() {},
     onModeChange: (mode) => {
       modeChanges.push(mode);
     },
@@ -245,7 +247,7 @@ describe("bottom anchor controller driver", () => {
     });
   });
 
-  it("preserves a blocked route anchor while a user scroll ends at the bottom", () => {
+  it("cancels a blocked route anchor even when a user scroll ends at the bottom", () => {
     const harness = createDriverHarness({ authoritativeReady: false });
 
     harness.driver.applyRouteRequest({
@@ -266,16 +268,16 @@ describe("bottom anchor controller driver", () => {
     harness.driver.endUserScroll({ isAtEnd: true });
     harness.scheduler.flushAll();
 
-    expect(harness.scrollAttempts).toHaveLength(1);
+    expect(harness.scrollAttempts).toHaveLength(0);
     expect(harness.driver.getSnapshot()).toMatchObject({
-      mode: "sticky-bottom",
+      mode: "detached",
       blockedReason: null,
       pendingRequest: null,
       pendingVerification: null,
     });
   });
 
-  it("preserves a blocked route anchor when layout moves after drag release", () => {
+  it("cancels a blocked route anchor when layout moves after drag release", () => {
     const harness = createDriverHarness({ authoritativeReady: false });
 
     harness.driver.applyRouteRequest({
@@ -296,9 +298,9 @@ describe("bottom anchor controller driver", () => {
     harness.driver.endUserScroll({ isAtEnd: true });
     harness.scheduler.flushAll();
 
-    expect(harness.scrollAttempts).toHaveLength(1);
+    expect(harness.scrollAttempts).toHaveLength(0);
     expect(harness.driver.getSnapshot()).toMatchObject({
-      mode: "sticky-bottom",
+      mode: "detached",
       blockedReason: null,
       pendingRequest: null,
       pendingVerification: null,
@@ -394,7 +396,7 @@ describe("bottom anchor controller driver", () => {
     expect(harness.scrollAttempts).toHaveLength(0);
   });
 
-  it("resumes following when a user scroll ends at the end", () => {
+  it("stays resting when a user scroll ends at the end", () => {
     const harness = createDriverHarness({
       transportBehavior: {
         verificationDelayFrames: 2,
@@ -418,15 +420,15 @@ describe("bottom anchor controller driver", () => {
     harness.scheduler.flushAll();
 
     expect(harness.driver.getSnapshot()).toMatchObject({
-      mode: "sticky-bottom",
+      mode: "detached",
       pendingRequest: null,
       pendingVerification: null,
     });
     // Following stopped for the gesture, so content that arrived meanwhile left the end below it.
-    expect(harness.scrollAttempts).toEqual([false]);
+    expect(harness.scrollAttempts).toEqual([]);
   });
 
-  it("holds a disclosure detached and resumes following when it is released at the end", () => {
+  it("holds a disclosure detached and stays resting when released at the end", () => {
     const harness = createDriverHarness({
       transportBehavior: {
         verificationDelayFrames: 2,
@@ -448,7 +450,7 @@ describe("bottom anchor controller driver", () => {
     harness.driver.releaseDisclosure({ isAtEnd: true });
     harness.scheduler.flushAll();
 
-    expect(harness.driver.getSnapshot().mode).toBe("sticky-bottom");
+    expect(harness.driver.getSnapshot().mode).toBe("detached");
   });
 
   it("stays detached when a disclosure is released away from the end", () => {
@@ -485,13 +487,13 @@ describe("bottom anchor controller driver", () => {
     });
     harness.scheduler.flushAll();
 
-    expect(harness.modeChanges).toContain("detached");
+    expect(harness.driver.getSnapshot().pendingRequest).toBeNull();
     expect(harness.modeChanges).toContain("sticky-bottom");
     expect(harness.scrollAttempts).toHaveLength(1);
     expect(harness.driver.getSnapshot().mode).toBe("sticky-bottom");
   });
 
-  it("scrolls for a viewport resize while following", () => {
+  it("does not scroll for a resting viewport resize", () => {
     const harness = createDriverHarness();
 
     harness.driver.handleViewportMetricsChange({
@@ -502,10 +504,10 @@ describe("bottom anchor controller driver", () => {
     });
     harness.scheduler.flushAll();
 
-    expect(harness.scrollAttempts).toHaveLength(1);
+    expect(harness.scrollAttempts).toHaveLength(0);
   });
 
-  it("never scrolls for a content change while following", () => {
+  it("never scrolls for a resting content change", () => {
     const harness = createDriverHarness({
       transportBehavior: {
         verificationDelayFrames: 2,
@@ -521,7 +523,7 @@ describe("bottom anchor controller driver", () => {
 
     expect(harness.scrollAttempts).toHaveLength(0);
     expect(harness.driver.getSnapshot()).toMatchObject({
-      mode: "sticky-bottom",
+      mode: "detached",
       pendingRequest: null,
       pendingVerification: null,
     });
@@ -718,47 +720,29 @@ describe("bottom anchor controller driver", () => {
     });
   });
 
-  it("keeps sticky-bottom during viewport growth until bottom is re-verified", () => {
-    const harness = createDriverHarness();
-    harness.context.nearBottom = false;
-    harness.setScrollToBottomBehavior(() => {
-      harness.context.measurementState.offsetY = 720;
+  it("clears exhausted verification on settlement and cannot revive from layout", () => {
+    const harness = createDriverHarness({ isNearBottom: false });
+    harness.setScrollToBottomBehavior(() => {});
+    harness.driver.requestLocalAnchor({ agentId: "agent-1", reason: "message-sent" });
+    harness.scheduler.flushAll();
+    expect(harness.scrollAttempts).toHaveLength(4);
+    harness.driver.settleLanding();
+    expect(harness.driver.getSnapshot()).toEqual({
+      mode: "detached",
+      pendingRequest: null,
+      pendingVerification: null,
+      blockedReason: null,
     });
-
+    harness.driver.handleContentSizeChange();
     harness.driver.handleViewportMetricsChange({
       previousViewportWidth: 800,
       viewportWidth: 800,
       previousViewportHeight: 480,
       viewportHeight: 420,
     });
+    harness.driver.reevaluate();
     harness.scheduler.flushAll();
-
     expect(harness.scrollAttempts).toHaveLength(4);
-    expect(harness.driver.getSnapshot()).toMatchObject({
-      mode: "sticky-bottom",
-      pendingRequest: null,
-      pendingVerification: null,
-    });
-
-    harness.driver.handleScrollNearBottomChange({
-      nextIsNearBottom: false,
-      scrollDelta: 0,
-    });
-
-    expect(harness.driver.getSnapshot().mode).toBe("sticky-bottom");
-
-    harness.context.nearBottom = true;
-    harness.driver.handleScrollNearBottomChange({
-      nextIsNearBottom: true,
-      scrollDelta: 0,
-    });
-    harness.scheduler.flushAll();
-    harness.driver.handleScrollNearBottomChange({
-      nextIsNearBottom: false,
-      scrollDelta: 64,
-    });
-
-    expect(harness.driver.getSnapshot().mode).toBe("detached");
   });
 });
 

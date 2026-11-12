@@ -284,9 +284,6 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
             drawDistance: NATIVE_STREAM_DRAW_DISTANCE,
           }),
       });
-      const endOffsetY = Math.max(0, metrics.contentHeight - metrics.viewportHeight);
-      scrollOffsetYRef.current = endOffsetY;
-      streamViewportMetricsRef.current = { ...metrics, offsetY: endOffsetY };
       onNearBottomChange(true);
     },
     [onNearBottomChange],
@@ -294,6 +291,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
 
   const bottomAnchorController = useBottomAnchorController({
     agentId,
+    isActive,
     routeRequest: routeBottomAnchorRequest,
     isAuthoritativeHistoryReady,
     renderStrategy: "legend-stream",
@@ -415,7 +413,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
   // drops the pin in the commit that mounts the reply, so the reply grows below the held row.
   const isEndHeld =
     endHold !== null && disclosureAnchor(rows, endHold.rowId, "bottom").kind === "end";
-  const isEndPinned = isFollowingEnd || isEndHeld;
+  const isEndPinned = isActive && (isFollowingEnd || isEndHeld);
   const pinsEnd = isEndPinned && isListPlaced;
   const maintainVisibleContentPosition = useMemo(
     () => (isEndPinned ? false : { data: true, size: true, shouldRestorePosition }),
@@ -762,7 +760,6 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
         maintainVisibleContentPosition={maintainVisibleContentPosition}
         renderScrollComponent={renderScrollComponent}
         recycleItems={false}
-        alignItemsAtEnd
         initialScrollAtEnd
         drawDistance={NATIVE_STREAM_DRAW_DISTANCE}
         getEstimatedItemSize={getEstimatedItemSize}

@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { readScrollMetrics, waitForContentGrowth, expectNearBottom } from "./agent-bottom-anchor";
+import { expectStableViewportDuringGrowth } from "./agent-bottom-anchor";
 
 export async function awaitAssistantMessage(page: Page, hasText?: string | RegExp): Promise<void> {
   const messages = page.getByTestId("assistant-message");
@@ -72,8 +72,6 @@ export async function expectTurnCopyButton(page: Page): Promise<void> {
   });
 }
 
-export async function expectScrollFollowsNewContent(page: Page): Promise<void> {
-  const { contentHeight } = await readScrollMetrics(page);
-  await waitForContentGrowth(page, contentHeight);
-  await expectNearBottom(page);
+export async function expectScrollStableDuringNewContent(page: Page): Promise<void> {
+  await expectStableViewportDuringGrowth(page);
 }

@@ -72,21 +72,34 @@ export async function holdParagraphThroughCompletion(page: Page, agent: MockAgen
   const stream = await holdAssistantStream(page, agent.agentId);
   await openAgentRoute(page, agent);
   await page.getByRole("textbox", { name: "Message agent...", exact: true }).waitFor();
-  const scroll = page.getByTestId("agent-chat-scroll");
-  const following = await scroll.evaluateHandle((viewport) => {
-    const result = { stopped: false, maxGap: 0 };
+  await agent.client.sendAgentMessage(agent.agentId, "Stream the mixed response.");
+  await stream.showUntil("Long section 3\n");
+  const fixedHeading = page.getByRole("heading", { name: "Long section 0", exact: true });
+  await fixedHeading.waitFor({ state: "attached" });
+  const growing = await fixedHeading.evaluateHandle((heading) => {
+    const viewport = document.querySelector<HTMLElement>('[data-testid="agent-chat-scroll"]')!;
+    viewport.scrollTop +=
+      heading.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 20;
+    const offset = viewport.scrollTop;
+    const y = heading.getBoundingClientRect().y;
+    const height = viewport.scrollHeight;
+    const result = { stopped: false, maxOffsetDrift: 0, maxAnchorDrift: 0, renderedGrowth: 0 };
     const frame = () => {
       if (result.stopped) return;
-      result.maxGap = Math.max(
-        result.maxGap,
-        viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop,
+      result.maxOffsetDrift = Math.max(
+        result.maxOffsetDrift,
+        Math.abs(viewport.scrollTop - offset),
       );
+      result.maxAnchorDrift = Math.max(
+        result.maxAnchorDrift,
+        Math.abs(heading.getBoundingClientRect().y - y),
+      );
+      result.renderedGrowth = Math.max(result.renderedGrowth, viewport.scrollHeight - height);
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
     return result;
   });
-  await agent.client.sendAgentMessage(agent.agentId, "Stream the mixed response.");
   await stream.showUntil("Long section 12\n");
   await page
     .getByRole("heading", { name: "Long section 12", exact: true })
@@ -96,15 +109,10 @@ export async function holdParagraphThroughCompletion(page: Page, agent: MockAgen
   await expect(page.getByTestId("mermaid-viewport")).toHaveCount(2);
   await expect(page.getByTestId("mermaid-viewport").nth(0)).toHaveCSS("opacity", "1");
   await expect(page.getByTestId("mermaid-viewport").nth(1)).toHaveCSS("opacity", "1");
-  const maxFollowGap = await following.evaluate((result) => {
+  const growthStability = await growing.evaluate((result) => {
     result.stopped = true;
-    return result.maxGap;
+    return result;
   });
-  const bounds = await scroll.boundingBox();
-  if (!bounds) throw new Error("Reader viewport is missing");
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-  await page.mouse.wheel(0, -1600);
-  await page.waitForTimeout(150);
   const paragraph = page.getByRole("heading", { name: "Long section 3", exact: true });
   await paragraph.waitFor({ state: "attached" });
   const recording = await paragraph.evaluateHandle((heading) => {
@@ -156,7 +164,7 @@ export async function holdParagraphThroughCompletion(page: Page, agent: MockAgen
   ).toBeVisible();
   stream.release();
   await page.waitForFunction((result) => result.done, recording);
-  return { ...(await recording.jsonValue()), maxFollowGap };
+  return { ...(await recording.jsonValue()), ...growthStability };
 }
 
 /** Real HTTP image responses, with intrinsic dimensions unavailable until the response arrives. */

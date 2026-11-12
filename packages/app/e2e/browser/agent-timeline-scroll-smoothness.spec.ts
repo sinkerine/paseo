@@ -213,9 +213,11 @@ test("holds a paragraph still while a mixed response streams and completes", asy
       "the held reader must observe an actively growing response",
     ).toBeGreaterThan(1000);
     expect(
-      reading.maxFollowGap,
-      "follow-bottom must catch each streamed commit before the next frame",
+      reading.maxOffsetDrift,
+      "output growth must preserve the viewport offset",
     ).toBeLessThanOrEqual(1);
+    expect(reading.maxAnchorDrift).toBeLessThanOrEqual(1);
+    expect(reading.renderedGrowth).toBeGreaterThan(300);
     expect(
       reading.maxDrift,
       "streaming must preserve the held paragraph's viewport position",

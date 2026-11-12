@@ -90,6 +90,8 @@ function mountTimeline(historyMounted: StreamItem[]) {
   };
 
   return {
+    scrollContainer,
+    viewportRef,
     render: (segments: Partial<StreamRenderInput["segments"]>) => act(() => render(segments)),
     hold: (rowId: string, apply: () => void, triggerEdge: DisclosureTriggerEdge = "top") =>
       act(() => viewportRef.current!.holdRow(rowId, apply, triggerEdge)),
@@ -191,7 +193,7 @@ describe("web disclosure hold", () => {
     }
   });
 
-  it("resumes following when collapsing an anchored row lands back at the end", async () => {
+  it("stays resting when collapsing an anchored row lands back at the end", async () => {
     const history = [1, 2, 3, 4, 5, 6].map((index) => row(index));
     const timeline = mountTimeline(history);
     await timeline.settle();
@@ -205,6 +207,54 @@ describe("web disclosure hold", () => {
 
     timeline.render({ liveHead: [row(8)] });
     await timeline.settle();
+    expect(timeline.distanceFromEnd()).toBeGreaterThan(1);
+  });
+});
+
+describe("bounded end landing", () => {
+  it("lands once, keeps visible text fixed through growth, and offers another explicit landing", async () => {
+    const history = Array.from({ length: 20 }, (_, index) => row(index));
+    const timeline = mountTimeline(history);
+    await timeline.settle();
+    const anchor = timeline.rowTop("message-18");
+    const offset = timeline.scrollContainer.scrollTop;
+    for (let count = 1; count <= 10; count += 1) {
+      timeline.render({ liveHead: [row(30, count * 40)] });
+      await timeline.settle();
+      expect(Math.abs(timeline.scrollContainer.scrollTop - offset)).toBeLessThanOrEqual(1);
+      expect(Math.abs(timeline.rowTop("message-18") - anchor)).toBeLessThanOrEqual(1);
+    }
+    expect(timeline.distanceFromEnd()).toBeGreaterThanOrEqual(300);
+    act(() => timeline.viewportRef.current!.scrollToBottom());
+    await timeline.settle();
     expect(timeline.distanceFromEnd()).toBeLessThanOrEqual(1);
+    const landedOffset = timeline.scrollContainer.scrollTop;
+    timeline.render({ liveHead: [row(30, 800)] });
+    await timeline.settle();
+    expect(timeline.scrollContainer.scrollTop).toBe(landedOffset);
+  });
+
+  it("keeps an underfilled prompt at the top through overflow", async () => {
+    const timeline = mountTimeline([row(1, 10)]);
+    await timeline.settle();
+    const top = timeline.rowTop("message-1");
+    for (const height of [10, 30, 100, 400]) {
+      timeline.render({ liveHead: [row(2, height)] });
+      await timeline.settle();
+      expect(timeline.rowTop("message-1")).toBe(top);
+      expect(timeline.scrollContainer.scrollTop).toBe(0);
+    }
+  });
+
+  it("cancels landing for downward viewport intent and never reattaches at the end", async () => {
+    const timeline = mountTimeline(Array.from({ length: 20 }, (_, index) => row(index)));
+    act(() => timeline.scrollContainer.dispatchEvent(new WheelEvent("wheel", { deltaY: 20 })));
+    timeline.scrollTo(timeline.scrollContainer.scrollHeight);
+    await timeline.settle();
+    const offset = timeline.scrollContainer.scrollTop;
+    timeline.render({ liveHead: [row(30, 400)] });
+    await timeline.settle();
+    expect(timeline.scrollContainer.scrollTop).toBe(offset);
+    expect(timeline.distanceFromEnd()).toBeGreaterThan(300);
   });
 });
