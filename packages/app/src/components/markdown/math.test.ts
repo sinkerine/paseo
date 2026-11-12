@@ -21,6 +21,15 @@ describe("math source adaptation", () => {
 });
 
 it.each([
+  ["\\[\nx\n=\ny\n\\]", "$$\nx =\ny\n$$"],
+  ["\\[\nx\n-\ny\n\\]", "$$\nx -\ny\n$$"],
+  ["\\[\nx\n===\ny\n\\]", "$$\nx ===\ny\n$$"],
+  ["\\[\r\nx\r\n = \r\ny\r\n\\]", "$$\r\nx  = \r\ny\r\n$$"],
+])("keeps heading underlines inside display math: %s", (source, expected) => {
+  expect(adapt(source).rendered).toBe(expected);
+});
+
+it.each([
   [String.raw`\\[x\\]`, String.raw`\\[x\\]`],
   [String.raw`\\(x\\)`, String.raw`\\(x\\)`],
   [String.raw`\(x\\) + y\)`, String.raw`$x\\) + y$`],

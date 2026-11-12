@@ -1106,6 +1106,20 @@ const MATH_FIXTURES = [
     math: [["LatexMathDisplay", ` ${SCREENSHOT_TEX} `]],
   },
   {
+    name: "RMSNorm with an equals sign on its own line",
+    source: String.raw`\[
+\operatorname{RMSNorm}(x)
+=
+\frac{x}{\sqrt{\operatorname{mean}(x^2)+\epsilon}} \odot w
+\]`,
+    math: [
+      [
+        "LatexMathDisplay",
+        String.raw` \operatorname{RMSNorm}(x) = \frac{x}{\sqrt{\operatorname{mean}(x^2)+\epsilon}} \odot w `,
+      ],
+    ],
+  },
+  {
     name: "own-line dollar delimiters",
     source: "$$\nx^2\n$$",
     math: [["LatexMathDisplay", " x^2 "]],

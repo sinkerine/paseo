@@ -175,6 +175,16 @@ export function collectMathEdits(
       { start: delimiter.index, end: delimiter.index + 2, text },
       { start: delimiter.close, end: delimiter.close + 2, text },
     );
+    if (delimiter.kind === "displayOpen") {
+      // MD4C resolves block syntax before math. An own-line equals or minus
+      // becomes a Setext heading underline unless it joins the preceding line.
+      const content = source.slice(delimiter.index + 2, delimiter.close);
+      for (const match of content.matchAll(/\r?\n[^\S\r\n]*(?:=+|-+)[^\S\r\n]*(?=\r?\n|$)/g)) {
+        const start = delimiter.index + 2 + match.index;
+        const end = start + (match[0].startsWith("\r\n") ? 2 : 1);
+        edits.push({ start, end, text: " " });
+      }
+    }
     mathEnd = delimiter.close + 2;
     math.push({ start: delimiter.index, end: mathEnd });
   }
