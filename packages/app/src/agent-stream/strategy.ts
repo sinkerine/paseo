@@ -56,11 +56,12 @@ export type DisclosureTriggerEdge = "top" | "bottom";
 export interface StreamViewportHandle {
   /** Give keyboard navigation back to the scrolling surface on web. */
   focus?: () => void;
+  /** Request one bounded end landing; later output preserves the reading position. */
   scrollToBottom: (reason?: BottomAnchorLocalRequest["reason"]) => void;
   prepareForViewportChange: () => void;
   /**
    * Run a disclosure's state change so the row that owns its trigger keeps the edge the trigger
-   * sits on in place. Following output stops; it resumes if the change leaves the list at its end.
+   * sits on in place. The viewport remains resting after the hold, including at the end.
    */
   holdRow: (rowId: string, apply: () => void, triggerEdge: DisclosureTriggerEdge) => void;
   scrollToMessage?: (messageId: string, occurrence?: ScrollToMessageOccurrence) => void;

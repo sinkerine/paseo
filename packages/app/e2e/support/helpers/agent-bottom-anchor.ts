@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
 const NEAR_BOTTOM_THRESHOLD_PX = 72;
-const DEFAULT_SCROLL_TOLERANCE_PX = 24;
+const DEFAULT_SCROLL_TOLERANCE_PX = 1;
 
 export interface ScrollMetrics {
   offsetY: number;
@@ -306,8 +306,84 @@ export async function expectScrollStaysFixed(
       contentHeight: metrics.contentHeight,
     });
     expect(
-      metrics.offsetY,
+      Math.abs(metrics.offsetY - baseline.offsetY),
       JSON.stringify({ baseline, samples: samples.slice(-12) }),
-    ).toBeLessThanOrEqual(baseline.offsetY + tolerancePx);
+    ).toBeLessThanOrEqual(tolerancePx);
   }
+}
+
+export interface StableViewportSample {
+  elapsedMs: number;
+  offsetY: number;
+  anchorY: number;
+  contentHeight: number;
+  textLength: number;
+}
+
+/** Measure a fixed visible text range as well as the offset on every painted frame. */
+export async function expectStableViewportDuringGrowth(
+  page: Page,
+  input: { durationMs?: number; minGrowthPx?: number } = {},
+): Promise<StableViewportSample[]> {
+  const samples = await getVisibleChatScroll(page).evaluate(
+    async (root, options) => {
+      const viewport = root as HTMLElement;
+      const clip = viewport.getBoundingClientRect();
+      const walker = document.createTreeWalker(viewport, NodeFilter.SHOW_TEXT);
+      let range: Range | null = null;
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.textContent?.trim() || !node.parentElement?.closest("[data-history-row-id]"))
+          continue;
+        const candidate = document.createRange();
+        candidate.setStart(node, 0);
+        candidate.setEnd(node, Math.min(20, node.textContent.length));
+        const bounds = candidate.getBoundingClientRect();
+        if (bounds.height > 0 && bounds.top >= clip.top && bounds.bottom <= clip.bottom) {
+          range = candidate;
+          break;
+        }
+      }
+      if (!range) throw new Error("No visible fixed text anchor for stability measurement");
+      const anchor = range;
+      const frameSamples: StableViewportSample[] = [];
+      const startedAt = performance.now();
+      await new Promise<void>((resolve, reject) => {
+        function frame(now: number) {
+          if (!anchor.startContainer.isConnected) {
+            reject(new Error("Visible text anchor was unmounted during pure tail growth"));
+            return;
+          }
+          frameSamples.push({
+            elapsedMs: now - startedAt,
+            offsetY: viewport.scrollTop,
+            anchorY: anchor.getBoundingClientRect().top,
+            contentHeight: viewport.scrollHeight,
+            textLength: viewport.textContent?.length ?? 0,
+          });
+          if (now - startedAt >= options.durationMs) resolve();
+          else requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      });
+      return frameSamples;
+    },
+    { durationMs: input.durationMs ?? 5_000 },
+  );
+  const baseline = samples[0]!;
+  const last = samples.at(-1)!;
+  const evidence = JSON.stringify({ baseline, last, samples });
+  expect(last.contentHeight - baseline.contentHeight, evidence).toBeGreaterThanOrEqual(
+    input.minGrowthPx ?? 300,
+  );
+  expect(last.textLength, evidence).toBeGreaterThan(baseline.textLength);
+  expect(
+    Math.max(...samples.map((sample) => Math.abs(sample.offsetY - baseline.offsetY))),
+    evidence,
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.max(...samples.map((sample) => Math.abs(sample.anchorY - baseline.anchorY))),
+    evidence,
+  ).toBeLessThanOrEqual(1);
+  return samples;
 }
