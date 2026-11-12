@@ -1137,6 +1137,11 @@ const MATH_FIXTURES = [
     source: String.raw`Before \(x^2\) after.`,
     math: [["LatexMathInline", "x^2"]],
   },
+  {
+    name: "attention scaling with a text subscript",
+    source: String.raw`The function also applies the usual \(1/\sqrt{\text{head_dim}}\) scale automatically.`,
+    math: [["LatexMathInline", String.raw`1/\sqrt{\text{head_dim}}`]],
+  },
   { name: "prefix currency", source: "It costs $5 and $10.", math: [] },
   { name: "currency range", source: "$5-$10", math: [] },
   { name: "currency suffix on prefix", source: "US$5", math: [] },
