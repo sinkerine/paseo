@@ -2,6 +2,21 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const fr: TranslationResources = {
+  btw: {
+    label: "BTW",
+    title: "Conversation BTW",
+    show: "Afficher la conversation BTW",
+    hide: "Masquer la conversation BTW",
+    minimize: "Réduire",
+    placeholder: "Poser une question à part",
+    send: "Envoyer",
+    stop: "Arrêter",
+    inject: "Envoyer à la conversation principale",
+    summarize: "Résumer pour la principale",
+    newThread: "Nouvelle conversation",
+    clear: "Effacer",
+    accepted: "Commande acceptée",
+  },
   paneFind: {
     connectionFailure:
       "Impossible de rechercher dans cette conversation. Vérifiez la connexion à l’hôte et réessayez.",

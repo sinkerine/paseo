@@ -1,3 +1,4 @@
+import { BtwWindow } from "@/btw/window";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -1213,12 +1214,20 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
         />
       </RenderProfile>
       {hasActiveComposer && !draft ? (
-        <AgentTracks
-          serverId={serverId}
-          workspaceId={workspaceId}
-          agentId={agentId}
-          parentAgentId={parentPillAgentId}
-        />
+        <>
+          <BtwWindow
+            serverId={serverId}
+            agentId={agentId}
+            isPaneFocused={isPaneFocused}
+            isComposerFullscreen={isComposerFullscreen}
+          />
+          <AgentTracks
+            serverId={serverId}
+            workspaceId={workspaceId}
+            agentId={agentId}
+            parentAgentId={parentPillAgentId}
+          />
+        </>
       ) : null}
     </View>
   );

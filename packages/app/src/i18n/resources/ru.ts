@@ -2,6 +2,21 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ru: TranslationResources = {
+  btw: {
+    label: "BTW",
+    title: "Разговор BTW",
+    show: "Показать разговор BTW",
+    hide: "Скрыть разговор BTW",
+    minimize: "Свернуть",
+    placeholder: "Задать побочный вопрос",
+    send: "Отправить",
+    stop: "Остановить",
+    inject: "Отправить в основной чат",
+    summarize: "Отправить сводку в основной чат",
+    newThread: "Новый разговор",
+    clear: "Очистить",
+    accepted: "Команда принята",
+  },
   paneFind: {
     connectionFailure:
       "Не удалось выполнить поиск в чате. Проверьте подключение к хосту и повторите попытку.",

@@ -847,3 +847,29 @@ describe("selectProviderSubagentDescendants", () => {
     expect(descendants().map((row) => row.id)).toEqual(["a", "b", "self"]);
   });
 });
+
+it("excludes side conversations from direct and nested tracks while retaining unknown presentations", () => {
+  const base: ProviderSubagentDescriptorPayload = {
+    id: "btw",
+    parentAgentId: "parent",
+    provider: "pi",
+    title: "Question",
+    description: null,
+    status: "running",
+    createdAt: AGENT_TIMESTAMP.toISOString(),
+    updatedAt: AGENT_TIMESTAMP.toISOString(),
+    toolCallId: null,
+    presentation: "side_conversation",
+  };
+  useProviderSubagentStore
+    .getState()
+    .replaceList(SERVER_ID, "parent", [base, { ...base, id: "future", presentation: "future" }]);
+  const state = useProviderSubagentStore.getState();
+  const params = { serverId: SERVER_ID, parentAgentId: "parent" };
+  expect(selectProviderSubagentsForParent(state, params, true, true).map(({ id }) => id)).toEqual([
+    "future",
+  ]);
+  expect(selectProviderSubagentDescendants(state, params, true, true).map(({ id }) => id)).toEqual([
+    "future",
+  ]);
+});

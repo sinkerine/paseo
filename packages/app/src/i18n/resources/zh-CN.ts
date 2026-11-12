@@ -2,6 +2,21 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const zhCN: TranslationResources = {
+  btw: {
+    label: "BTW",
+    title: "BTW 对话",
+    show: "显示 BTW 对话",
+    hide: "隐藏 BTW 对话",
+    minimize: "最小化",
+    placeholder: "提出旁支问题",
+    send: "发送",
+    stop: "停止",
+    inject: "发送到主对话",
+    summarize: "总结到主对话",
+    newThread: "新建对话",
+    clear: "清空",
+    accepted: "命令已接受",
+  },
   paneFind: {
     connectionFailure: "无法搜索此聊天。请检查主机连接后重试。",
     historyChangedFailure: "搜索期间聊天已更改。请重新搜索。",

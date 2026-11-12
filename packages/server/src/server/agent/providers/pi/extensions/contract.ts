@@ -37,6 +37,9 @@ export interface PiExtensionCustomMapping {
 export interface PiChildSessionFile {
   id: string;
   file: string;
+  lifetime?: "conversation";
+  /** Producer-specific display projection; lifetime alone never changes message content. */
+  projection?: "pi-btw";
 }
 
 export type PiExtensionDialog = Extract<PiRuntimeEvent, { type: "extension_ui_request" }>;
@@ -54,7 +57,17 @@ export interface PiExtensionUiReply {
   responses: Array<{ id: string; response: PiExtensionUiResponse }>;
 }
 
+export interface PiExtensionOutOfBandCommand {
+  /** Clears only a host-owned command error after a later Pi admission succeeds. */
+  complete?(): PiExtensionCustomMapping | undefined;
+  /** Captures a live target at dispatch; a replaced or cleared target must decline late failures. */
+  fail(error: Error): PiExtensionCustomMapping | undefined;
+}
+
 export interface PiExtensionSession {
+  /** Current validated runtime state for history-only replay; must not mutate the live adapter. */
+  replay?(): PiExtensionCustomMapping | undefined;
+  beginOutOfBandCommand?(commandName: string): PiExtensionOutOfBandCommand | undefined;
   mapToolCall?(call: PiExtensionToolCall): PiExtensionToolMapping | undefined;
   /** Claims a `ctx.ui.notify` message sent by this extension's `runtimeBridge`. */
   mapRuntimeNotification?(message: string): PiExtensionCustomMapping | undefined;
@@ -79,5 +92,7 @@ export interface PiExtension {
    * state that Pi's RPC stream omits through `ctx.ui.notify`, which reaches `mapRuntimeNotification`.
    */
   runtimeBridge?: string;
+  /** Commands admitted independently of the parent turn, when installed in Pi. */
+  outOfBandCommands?: readonly string[];
   createSession(): PiExtensionSession;
 }

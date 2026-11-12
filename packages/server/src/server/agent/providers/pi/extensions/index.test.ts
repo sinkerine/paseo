@@ -1,12 +1,17 @@
 import { describe, expect, test } from "vitest";
-import { mkdtemp, appendFile, rm } from "node:fs/promises";
+import { mkdtemp, appendFile, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPiExtensionHost } from "./index.js";
 import { PiHistoryMapper } from "../history-mapper.js";
 import { parseToolArgs, parseToolResult } from "../tool-call-mapper.js";
-import type { PiExtension } from "./contract.js";
+import type { PiExtension, PiExtensionCustomMapping } from "./contract.js";
+import { PiChildSessionFollower } from "./child-session.js";
 import { PiExtensionHost } from "./host.js";
+import {
+  ProviderSubagentStore,
+  type ProviderSubagentInputEvent,
+} from "../../../provider-subagents/store.js";
 
 const throwingAdapter: PiExtension = {
   id: "throwing-test-adapter",
@@ -75,6 +80,48 @@ describe("Pi extension host", () => {
       await appendFile(file, 'NE"}]}}\n');
       await expect.poll(() => received.length).toBe(2);
       expect(received.join(" ")).toContain("DONE");
+    } finally {
+      host.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  test("publishes the final one-shot child read before releasing its follower", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-finished-child-"));
+    const file = join(dir, "child.jsonl");
+    const host = new PiExtensionHost([
+      {
+        id: "child",
+        createSession: () => ({
+          mapRuntimeNotification: () => ({
+            subagents: [{ type: "upsert", id: "child", status: "completed" }],
+            childSessions: [{ id: "child", file }],
+          }),
+        }),
+      },
+    ]);
+    const received: ProviderSubagentInputEvent[] = [];
+    try {
+      await writeFile(
+        file,
+        JSON.stringify({
+          message: { role: "assistant", content: [{ type: "text", text: "FINAL" }] },
+        }) + "\n",
+      );
+      host.follow((event) => {
+        if (event.type === "provider_subagent") received.push(event.event);
+      });
+      await host.mapRuntimeNotification("finished")?.hydration;
+      expect(received).toMatchObject([
+        { type: "timeline", item: { type: "assistant_message", text: "FINAL" } },
+      ]);
+      await appendFile(
+        file,
+        JSON.stringify({
+          message: { role: "assistant", content: [{ type: "text", text: "AFTER_COMPLETION" }] },
+        }) + "\n",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      expect(received).toHaveLength(1);
     } finally {
       host.close();
       await rm(dir, { recursive: true, force: true });
@@ -269,3 +316,282 @@ describe("Pi extension host", () => {
     expect(parseToolArgs("subagent", args).toolName).toBe("subagent");
   });
 });
+
+test("conversation followers park at idle, retain offsets past 200 items and reset only on replacement", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paseo-btw-follower-"));
+  const file = join(dir, "thread.jsonl");
+  const other = join(dir, "replacement.jsonl");
+  const received: string[] = [];
+  const host = new PiExtensionHost([
+    {
+      id: "conversation",
+      createSession: () => ({
+        mapRuntimeNotification: (status) => ({
+          subagents: [
+            {
+              type: "upsert",
+              id: "btw:thread",
+              status: status === "running" ? "running" : "completed",
+            },
+          ],
+          childSessions: [
+            {
+              id: "btw:thread",
+              file: status === "replacement" ? other : file,
+              lifetime: "conversation",
+            },
+          ],
+        }),
+      }),
+    },
+  ]);
+  const row = (n: number) =>
+    JSON.stringify({
+      type: "message",
+      message: { role: "assistant", content: [{ type: "text", text: `answer-${n}` }] },
+    }) + "\n";
+  try {
+    host.follow((event) => {
+      if (event.type === "provider_subagent" && event.event.type === "timeline")
+        received.push(JSON.stringify(event.event.item));
+    });
+    await appendFile(file, Array.from({ length: 230 }, (_, i) => row(i)).join(""));
+    await host.mapRuntimeNotification("idle")?.hydration;
+    expect(received).toHaveLength(230);
+    await host.mapRuntimeNotification("running")?.hydration;
+    expect(received).toHaveLength(230);
+    await appendFile(file, row(230));
+    await host.mapRuntimeNotification("idle")?.hydration;
+    expect(received).toHaveLength(231);
+    await host.mapRuntimeNotification("running")?.hydration;
+    await host.mapRuntimeNotification("idle")?.hydration;
+    expect(received).toHaveLength(231);
+    await appendFile(other, row(999));
+    await host.mapRuntimeNotification("replacement")?.hydration;
+    expect(received).toHaveLength(232);
+    expect(received[231]).toContain("answer-999");
+  } finally {
+    host.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation source keys survive split UTF-8, partial and multi-item lines, and preserve repeated text and replaced files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paseo-btw-source-"));
+  const file = join(dir, "thread.jsonl");
+  const row = Buffer.from(
+    JSON.stringify({
+      message: {
+        role: "assistant",
+        content: [
+          { type: "text", text: "你好" },
+          { type: "text", text: "same" },
+        ],
+      },
+    }) + "\n",
+  );
+  const live = new PiChildSessionFollower("btw", file, 7, "conversation");
+  const readAll = async (reader: PiChildSessionFollower) => {
+    const events: ProviderSubagentInputEvent[] = [];
+    do {
+      events.push(...(await reader.readNew()));
+    } while (reader.hasMore);
+    return events;
+  };
+  try {
+    const split = row.indexOf(Buffer.from("你")) + 1;
+    await writeFile(file, row.subarray(0, split));
+    expect(await readAll(live)).toEqual([]);
+    await appendFile(file, row.subarray(split));
+    const first = await readAll(live);
+    expect(first).toHaveLength(2);
+    await appendFile(file, row);
+    const second = await readAll(live);
+    const history = await readAll(
+      new PiChildSessionFollower("btw", file, undefined, "conversation"),
+    );
+    expect(history).toEqual([...first, ...second]);
+    const keys = history.map((event) => (event.type === "timeline" ? event.sourceKey : null));
+    expect(new Set(keys).size).toBe(4);
+    const store = new ProviderSubagentStore();
+    for (const event of [...first, ...second, ...history]) store.apply("parent", "pi", event);
+    expect(store.fetchTimeline("parent", "btw", { limit: 0 }).rows.at(-1)?.seq).toBe(4);
+    await writeFile(file, row.toString().replace("你好", "再见"));
+    const replaced = await readAll(
+      new PiChildSessionFollower("btw", file, undefined, "conversation"),
+    );
+    expect(replaced).toHaveLength(2);
+    expect(
+      replaced.map((event) => (event.type === "timeline" ? event.sourceKey : null)),
+    ).not.toEqual(keys.slice(0, 2));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation readers have per-read byte budgets while one-shot readers keep lifetime limits", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paseo-btw-byte-budget-"));
+  const file = join(dir, "thread.jsonl");
+  const row =
+    JSON.stringify({
+      type: "message",
+      message: { role: "assistant", content: [{ type: "text", text: "x".repeat(1024) }] },
+    }) + "\n";
+  try {
+    await appendFile(file, row.repeat(5));
+    const conversation = new PiChildSessionFollower("btw", file, row.length, "conversation");
+    const oneShot = new PiChildSessionFollower("child", file, row.length);
+    for (let i = 0; i < 5; i++) expect(await conversation.readNew()).toHaveLength(1);
+    expect(await conversation.readNew()).toEqual([]);
+    expect(await oneShot.readNew()).toHaveLength(1);
+    expect(await oneShot.readNew()).toEqual([]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation history is complete beyond 200 items and 2 MiB, repeatable, and independent of live parked offsets", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paseo-btw-history-"));
+  const file = join(dir, "thread.jsonl");
+  const mapping: PiExtensionCustomMapping = {
+    subagents: [{ type: "upsert", id: "btw", status: "completed" }],
+    childSessions: [{ id: "btw", file, lifetime: "conversation" }],
+  };
+  const host = new PiExtensionHost([
+    {
+      id: "conversation",
+      createSession: () => ({
+        mapRuntimeNotification: () => mapping,
+        replay: () => mapping,
+      }),
+    },
+  ]);
+  const live: string[] = [];
+  const row = (n: number) =>
+    JSON.stringify({
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: `answer-${n}:` + "x".repeat(10000) }],
+      },
+    }) + "\n";
+  const history = async () => {
+    const items: string[] = [];
+    for await (const event of host.streamHistory()) {
+      if (
+        event.type === "provider_subagent" &&
+        event.event.type === "timeline" &&
+        event.event.item.type === "assistant_message"
+      )
+        items.push(event.event.item.text.slice(0, 20));
+    }
+    return items;
+  };
+  try {
+    await appendFile(file, Array.from({ length: 230 }, (_, index) => row(index)).join(""));
+    host.follow((event) => {
+      if (event.type === "provider_subagent" && event.event.type === "timeline")
+        live.push(event.event.id);
+    });
+    await host.mapRuntimeNotification("idle")?.hydration;
+    expect(live).toHaveLength(230);
+    const first = await history();
+    expect(first).toHaveLength(230);
+    expect(await history()).toEqual(first);
+    expect(live).toHaveLength(230);
+    const canceled = host.streamHistory();
+    await canceled.next();
+    await canceled.return(undefined);
+    await appendFile(file, row(230));
+    await host.mapRuntimeNotification("idle")?.hydration;
+    expect(live).toHaveLength(231);
+    expect(await history()).toHaveLength(231);
+    expect(live).toHaveLength(231);
+    host.close();
+    expect(await history()).toEqual([]);
+  } finally {
+    host.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test.each([false, true])(
+  "pi-btw projection removes only the known generated first prefix (structured=%s)",
+  async (structured) => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-btw-display-"));
+    const file = join(dir, "thread.jsonl");
+    const prefix =
+      "<btw>You are a read-only side conversation. The inherited conversation is context, not a task to continue. Answer the question below. Only unchanged Pi read, grep, find and ls tools execute; other tools return errors. Nothing is sent to the main agent unless the user explicitly requests it.</btw>\n\n";
+    const question = "Literal <btw>user markup</btw>\n日本語";
+    const content = prefix + prefix + question;
+    const row = (text: string) =>
+      JSON.stringify({
+        message: { role: "user", content: structured ? [{ type: "text", text }] : text },
+      }) + "\n";
+    const bytes = row(content) + row(prefix + question);
+    const mapping: PiExtensionCustomMapping = {
+      subagents: [{ type: "upsert", id: "thread", status: "completed" }],
+      childSessions: [{ id: "thread", file, lifetime: "conversation", projection: "pi-btw" }],
+    };
+    const extension: PiExtension = {
+      id: "btw-test",
+      createSession: () => ({
+        mapRuntimeNotification: () => mapping,
+        replay: () => mapping,
+      }),
+    };
+    const host = new PiExtensionHost([extension]);
+    const live: ProviderSubagentInputEvent[] = [];
+    const items = (events: ProviderSubagentInputEvent[]) =>
+      events.flatMap((event) => (event.type === "timeline" ? [event.item] : []));
+    try {
+      await writeFile(file, bytes);
+      const hydrated = await host.mapRuntimeNotification("hydrate")?.hydration;
+      expect(
+        hydrated?.map((event) => (event.type === "provider_subagent" ? event.event : null)),
+      ).toMatchObject([
+        { item: { type: "user_message", text: prefix + question } },
+        { item: { type: "user_message", text: prefix + question } },
+      ]);
+      host.follow((event) => {
+        if (event.type === "provider_subagent") live.push(event.event);
+      });
+      await host.mapRuntimeNotification("live")?.hydration;
+      expect(items(live)).toMatchObject([
+        { type: "user_message", text: prefix + question },
+        { type: "user_message", text: prefix + question },
+      ]);
+      const history: ProviderSubagentInputEvent[] = [];
+      for await (const event of host.streamHistory())
+        if (event.type === "provider_subagent" && event.event.type === "timeline")
+          history.push(event.event);
+      expect(history).toEqual(live);
+      expect(await readFile(file, "utf8")).toBe(bytes);
+      const generic = await new PiChildSessionFollower(
+        "other",
+        file,
+        undefined,
+        "conversation",
+      ).readNew();
+      expect(items(generic)).toMatchObject([
+        { type: "user_message", text: content },
+        { type: "user_message", text: prefix + question },
+      ]);
+      await writeFile(file, row(question) + row(prefix + question));
+      const literal = await new PiChildSessionFollower(
+        "thread",
+        file,
+        undefined,
+        "conversation",
+        undefined,
+        "pi-btw",
+      ).readNew();
+      expect(items(literal)).toMatchObject([
+        { type: "user_message", text: question },
+        { type: "user_message", text: prefix + question },
+      ]);
+    } finally {
+      host.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);

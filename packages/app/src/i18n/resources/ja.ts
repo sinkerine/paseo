@@ -2,6 +2,21 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ja: TranslationResources = {
+  btw: {
+    label: "BTW",
+    title: "BTW 会話",
+    show: "BTW 会話を表示",
+    hide: "BTW 会話を隠す",
+    minimize: "最小化",
+    placeholder: "別の質問をする",
+    send: "送信",
+    stop: "停止",
+    inject: "メインへ送信",
+    summarize: "要約してメインへ",
+    newThread: "新しい会話",
+    clear: "クリア",
+    accepted: "コマンドを受け付けました",
+  },
   paneFind: {
     connectionFailure:
       "このチャットを検索できませんでした。ホストへの接続を確認して再試行してください。",

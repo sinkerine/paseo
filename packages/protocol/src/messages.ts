@@ -5009,6 +5009,8 @@ export const AgentTimelineListPromptsResponseMessageSchema = z.object({
 });
 
 export const ProviderSubagentDescriptorPayloadSchema = z.object({
+  // Open string: unknown presentations remain normal subagent track rows.
+  presentation: z.string().nullable().optional(),
   // COMPAT(providerSubagentTimeline): added in v0.13.2, absence means true; remove after 2027-05-01.
   hasTimeline: z.boolean().optional(),
   id: z.string(),

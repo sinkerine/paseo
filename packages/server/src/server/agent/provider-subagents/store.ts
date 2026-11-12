@@ -24,6 +24,7 @@ export interface ProviderSubagentDescriptor {
   toolCallId: string | null;
   cwd: string | null;
   subtitle: string | null;
+  presentation: string | null;
 }
 
 export type ProviderSubagentInputEvent =
@@ -41,6 +42,7 @@ export type ProviderSubagentInputEvent =
       toolCallId?: string | null;
       cwd?: string | null;
       subtitle?: string | null;
+      presentation?: string | null;
       parentSubagentId?: string | null;
       timestamp?: string;
     }
@@ -48,6 +50,8 @@ export type ProviderSubagentInputEvent =
       type: "timeline";
       id: string;
       item: AgentTimelineItem;
+      /** Stable provider-file identity shared by live observation and history replay; never sent on wire. */
+      sourceKey?: string;
       timestamp?: string;
     }
   | { type: "remove"; id: string };
@@ -80,6 +84,7 @@ function stickyField<T>(next: T | undefined, previous: T | null | undefined): T 
 export class ProviderSubagentStore {
   private readonly descriptors = new Map<string, ProviderSubagentDescriptor>();
   private readonly timelines = new InMemoryAgentTimelineStore();
+  private readonly sourceRows = new Map<string, Map<string, AgentTimelineRow>>();
 
   apply(
     parentAgentId: string,
@@ -90,16 +95,12 @@ export class ProviderSubagentStore {
     if (event.type === "remove") {
       this.descriptors.delete(key);
       this.timelines.delete(key);
+      this.sourceRows.delete(key);
       return { type: "remove", parentAgentId, subagentId: event.id };
     }
 
     if (event.type === "timeline") {
-      if (!this.timelines.has(key)) {
-        this.timelines.initialize(key);
-      }
-      const row = this.timelines.append(key, limitAgentTimelineItemContent(event.item), {
-        timestamp: event.timestamp,
-      });
+      const row = this.appendTimelineRow(key, event);
       return {
         type: "timeline",
         parentAgentId,
@@ -128,10 +129,29 @@ export class ProviderSubagentStore {
       toolCallId: stickyField(event.toolCallId, previous?.toolCallId),
       cwd: stickyField(event.cwd, previous?.cwd),
       subtitle: stickyField(event.subtitle, previous?.subtitle),
+      presentation: stickyField(event.presentation, previous?.presentation),
       parentSubagentId: stickyField(event.parentSubagentId, previous?.parentSubagentId),
     };
     this.descriptors.set(key, subagent);
     return { type: "upsert", subagent };
+  }
+
+  private appendTimelineRow(
+    key: string,
+    event: Extract<ProviderSubagentInputEvent, { type: "timeline" }>,
+  ): AgentTimelineRow {
+    if (!this.timelines.has(key)) this.timelines.initialize(key);
+    const previous = event.sourceKey ? this.sourceRows.get(key)?.get(event.sourceKey) : undefined;
+    if (previous) return previous;
+    const row = this.timelines.append(key, limitAgentTimelineItemContent(event.item), {
+      timestamp: event.timestamp,
+    });
+    if (event.sourceKey) {
+      const sources = this.sourceRows.get(key) ?? new Map<string, AgentTimelineRow>();
+      sources.set(event.sourceKey, row);
+      this.sourceRows.set(key, sources);
+    }
+    return row;
   }
 
   list(parentAgentId: string): ProviderSubagentDescriptor[] {
@@ -158,6 +178,9 @@ export class ProviderSubagentStore {
 
   deleteParent(parentAgentId: string): ProviderSubagentStoreEvent[] {
     const events: ProviderSubagentStoreEvent[] = [];
+    for (const key of this.sourceRows.keys()) {
+      if (key.startsWith(`${parentAgentId}\0`)) this.sourceRows.delete(key);
+    }
     for (const subagent of this.list(parentAgentId)) {
       const key = storeKey(parentAgentId, subagent.id);
       this.descriptors.delete(key);

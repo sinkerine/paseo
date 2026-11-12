@@ -501,3 +501,33 @@ it("accepts additive native fork requests and optional host capability advertise
     ).toBe(true);
   }
 });
+
+it("accepts optional open presentation values and old clients discard the new field", () => {
+  const legacy = {
+    id: "btw",
+    parentAgentId: "parent",
+    provider: "pi",
+    title: "Question",
+    description: null,
+    status: "completed",
+    createdAt: "now",
+    updatedAt: "now",
+    toolCallId: null,
+  };
+  expect(ProviderSubagentDescriptorPayloadSchema.parse(legacy)).not.toHaveProperty("presentation");
+  const oldClient = ProviderSubagentDescriptorPayloadSchema.omit({ presentation: true });
+  for (const presentation of [null, "side_conversation", "future_presentation"]) {
+    const subagent = { ...legacy, presentation };
+    expect(oldClient.parse(subagent)).toEqual(legacy);
+    expect(ProviderSubagentDescriptorPayloadSchema.parse(subagent)).toMatchObject({ presentation });
+    expect(
+      validateWSOutboundMessage({
+        type: "session",
+        message: {
+          type: "agent.provider_subagents.update",
+          payload: { kind: "upsert", subagent },
+        },
+      }),
+    ).toMatchObject({ success: true, data: { message: { payload: { subagent } } } });
+  }
+});

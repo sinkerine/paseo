@@ -1,3 +1,4 @@
+import { BtwPill } from "@/btw/pill";
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
 import { memo, useCallback, useMemo, type ReactElement } from "react";
 import { BackgroundWorkTrack, createHostBackgroundWorkModel } from "@/background-work";
@@ -147,6 +148,7 @@ export const AgentTracks = memo(function AgentTracks({
       <BackgroundWorkTrack model={backgroundModel} count={backgroundWorkCount} />
       {parentAgentId ? <ParentAgentPill serverId={serverId} parentAgentId={parentAgentId} /> : null}
       <AgentTaskList tasks={tasks} />
+      <BtwPill serverId={serverId} agentId={agentId} />
       <SubagentsTrack
         serverId={serverId}
         rows={subagentRows}

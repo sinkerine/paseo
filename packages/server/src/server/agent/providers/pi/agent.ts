@@ -95,6 +95,7 @@ import {
   piExtensionRuntimeBridge,
   type PiExtensionEventOutput,
 } from "./extensions/index.js";
+import { piExtensions } from "./extensions/registry.js";
 import { resolveResumeProcessCwd } from "../resume-process-cwd.js";
 import { revertPiConversation } from "./rewind.js";
 import {
@@ -174,6 +175,7 @@ function mapPiSlashCommands(
     handledCommands.map((command) => [command.name, { ...command }]),
   );
   for (const command of commands) {
+    if (command.name === "paseo_btw_sync") continue;
     const knownCommand = mappedCommands.get(command.name);
     mappedCommands.set(command.name, {
       name: command.name,
@@ -268,6 +270,7 @@ interface PiRpcAgentSessionOptions {
   runtimeSession: PiRuntimeSession;
   config: AgentSessionConfig;
   initialState: PiSessionState;
+  initialCommands?: readonly PiRpcSlashCommand[];
   capabilities: AgentCapabilityFlags;
   currentModeId?: string | null;
   persistedSessionFile?: string;
@@ -1274,6 +1277,10 @@ export class PiRpcAgentSession implements AgentSession {
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
   private commandCache: AgentSlashCommand[] | null = null;
+  private btwSync: Promise<void> | undefined;
+  private providerConsumerAttached = false;
+  private readonly initialProviderEvents: AgentStreamEvent[] = [];
+  private readonly hasBtwSync: boolean;
   private state: PiSessionState;
   private readonly currentModeId: string | null;
   private readonly logger: Logger;
@@ -1304,6 +1311,9 @@ export class PiRpcAgentSession implements AgentSession {
     this.runtimeSession = options.runtimeSession;
     this.config = options.config;
     this.state = options.initialState;
+    this.hasBtwSync =
+      options.initialCommands?.some((command) => command.name === "paseo_btw_sync") === true;
+    if (options.initialCommands) this.commandCache = mapPiSlashCommands(options.initialCommands);
     this.persistenceMetadata = options.persistenceMetadata ?? {};
     const framing = NativeSessionForkFramingSchema.safeParse(
       this.persistenceMetadata.nativeSessionForkFraming,
@@ -1511,8 +1521,20 @@ export class PiRpcAgentSession implements AgentSession {
     return submission;
   }
 
+  private syncBtw(): Promise<void> {
+    if (!this.hasBtwSync) return Promise.resolve();
+    this.btwSync ??= this.runtimeSession.prompt("/paseo_btw_sync").then(() => undefined);
+    return this.btwSync;
+  }
+
   subscribe(callback: (event: AgentStreamEvent) => void): () => void {
     this.subscribers.add(callback);
+    this.providerConsumerAttached = true;
+    for (const event of this.initialProviderEvents.splice(0)) callback(event);
+    // A session is constructed before AgentManager attaches. Sync only after its consumer exists.
+    void this.syncBtw().catch((error) => {
+      this.logger.warn({ err: error }, "Pi BTW startup sync failed");
+    });
     return () => {
       this.subscribers.delete(callback);
     };
@@ -1520,6 +1542,38 @@ export class PiRpcAgentSession implements AgentSession {
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
     try {
+      const restored = this.initialProviderEvents.splice(0);
+      const firstConsumer = !this.providerConsumerAttached;
+      this.providerConsumerAttached = true;
+      const receive = (event: AgentStreamEvent) => {
+        if (event.type === "provider_subagent") restored.push(event);
+      };
+      if (firstConsumer) this.subscribers.add(receive);
+      try {
+        await this.syncBtw();
+        await Promise.all(this.pendingExtensionHydrations);
+        await this.pendingOutput;
+        const replayed = new Set<string>();
+        for await (const event of this.extensionHost.streamHistory()) {
+          if (event.type === "provider_subagent") replayed.add(event.event.id);
+          yield event;
+        }
+        const unclaimed = new Map<string, AgentStreamEvent[]>();
+        for (const event of restored) {
+          if (event.type !== "provider_subagent" || replayed.has(event.event.id)) continue;
+          const id = event.event.id;
+          if (event.event.type === "remove") {
+            unclaimed.delete(id);
+            continue;
+          }
+          const group = unclaimed.get(id) ?? [];
+          group.push(event);
+          unclaimed.set(id, group);
+        }
+        for (const events of unclaimed.values()) yield* events;
+      } finally {
+        if (firstConsumer) this.subscribers.delete(receive);
+      }
       await this.requestEntryCapture("history");
       const history = await this.runtimeSession.getHistory();
       const origin = this.persistenceMetadata.forkOrigin;
@@ -1756,8 +1810,8 @@ export class PiRpcAgentSession implements AgentSession {
       return this.commandCache;
     }
     const commands = await this.runtimeSession.getCommands();
-    const mappedCommands = mapPiSlashCommands(commands);
-    return mappedCommands;
+    this.commandCache = mapPiSlashCommands(commands);
+    return this.commandCache;
   }
 
   tryHandleOutOfBand(
@@ -1771,6 +1825,29 @@ export class PiRpcAgentSession implements AgentSession {
       return null;
     }
     const commandName = parsed.commandName.toLowerCase();
+    const extensionCommand = piExtensions.some((extension) =>
+      extension.outOfBandCommands?.includes(parsed.commandName),
+    );
+    if (
+      extensionCommand &&
+      this.commandCache?.some((command) => command.name === parsed.commandName)
+    ) {
+      return {
+        run: async () => {
+          const command = this.extensionHost.beginOutOfBandCommand(commandName);
+          try {
+            // Pi recognizes commands only at column zero with an ASCII-space separator.
+            const invocation = `/${parsed.commandName}${parsed.args ? ` ${parsed.args}` : ""}`;
+            await this.runtimeSession.prompt(invocation);
+            this.emitExtensionOutput(command?.complete());
+          } catch (error) {
+            const failure = error instanceof Error ? error : new Error(String(error));
+            this.emitExtensionOutput(command?.fail(failure));
+            throw error;
+          }
+        },
+      };
+    }
     if (commandName === "compact") {
       return {
         run: async ({ emit }) => {
@@ -1826,6 +1903,10 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   private publish(event: AgentStreamEvent): void {
+    // Runtime notifications can arrive before AgentManager owns the session.
+    if (!this.providerConsumerAttached && event.type === "provider_subagent") {
+      this.initialProviderEvents.push(event);
+    }
     for (const subscriber of this.subscribers) subscriber(event);
   }
 
@@ -2854,6 +2935,7 @@ export class PiRpcAgentClient implements AgentClient {
         runtimeSession,
         config,
         initialState: await runtimeSession.getState(),
+        initialCommands: await runtimeSession.getCommands(),
         capabilities: capabilitiesForSession(mcp !== null),
         cleanup: combineCleanup([mcpConfigFile?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
@@ -2941,6 +3023,7 @@ export class PiRpcAgentClient implements AgentClient {
             model: modelToId(initialState.model) ?? resumeConfig.config.model,
           },
           initialState,
+          initialCommands: await runtimeSession.getCommands(),
           capabilities: capabilitiesForSession(mcp !== null),
           persistedSessionFile: sessionCopy ? sessionFile : undefined,
           persistenceMetadata: handle.metadata,

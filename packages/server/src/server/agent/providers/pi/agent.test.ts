@@ -29,6 +29,7 @@ import { PiCliRuntime } from "./cli-runtime.js";
 import { FakePi } from "./test-utils/fake-pi.js";
 import { createPiExtensionHost } from "./extensions/index.js";
 import { PiExtensionHost } from "./extensions/host.js";
+import { ProviderSubagentStore } from "../../provider-subagents/store.js";
 import type { PiModel, PiThinkingLevel } from "./rpc-types.js";
 import type { PiUsagePollScheduler } from "./usage-poller.js";
 
@@ -3096,12 +3097,13 @@ describe("PiRpcAgentClient", () => {
   });
 
   test("maps extension, prompt, and skill commands to Paseo slash commands", async () => {
-    const { pi, session } = await createSession();
-    pi.latestSession().commands = [
+    const pi = new FakePi();
+    pi.queueCommands([
       { name: "review", description: "Review changes", source: "extension" },
       { name: "fix-tests", description: "Fix tests", source: "prompt" },
       { name: "skill:docs", description: "Read docs", source: "skill" },
-    ];
+    ]);
+    const { session } = await createSession(pi);
 
     await expect(session.listCommands()).resolves.toEqual([
       {
@@ -3123,10 +3125,9 @@ describe("PiRpcAgentClient", () => {
   });
 
   test("lists Pi compact even when RPC get_commands omits built-in slash commands", async () => {
-    const { pi, session } = await createSession();
-    pi.latestSession().commands = [
-      { name: "review", description: "Review changes", source: "extension" },
-    ];
+    const pi = new FakePi();
+    pi.queueCommands([{ name: "review", description: "Review changes", source: "extension" }]);
+    const { session } = await createSession(pi);
 
     await expect(session.listCommands()).resolves.toContainEqual({
       name: "compact",
@@ -3143,11 +3144,12 @@ describe("PiRpcAgentClient", () => {
   });
 
   test("preserves known argument hints when RPC get_commands returns built-in slash commands", async () => {
-    const { pi, session } = await createSession();
-    pi.latestSession().commands = [
+    const pi = new FakePi();
+    pi.queueCommands([
       { name: "compact", description: "Compact from RPC", source: "extension" },
       { name: "autocompact", description: "Auto compact from RPC", source: "extension" },
-    ];
+    ]);
+    const { session } = await createSession(pi);
 
     await expect(session.listCommands()).resolves.toEqual([
       {
@@ -4282,4 +4284,340 @@ test("observes the actual trigger object across an identical passive append afte
   );
   await listeners.get("message_start")?.({ message: { role: "assistant", content: [] } }, ctx);
   expect(notifications.some((text) => text.includes('"invalid":true'))).toBe(true);
+});
+
+test("out-of-band extension support is initialized before catalog demand and does not interrupt the parent", async () => {
+  const pi = new FakePi();
+  pi.queueCommands([
+    { name: "btw", description: "Side question", source: "extension" },
+    { name: "btw:abort", description: "Stop side question", source: "extension" },
+  ]);
+  const session = await createClient(pi).createSession(createConfig());
+  try {
+    const runtime = pi.latestSession();
+    const { turnId } = await session.startTurn("Main task");
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    expect(session.tryHandleOutOfBand?.("/BTW Why?")).toBeNull();
+    const handler = session.tryHandleOutOfBand?.("/btw Why?\nUnicode 日本語");
+    expect(handler).not.toBeNull();
+    await handler?.run({ emit: () => undefined });
+    await session.tryHandleOutOfBand?.("/btw:abort")?.run({ emit: () => undefined });
+    expect(runtime.prompts.map(({ message }) => message)).toEqual([
+      "Main task",
+      "/btw Why?\nUnicode 日本語",
+      "/btw:abort",
+    ]);
+    expect(runtime.abortRequested).toBe(false);
+    expect(runtime.steerCalls).toEqual([]);
+    runtime.finishTurn();
+    expect(events).toContainEqual(expect.objectContaining({ type: "turn_completed", turnId }));
+  } finally {
+    await session.close();
+  }
+});
+
+test.each([
+  " /btw Why?\nUnicode 日本語",
+  "/btw\nWhy?\nUnicode 日本語",
+  "/btw\tWhy?\nUnicode 日本語",
+])(
+  "out-of-band normalizes Pi command separators without changing argument content: %j",
+  async (input) => {
+    const pi = new FakePi();
+    pi.queueCommands([{ name: "btw", description: "Ask", source: "extension" }]);
+    const session = await createClient(pi).createSession(createConfig());
+    try {
+      const handler = session.tryHandleOutOfBand?.(input);
+      expect(handler).not.toBeNull();
+      await handler?.run({ emit: () => undefined });
+      expect(pi.latestSession().prompts.map(({ message }) => message)).toEqual([
+        "/btw Why?\nUnicode 日本語",
+      ]);
+      expect(pi.latestSession().abortRequested).toBe(false);
+    } finally {
+      await session.close();
+    }
+  },
+);
+
+test("out-of-band unavailable extension commands keep existing slash behavior", async () => {
+  const session = await createClient().createSession(createConfig());
+  try {
+    expect(session.tryHandleOutOfBand?.("/btw Why?")).toBeNull();
+  } finally {
+    await session.close();
+  }
+});
+
+function btwState(overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    parentSessionId: "parent",
+    threadId: "thread",
+    mode: "contextual",
+    status: "idle",
+    title: "Why?",
+    sessionFile: "/tmp/btw/sessions/parent/thread/messages.jsonl",
+    resumable: true,
+    revision: 1,
+    boundary: {
+      kind: "turn_end",
+      parentLeafEntryId: "leaf",
+      parentTurnIndex: 2,
+      messageCount: 4,
+      prefixDigest: "a".repeat(64),
+      pinnedAt: "2026-01-01T00:00:00.000Z",
+    },
+    parentAhead: 1,
+    cache: {
+      provider: "test",
+      modelId: "model",
+      api: "openai-completions",
+      thinkingLevel: "off",
+      requestSessionId: "parent",
+      sharesParentPrefix: true,
+      reason: null,
+    },
+    lastUsage: {
+      input: 10,
+      output: 2,
+      cacheRead: 80,
+      cacheWrite: 10,
+      at: "2026-01-01T00:00:00.000Z",
+    },
+    error: null,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+function btwNotification(thread = btwState()) {
+  return `PASEO_PI_BTW ${JSON.stringify({ parentSessionId: "parent", event: { type: "state", thread } })}`;
+}
+
+test.each(["subscriber", "history"])(
+  "out-of-band startup sync preserves early notifications for a late %s and repeatable history",
+  async (consumer) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "paseo-btw-replay-"));
+    const file = path.join(dir, "btw/sessions/parent/thread/messages.jsonl");
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        type: "message",
+        message: { role: "assistant", content: [{ type: "text", text: "RESTORED" }] },
+      }) + "\n",
+    );
+    const pi = new FakePi();
+    pi.queueCommands([
+      { name: "btw", description: "Ask", source: "extension" },
+      { name: "paseo_btw_sync", description: "Internal sync", source: "extension" },
+    ]);
+    const session = await createClient(pi).createSession(createConfig());
+    const runtime = pi.latestSession();
+    const notification = btwNotification(btwState({ sessionFile: file }));
+    const notify = () =>
+      runtime.emit({
+        type: "extension_ui_request",
+        id: "btw-state",
+        method: "notify",
+        message: notification,
+      });
+    const prompt = runtime.prompt.bind(runtime);
+    runtime.prompt = async (...args) => {
+      const result = await prompt(...args);
+      if (args[0] === "/paseo_btw_sync") notify();
+      return result;
+    };
+    try {
+      notify();
+      await waitForImmediate();
+      const events: AgentStreamEvent[] = [];
+      if (consumer === "subscriber") session.subscribe((event) => events.push(event));
+      else for await (const event of session.streamHistory()) events.push(event);
+      await expect
+        .poll(
+          () =>
+            events.filter((e) => e.type === "provider_subagent" && e.event.type === "timeline")
+              .length,
+        )
+        .toBe(1);
+      expect(
+        events.filter((e) => e.type === "provider_subagent" && e.event.type === "upsert"),
+      ).toHaveLength(1);
+      notify();
+      session.subscribe(() => undefined);
+      await waitForImmediate();
+      expect(
+        events.filter((e) => e.type === "provider_subagent" && e.event.type === "timeline"),
+      ).toHaveLength(1);
+      expect(runtime.prompts.filter(({ message }) => message === "/paseo_btw_sync")).toHaveLength(
+        1,
+      );
+      expect((await session.listCommands?.())?.map(({ name }) => name)).not.toContain(
+        "paseo_btw_sync",
+      );
+      expect(runtime.abortRequested).toBe(false);
+      const liveCount = events.length;
+      const replay: AgentStreamEvent[] = [];
+      for await (const event of session.streamHistory()) replay.push(event);
+      const expected = events.filter((event) => event.type === "provider_subagent");
+      expect(replay.filter((event) => event.type === "provider_subagent")).toEqual(expected);
+      const repeated: AgentStreamEvent[] = [];
+      for await (const event of session.streamHistory()) repeated.push(event);
+      expect(repeated).toEqual(replay);
+      expect(events).toHaveLength(liveCount);
+    } finally {
+      await session.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("out-of-band rejecting Pi prompt fails the existing BTW window and the next command recovers", async () => {
+  const pi = new FakePi();
+  pi.queueCommands([{ name: "btw", description: "Ask", source: "extension" }]);
+  const session = await createClient(pi).createSession(createConfig());
+  const runtime = pi.latestSession();
+  const store = new ProviderSubagentStore();
+  const events: AgentStreamEvent[] = [];
+  session.subscribe((event) => {
+    events.push(event);
+    if (event.type === "provider_subagent") store.apply("owner", "pi", event.event);
+  });
+  const notify = (revision: number, status = "idle") =>
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "btw",
+      method: "notify",
+      message: btwNotification(btwState({ sessionFile: null, revision, status })),
+    });
+  try {
+    notify(1);
+    const before = store.get("owner", "btw:thread");
+    runtime.holdNextPrompt();
+    const handler = session.tryHandleOutOfBand?.("/btw Question");
+    if (!handler) throw new Error("Missing out-of-band command");
+    const outcome = handler.run({ emit: () => undefined }).catch((error: unknown) => error);
+    await runtime.failHeldPrompt(new Error("Pi RPC disconnected"));
+    expect(await outcome).toEqual(new Error("Pi RPC disconnected"));
+    expect(store.get("owner", "btw:thread")).toEqual({
+      ...before,
+      status: "failed",
+      description: "Pi RPC disconnected",
+      updatedAt: expect.any(String),
+    });
+    expect(
+      events.filter(
+        (event) => event.type === "provider_subagent" && event.event.type === "timeline",
+      ),
+    ).toEqual([]);
+    await session.tryHandleOutOfBand?.("/btw Retry question")?.run({ emit: () => undefined });
+    expect(store.get("owner", "btw:thread")).toMatchObject({
+      status: "completed",
+      description: null,
+    });
+    notify(2, "running");
+    notify(3);
+    expect(store.get("owner", "btw:thread")).toMatchObject({
+      status: "completed",
+      description: null,
+      title: before?.title,
+      subtitle: before?.subtitle,
+      presentation: "side_conversation",
+    });
+    expect(runtime.abortRequested).toBe(false);
+  } finally {
+    await session.close();
+  }
+});
+
+test.each(["replace", "clear", "close"])(
+  "out-of-band late Pi rejection ignores a target after %s",
+  async (change) => {
+    const pi = new FakePi();
+    pi.queueCommands([{ name: "btw", description: "Ask", source: "extension" }]);
+    const session = await createClient(pi).createSession(createConfig());
+    const runtime = pi.latestSession();
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    const notify = (message: string) =>
+      runtime.emit({ type: "extension_ui_request", id: "btw", method: "notify", message });
+    try {
+      notify(btwNotification(btwState({ sessionFile: null })));
+      runtime.holdNextPrompt();
+      const handler = session.tryHandleOutOfBand?.("/btw Old question");
+      if (!handler) throw new Error("Missing out-of-band command");
+      const outcome = handler.run({ emit: () => undefined }).catch((error: unknown) => error);
+      if (change === "replace")
+        notify(btwNotification(btwState({ sessionFile: null, threadId: "new" })));
+      if (change === "clear")
+        notify(
+          `PASEO_PI_BTW ${JSON.stringify({
+            parentSessionId: "parent",
+            event: {
+              type: "closed",
+              version: 1,
+              parentSessionId: "parent",
+              threadId: "thread",
+              reason: "cleared",
+            },
+          })}`,
+        );
+      if (change === "close") await session.close();
+      const count = events.length;
+      await runtime.failHeldPrompt(new Error("Late Pi rejection"));
+      expect(await outcome).toEqual(new Error("Late Pi rejection"));
+      expect(events.slice(count)).toEqual([]);
+    } finally {
+      await session.close();
+    }
+  },
+);
+
+test("out-of-band Pi rejection before thread discovery never invents a BTW window", async () => {
+  const pi = new FakePi();
+  pi.queueCommands([{ name: "btw", description: "Ask", source: "extension" }]);
+  const session = await createClient(pi).createSession(createConfig());
+  const runtime = pi.latestSession();
+  const events: AgentStreamEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    runtime.holdNextPrompt();
+    const handler = session.tryHandleOutOfBand?.("/btw First question");
+    if (!handler) throw new Error("Missing out-of-band command");
+    const outcome = handler.run({ emit: () => undefined }).catch((error: unknown) => error);
+    await runtime.failHeldPrompt(new Error("Pi rejected command"));
+    expect(await outcome).toEqual(new Error("Pi rejected command"));
+    expect(events.filter((event) => event.type === "provider_subagent")).toEqual([]);
+  } finally {
+    await session.close();
+  }
+});
+
+test("out-of-band early thread clear stays absent from first and repeated history", async () => {
+  const pi = new FakePi();
+  const owned = await createClient(pi).createSession(createConfig());
+  try {
+    const runtime = pi.latestSession();
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "btw-state",
+      method: "notify",
+      message: btwNotification(btwState({ sessionFile: null })),
+    });
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "btw-clear",
+      method: "notify",
+      message: `PASEO_PI_BTW ${JSON.stringify({ parentSessionId: "parent", event: { type: "closed", version: 1, parentSessionId: "parent", threadId: "thread", reason: "cleared" } })}`,
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const events: AgentStreamEvent[] = [];
+      for await (const event of owned.streamHistory()) events.push(event);
+      expect(events.filter((event) => event.type === "provider_subagent")).toEqual([]);
+    }
+  } finally {
+    await owned.close();
+  }
 });

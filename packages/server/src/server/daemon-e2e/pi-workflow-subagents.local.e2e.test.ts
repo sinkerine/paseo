@@ -669,17 +669,54 @@ test("direct workflow streams its tree and child transcripts, then replays after
           (await active.fetchAgentTimeline(killed.scenario.id, { limit: 0 })).agent?.status,
       )
       .toBe("idle");
-    const artifact = JSON.parse(
-      await readFile(
-        path.join(
-          subagentsTmp,
-          "async-subagent-runs",
-          killed.workflow.split(":")[1],
-          "status.json",
-        ),
-        "utf8",
-      ),
+    const workflowStatusPath = path.join(
+      subagentsTmp,
+      "async-subagent-runs",
+      killed.workflow.split(":")[1],
+      "status.json",
     );
+    await expect
+      .poll(
+        async () =>
+          JSON.parse(await readFile(workflowStatusPath, "utf8")).steps.find(
+            (step: { workflowKey?: string }) => step.workflowKey === "T2.review",
+          )?.runId,
+        { timeout: 20_000, interval: 100 },
+      )
+      .toEqual(expect.any(String));
+    const artifact = JSON.parse(await readFile(workflowStatusPath, "utf8"));
+    const heldChildRunId = artifact.steps.find(
+      (step: { workflowKey?: string }) => step.workflowKey === "T2.review",
+    )?.runId;
+    expect(heldChildRunId).toEqual(expect.any(String));
+    const heldChildStatusPath = path.join(
+      subagentsTmp,
+      "async-subagent-runs",
+      heldChildRunId,
+      "status.json",
+    );
+    await expect
+      .poll(async () => JSON.parse(await readFile(heldChildStatusPath, "utf8")), {
+        timeout: 20_000,
+        interval: 100,
+      })
+      .toMatchObject({
+        runId: heldChildRunId,
+        parentWorkflowRunId: killed.workflow.split(":")[1],
+        pid: expect.any(Number),
+        state: "running",
+      });
+    const heldChild = JSON.parse(await readFile(heldChildStatusPath, "utf8"));
+    expect(Number.isInteger(heldChild.pid)).toBe(true);
+    await expect(readFile(gate, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await record("owner-death-child-launched", {
+      workflowRunId: artifact.runId,
+      runId: heldChild.runId,
+      parentWorkflowRunId: heldChild.parentWorkflowRunId,
+      pid: heldChild.pid,
+      state: heldChild.state,
+      gateClosed: true,
+    });
     if (!Number.isInteger(artifact.pid)) throw new Error("Real workflow artifact has no owner PID");
     killRootedProcess(artifact.pid);
     await expect
@@ -701,6 +738,20 @@ test("direct workflow streams its tree and child transcripts, then replays after
       descriptors: (await active.listProviderSubagents(killed.scenario.id)).subagents,
     });
     await writeFile(gate, "open\n");
+    // Detached children survive owner death for reattachment. Drain this fixture's child before shutdown.
+    await expect
+      .poll(async () => JSON.parse(await readFile(heldChildStatusPath, "utf8")).state, {
+        timeout: 20_000,
+        interval: 100,
+      })
+      .toBe("complete");
+    await expect
+      .poll(async () => (await rootedProcesses(root)).some(({ pid }) => pid === heldChild.pid), {
+        timeout: 5000,
+        interval: 100,
+      })
+      .toBe(false);
+    await record("owner-death-child-drained", { runId: heldChildRunId, pid: heldChild.pid });
     expect((await active.listProviderSubagents(observer.id)).subagents).toEqual([]);
   } catch (error) {
     failures.push(error);

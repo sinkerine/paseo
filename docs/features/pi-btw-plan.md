@@ -502,9 +502,9 @@ export function BtwWindow(props: { serverId: string; agentId: string }): ReactEl
 
 Use the existing Agent Device runner, not the whole mobile suite. Once the device is connected to the same isolated fixture host and this checkout's Metro, run `agent-device test packages/app/e2e/mobile/agent-device/pi-btw.android.ad --metro-port "$PASEO_MOBILE_E2E_METRO_PORT" --timeout 120000 --fail-fast --artifacts-dir artifacts/pi-btw-native-android`; the iOS command substitutes `pi-btw.ios.ad` and `artifacts/pi-btw-native-ios`. Verify `agent-device test --help` on that host before the run. Record keyboard-visible composer bounds, sheet taps and Back/dismiss behavior. No device means an explicit unverified platform, not a pass.
 
-### Design-stage checks (not feature evidence)
+### Implementation verification
 
-Only this plan and an artifact mockup were written during design. `npm run typecheck` passed and `npm run lint` passed (0 warnings/errors). Artifact JavaScript passed `node --check`. New feature tests, real provider cache measurements, native/device smoke, and implementation builds have **not** been run, because there is no implementation yet. The test inventory above is the implementation acceptance work.
+The T2 implementation includes bridge, protocol, follower, command-routing and app tests, plus producer-backed daemon/browser journeys and native smoke scripts. Independent local checks and their current results belong in the task receipt under the run artifacts. Producer-backed execution waits for G1; test source or discovery does not establish a live-provider, browser, native or cache-measurement pass. Run the inventory above against the recorded producer revision and record platform gaps explicitly. The test inventory above is the implementation acceptance work.
 
 ### Repo gates
 

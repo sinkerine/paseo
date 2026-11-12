@@ -2,6 +2,21 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ko: TranslationResources = {
+  btw: {
+    label: "BTW",
+    title: "BTW 대화",
+    show: "BTW 대화 표시",
+    hide: "BTW 대화 숨기기",
+    minimize: "최소화",
+    placeholder: "곁가지 질문하기",
+    send: "보내기",
+    stop: "중지",
+    inject: "주 대화로 보내기",
+    summarize: "요약하여 주 대화로",
+    newThread: "새 대화",
+    clear: "지우기",
+    accepted: "명령을 접수했습니다",
+  },
   paneFind: {
     connectionFailure: "이 채팅을 검색할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
     historyChangedFailure: "검색 중에 채팅이 변경되었습니다. 다시 검색하세요.",

@@ -1,3 +1,4 @@
+import { piBtw } from "./pi-btw/index.js";
 import { piAskUser } from "./pi-ask-user/index.js";
 import { piSubagents } from "./pi-subagents/index.js";
 import { edxethPiSubagents } from "./edxeth-pi-subagents/index.js";
@@ -10,6 +11,7 @@ import { gotgenesPiSubagents } from "./gotgenes-pi-subagents/index.js";
 import { rpivAskUserQuestion } from "./rpiv-ask-user-question/index.js";
 
 export const piExtensions = [
+  piBtw,
   piAskUser, // Dialog correlation
   edxethPiSubagents, // Structured results before the generic subagent tool matcher
   piSubagents, // Delegation calls

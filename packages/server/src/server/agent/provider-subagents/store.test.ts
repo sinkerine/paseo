@@ -1,7 +1,35 @@
 import { describe, expect, test } from "vitest";
-import { ProviderSubagentStore } from "./store.js";
+import { ProviderSubagentStore, type ProviderSubagentInputEvent } from "./store.js";
 
 describe("ProviderSubagentStore", () => {
+  test("replayed source rows keep their canonical sequence while repeated text and fresh timelines remain distinct", () => {
+    const store = new ProviderSubagentStore();
+    const event: ProviderSubagentInputEvent = {
+      type: "timeline",
+      id: "btw",
+      sourceKey: "file:0:hash:0",
+      item: { type: "user_message", text: "same question" },
+    };
+    store.apply("parent", "pi", { type: "upsert", id: "btw" });
+    const first = store.apply("parent", "pi", event);
+    expect(store.apply("parent", "pi", event)).toEqual(first);
+    expect(store.fetchTimeline("parent", "btw").rows).toHaveLength(1);
+    expect(store.apply("parent", "pi", { ...event, sourceKey: "file:100:hash:0" })).toMatchObject({
+      row: { seq: 2 },
+    });
+    expect(
+      store.apply("parent", "pi", { ...event, sourceKey: "file:0:replacement:0" }),
+    ).toMatchObject({ row: { seq: 3 } });
+    expect(store.apply("other", "pi", event)).toMatchObject({ row: { seq: 1 } });
+    store.apply("parent", "pi", { type: "remove", id: "btw" });
+    const recreated = store.apply("parent", "pi", event);
+    expect(recreated).toMatchObject({ row: { seq: 1 } });
+    expect(recreated).not.toEqual(first);
+    store.apply("parent", "pi", { type: "upsert", id: "btw" });
+    store.deleteParent("parent");
+    expect(store.apply("parent", "pi", event)).toMatchObject({ row: { seq: 1 } });
+    expect(store.fetchTimeline("other", "btw").rows).toHaveLength(1);
+  });
   test("preserves explicit timeline capability across partial upserts", () => {
     const store = new ProviderSubagentStore();
     store.apply("parent", "pi", { type: "upsert", id: "root", hasTimeline: false });
@@ -117,4 +145,14 @@ describe("ProviderSubagentStore", () => {
     expect(page.rows.at(-1)?.seq).toBe(101);
     expect(page.hasOlder).toBe(false);
   });
+});
+
+test("presentation is sticky, explicitly clearable and scoped to the owning parent", () => {
+  const store = new ProviderSubagentStore();
+  store.apply("parent", "pi", { type: "upsert", id: "btw", presentation: "side_conversation" });
+  store.apply("parent", "pi", { type: "upsert", id: "btw", status: "completed" });
+  expect(store.get("parent", "btw")?.presentation).toBe("side_conversation");
+  expect(store.get("other", "btw")).toBeNull();
+  store.apply("parent", "pi", { type: "upsert", id: "btw", presentation: null });
+  expect(store.get("parent", "btw")?.presentation).toBeNull();
 });

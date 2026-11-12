@@ -1,4 +1,19 @@
 export const en = {
+  btw: {
+    label: "BTW",
+    title: "BTW conversation",
+    show: "Show BTW conversation",
+    hide: "Hide BTW conversation",
+    minimize: "Minimize",
+    placeholder: "Ask a side question",
+    send: "Send",
+    stop: "Stop",
+    inject: "Send to main",
+    summarize: "Summarize to main",
+    newThread: "New thread",
+    clear: "Clear",
+    accepted: "Command accepted",
+  },
   paneFind: {
     connectionFailure: "Could not search this chat. Check the host connection and retry.",
     historyChangedFailure: "The chat changed while searching. Search again.",

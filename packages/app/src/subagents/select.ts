@@ -26,6 +26,7 @@ export interface PaseoSubagentRow {
 
 export interface ProviderSubagentRow {
   kind: "provider";
+  presentation?: string | null;
   id: string;
   parentAgentId: string;
   parentSubagentId: string | null;
@@ -148,7 +149,12 @@ export function selectProviderSubagentsForParent(
   const rows: ProviderSubagentRow[] = [];
   const prefix = `${params.serverId}\0${params.parentAgentId}\0`;
   for (const [key, subagent] of state.descriptors) {
-    if (!key.startsWith(prefix) || state.hiddenFromTrack.has(key)) continue;
+    if (
+      !key.startsWith(prefix) ||
+      state.hiddenFromTrack.has(key) ||
+      subagent.presentation === "side_conversation"
+    )
+      continue;
     if (
       nestingSupported &&
       (subagent.parentSubagentId ?? null) !== (params.providerParentSubagentId ?? null)
@@ -189,7 +195,8 @@ export function selectProviderSubagentDescendants(
   const prefix = `${params.serverId}\0${params.parentAgentId}\0`;
   const descriptors = new Map<string, ProviderSubagentDescriptorPayload>();
   for (const [key, descriptor] of state.descriptors) {
-    if (key.startsWith(prefix)) descriptors.set(descriptor.id, descriptor);
+    if (key.startsWith(prefix) && descriptor.presentation !== "side_conversation")
+      descriptors.set(descriptor.id, descriptor);
   }
 
   const keptVisible = new Set<string>();

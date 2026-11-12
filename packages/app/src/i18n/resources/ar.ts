@@ -2,6 +2,21 @@ import { en, type TranslationResources } from "./en";
 import { pluginSettings } from "./plugin-settings";
 
 export const ar: TranslationResources = {
+  btw: {
+    label: "BTW",
+    title: "محادثة BTW",
+    show: "إظهار محادثة BTW",
+    hide: "إخفاء محادثة BTW",
+    minimize: "تصغير",
+    placeholder: "اطرح سؤالًا جانبيًا",
+    send: "إرسال",
+    stop: "إيقاف",
+    inject: "إرسال إلى المحادثة الرئيسية",
+    summarize: "تلخيص للمحادثة الرئيسية",
+    newThread: "محادثة جديدة",
+    clear: "مسح",
+    accepted: "تم قبول الأمر",
+  },
   paneFind: {
     connectionFailure: "تعذر البحث في هذه المحادثة. تحقق من الاتصال بالمضيف وأعد المحاولة.",
     historyChangedFailure: "تغيّرت المحادثة أثناء البحث. أعد البحث.",
