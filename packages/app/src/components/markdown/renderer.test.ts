@@ -1106,6 +1106,20 @@ const MATH_FIXTURES = [
     math: [["LatexMathDisplay", ` ${SCREENSHOT_TEX} `]],
   },
   {
+    name: "RMSNorm with an equals sign on its own line",
+    source: String.raw`\[
+\operatorname{RMSNorm}(x)
+=
+\frac{x}{\sqrt{\operatorname{mean}(x^2)+\epsilon}} \odot w
+\]`,
+    math: [
+      [
+        "LatexMathDisplay",
+        String.raw` \operatorname{RMSNorm}(x) = \frac{x}{\sqrt{\operatorname{mean}(x^2)+\epsilon}} \odot w `,
+      ],
+    ],
+  },
+  {
     name: "own-line dollar delimiters",
     source: "$$\nx^2\n$$",
     math: [["LatexMathDisplay", " x^2 "]],
@@ -1122,6 +1136,11 @@ const MATH_FIXTURES = [
     name: "inline brackets",
     source: String.raw`Before \(x^2\) after.`,
     math: [["LatexMathInline", "x^2"]],
+  },
+  {
+    name: "attention scaling with a text subscript",
+    source: String.raw`The function also applies the usual \(1/\sqrt{\text{head_dim}}\) scale automatically.`,
+    math: [["LatexMathInline", String.raw`1/\sqrt{\text{head_dim}}`]],
   },
   { name: "prefix currency", source: "It costs $5 and $10.", math: [] },
   { name: "currency range", source: "$5-$10", math: [] },
