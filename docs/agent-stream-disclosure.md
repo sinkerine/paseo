@@ -24,16 +24,25 @@ place. Header triggers sit on the top edge, the default. A long user message's s
 the text it opens, so `MessagePreview` passes `{ triggerEdge: "bottom" }`: the text grows and shrinks
 above the trigger, and the rows below stay put.
 
-Following output:
+### Following output
 
-- A hold detaches the bottom anchor controller (`holdForDisclosure`), except a bottom-edge hold on
-  native while following: there the end pin already keeps the row's bottom in place.
-- When the hold ends, the controller re-sticks only if the list sits at its end and no user scroll
-  owns the viewport (`releaseDisclosure({ isAtEnd })`). Expanding at the bottom therefore leaves
-  the list detached with the scroll-to-bottom pill showing; collapsing back to the end resumes
-  following.
-- Scroll events during the hold never re-stick: the correction is a programmatic scroll that
-  would otherwise read as "back at the bottom".
+Generation preserves the reading position, including when the viewport rests exactly at the end.
+Entry/reload, Send (including running Send and Queue track Send now), rewind, and **Scroll to bottom**
+request one end landing. Automatic queued dispatch and remote messages do not request navigation.
+After the first measurable write, two consecutive painted frames within 1 logical px of the end
+release the landing, with a hard limit of 60 eligible frames. Hidden or unmeasurable frames do not
+consume that budget. User intent cancels even a request waiting for history. An expired request
+cannot restart from content or layout changes.
+
+A disclosure cancels navigation and preserves its trigger edge. Releasing the hold stays resting,
+even when collapse clamps the viewport to the end. On native, a last-row bottom-edge hold may mount
+the end pin transiently; a reply inserted below that row drops the pin in the same commit.
+
+The existing **Scroll to bottom** control appears when the resting viewport is more than 1 logical
+px from the end, or newer history is unloaded. During a landing it uses the wider navigation
+threshold. Returning to a retained panel preserves its reading position; hiding cancels navigation.
+A fresh route request can land again. Completion, cancellation, failure and final reveal do not
+create navigation intent. Reading anchors still handle prepends, virtualization and delayed sizing.
 
 The trigger can only stay put when the list has scroll room for the change. When the loaded
 content fits the viewport, or a collapse at the end would need an offset past the end, the list
@@ -65,17 +74,18 @@ One owner keeps the scroll offset at any moment:
 | State                  | Owner                                                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Before rows are placed | LegendList's initial scroll to the end. It keeps the rows hidden until they are measured.                         |
-| Following the end      | The end pin (`native-end-pin.tsx`), also for a bottom-edge hold.                                                  |
+| Explicit end landing   | The end pin (`native-end-pin.tsx`), also for a bottom-edge hold.                                                  |
 | Disclosure hold        | LegendList's `maintainVisibleContentPosition` on the hold's anchor row, or the end pin for the last row's bottom. |
 | User scroll            | The finger. The controller detaches at drag start.                                                                |
-| Detached               | LegendList's `maintainVisibleContentPosition` on the first visible row.                                           |
+| Resting                | LegendList's `maintainVisibleContentPosition` on the first visible row.                                           |
 | Keyboard motion        | Nobody. The keyboard translates the list with the composer and leaves the offset alone.                           |
 
 The end pin is a zero-height view at the bottom of the content and the content's first native
 child, with React Native's `maintainVisibleContentPosition` set to `{ minIndexForVisible: 0 }`. The
 native correction runs on the UI thread around each mount, so a row that grows or lands at the end
-scrolls in the frame it lays out. The controller scrolls only for a viewport resize (the composer
-growing or shrinking) and an explicit jump, both through the native `scrollToEnd`.
+scrolls in the frame it lays out. The controller writes only during explicit navigation through native `scrollToEnd`. A viewport
+resize can help an active landing finish; resting resizes never request navigation. Short native
+content stays top aligned, since end alignment moves text even at offset zero.
 
 Do not use LegendList's `maintainScrollAtEnd` instead. It scrolls from JS after the mount to the end
 its JS sizes predict: growth paints below the viewport for a frame, and the scroll lands short of
@@ -104,7 +114,7 @@ jumps by the keyboard height after the keyboard settles.
    anchors only once it is mounted, and a pin that mounts in the same commit as the new height
    anchors nothing. The pin's commit mounts before that frame's JS callbacks run, so `apply`'s
    commit mounts with the pin already in place. The pin keeps the distance from the end, and each
-   content size change clamps it to the scroll room left, so the hold re-sticks if the list was
+   content size change clamps it to the scroll room left, so the hold clamps if the list was
    at its end when tapped or a collapse used up the room. The release tracks that distance
    instead of reading the offset: the new content size reaches JS before the pin's scroll does.
    A reply landing below the row ends the pin in the commit that mounts the reply, so the reply
@@ -128,8 +138,7 @@ jumps by the keyboard height after the keyboard settles.
    in the toggle's own commit.
 
 The hold ends two frames after the last item size change, since the list measures the toggled row
-and any rows it inserted over several frames (`native-disclosure-hold.ts`). The controller then
-re-sticks only if the list is within 1 px of its end, the same distance web resumes from.
+and any rows it inserted over several frames (`native-disclosure-hold.ts`). The controller remains resting when the hold releases, including within 1 px of the end.
 
 ### User scroll
 
@@ -141,10 +150,12 @@ in the detached state LegendList uses the same native correction, and a history 
 mid-drag needs it. They key on the drag, not the touch, so a tap or long press while following
 keeps following.
 
-Following resumes only for a gesture that ends within 1 px of the end, either when the finger lifts
-or when momentum stops. A release past the end counts: iOS bounces back to the end, and lines that
-land during the bounce must keep scrolling in. A release anywhere short of the end stays detached
-with the scroll-to-bottom pill, so the rows the user let go of never move.
+Reaching the end by wheel, keyboard, scrollbar, swipe or momentum does not start navigation.
+A gesture cancels the landing, its verification and blocked requests immediately. Nested tool
+scrollers and editable fields keep their own wheel/key ownership. Keyboard/composer motion and
+viewport resizing may change geometry; baseline after that movement settles, then further output
+must preserve visible text. Keep native jump animation bounded by mounted content and cancel it on
+a gesture.
 
 ### Draw distance
 

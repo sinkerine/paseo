@@ -5,7 +5,7 @@ import {
   expectInlineWorkingIndicator,
   expectRunningAgentChrome,
   expectTurnCopyButton,
-  expectScrollFollowsNewContent,
+  expectScrollStableDuringNewContent,
 } from "../support/helpers/agent-stream";
 import {
   expectScrollStaysFixed,
@@ -48,7 +48,7 @@ test.describe("Agent stream UI", () => {
     }
   });
 
-  test("auto-scroll sticks to bottom across token bursts", async ({ page }) => {
+  test("keeps visible text stable across token bursts", async ({ page }) => {
     test.setTimeout(120_000);
     const agent = await startRunningMockAgent(page, {
       prefix: "stream-scroll-",
@@ -57,7 +57,7 @@ test.describe("Agent stream UI", () => {
     });
     try {
       await awaitAssistantMessage(page);
-      await expectScrollFollowsNewContent(page);
+      await expectScrollStableDuringNewContent(page);
     } finally {
       await agent.cleanup();
     }
