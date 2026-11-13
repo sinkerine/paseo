@@ -1,4 +1,5 @@
 import { expect, type Locator, type TestInfo } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 import type { BtwRuntime } from "../../../server/src/server/daemon-e2e/fixtures/pi-btw-stub/runtime";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
@@ -8,6 +9,9 @@ import { expectComposerEditable, submitMessageWithButton } from "../support/help
 import { waitForSettledPosition } from "../support/helpers/sheet-layout";
 import {
   askBtw,
+  btwViewportGeometry,
+  expectBtwTextInViewport,
+  revealBtwText,
   askBtwFromRunningMainComposer,
   btwBrowserTest,
   captureBtw,
@@ -125,6 +129,7 @@ for (const compact of [false, true]) {
         limit: 0,
       });
       await client.refreshAgent(handle.agentId);
+      await expect(window).toHaveCount(1);
       await expect(window).toHaveAttribute("aria-label", threadId ?? "");
       expect(
         (
@@ -178,6 +183,7 @@ for (const compact of [false, true]) {
       await expect(window).not.toHaveAttribute("aria-label", threadId ?? "");
       await expect(window.getByTestId("btw-inject")).toBeDisabled();
       await expect(window.getByTestId("btw-summarize")).toBeDisabled();
+      await expect(window.getByTestId("turn-footer")).toHaveCount(0);
       await window.getByTestId("btw-clear").click();
       await expect(window).toBeHidden();
       await expect(chip).toHaveCount(0);
@@ -194,6 +200,149 @@ for (const compact of [false, true]) {
       stub.release("parent");
       stub.release("btw");
       await client.close();
+      await closeAgent(handle);
+    }
+  });
+}
+
+for (const compact of [false, true]) {
+  test(`BTW ${compact ? "compact" : "wide"} explicit sends land once and output preserves the reader`, async ({
+    page,
+    btwRuntime,
+  }, info) => {
+    test.setTimeout(120000);
+    const stub = btwRuntime.stub;
+    if (!stub) throw new Error("Missing deterministic HTTP fixture");
+    await page.setViewportSize(
+      compact ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+    );
+    const transport = await installDaemonWebSocketGate(page);
+    const handle = await launchBtwAgent(page, btwRuntime);
+    const window = page.getByTestId("btw-window").filter({ visible: true });
+    const scroller = window.getByTestId("agent-chat-scroll");
+    const proof = [];
+    try {
+      await submitMessageWithButton(page, "PARENT_A");
+      await handle.client.waitForFinish(handle.agentId, 60000);
+      await submitMessageWithButton(page, "/btw HOLD_BTW initial viewport question");
+      await expect.poll(() => stub.pending("btw")).toBe(1);
+      await expect(window.getByTestId("btw-stop")).toBeVisible();
+      await expectBtwTextInViewport(
+        scroller.getByText("HOLD_BTW initial viewport question", { exact: true }),
+      );
+      stub.release("btw");
+      await revealBtwText(page, scroller.getByText("BTW_REPLY CONTEXT_A", { exact: true }).last());
+      for (const index of [1, 2, 3, 4]) {
+        const question = `HOLD_BTW AFTER_B viewport question ${index}`;
+        await askBtw(page, question);
+        await expect.poll(() => stub.pending("btw")).toBe(1);
+        await expect(window.getByTestId("btw-stop")).toBeVisible();
+        const prompt = scroller.getByText(question, { exact: true });
+        await expect(prompt).toBeVisible();
+        proof.push({ phase: `send-${index}`, ...(await btwViewportGeometry(prompt)) });
+        await expectBtwTextInViewport(prompt);
+        const beforeOutput = await btwViewportGeometry(prompt);
+        const samplesPromise = scroller.evaluate(async (element) => {
+          const samples = [];
+          for (let frame = 0; frame < 60; frame += 1) {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            samples.push({
+              frame,
+              scrollTop: element.scrollTop,
+              scrollHeight: element.scrollHeight,
+              rows: Array.from(element.querySelectorAll("[data-history-row-id]"), (row) => ({
+                id: row.getAttribute("data-history-row-id"),
+                top: row.getBoundingClientRect().top,
+                height: row.getBoundingClientRect().height,
+              })),
+            });
+          }
+          return samples;
+        });
+        stub.release("btw");
+        await expect(scroller.getByText("BTW_REPLY AFTER_B", { exact: true })).toHaveCount(index);
+        await expect(window.getByTestId("btw-stop")).toHaveCount(0);
+        await prompt.evaluate(async () => {
+          for (let frame = 0; frame < 4; frame += 1) {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          }
+        });
+        const afterOutput = await btwViewportGeometry(prompt);
+        const samples = await samplesPromise;
+        proof.push({ phase: `output-${index}`, ...afterOutput, samples });
+        const promptRow = beforeOutput.rows.at(-1);
+        if (!promptRow) throw new Error("Missing submitted prompt row");
+        for (const sample of samples) {
+          expect(Math.abs(sample.scrollTop - beforeOutput.scrollTop)).toBeLessThanOrEqual(1);
+          const sampledPrompt = sample.rows.find((row) => row.id === promptRow.id);
+          expect(sampledPrompt?.top).toBeCloseTo(promptRow.top, 0);
+        }
+        expect(afterOutput.scrollTop).toBeCloseTo(beforeOutput.scrollTop, 0);
+        await revealBtwText(page, scroller.getByText("BTW_REPLY AFTER_B", { exact: true }).last());
+      }
+      const question = "HOLD_BTW AFTER_B reader stays above new output";
+      await askBtw(page, question);
+      await expect.poll(() => stub.pending("btw")).toBe(1);
+      await expect(window.getByTestId("btw-stop")).toBeVisible();
+      const prompt = scroller.getByText(question, { exact: true });
+      await expectBtwTextInViewport(prompt);
+      await scroller.hover();
+      await page.mouse.wheel(0, -10000);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+      const before = await btwViewportGeometry(prompt);
+      stub.release("btw");
+      await expect(scroller.getByText("BTW_REPLY AFTER_B", { exact: true })).toHaveCount(5);
+      const after = await btwViewportGeometry(prompt);
+      proof.push(
+        { phase: "reader-before-output", ...before },
+        { phase: "reader-after-output", ...after },
+      );
+      expect(after.scrollTop).toBe(before.scrollTop);
+      expect(after.target.top).toBeCloseTo(before.target.top, 0);
+      const reply = scroller.getByText("BTW_REPLY AFTER_B", { exact: true }).last();
+      await window.getByTestId("scroll-to-bottom-button").click();
+      await expectBtwTextInViewport(reply);
+      proof.push({ phase: "explicit-jump", ...(await btwViewportGeometry(reply)) });
+      transport.holdNextClientRequest("send_agent_message_request");
+      const delayedQuestion = "HOLD_BTW AFTER_B delayed question after reader gesture";
+      await askBtw(page, delayedQuestion);
+      await transport.waitForHeldClientRequest();
+      await scroller.hover();
+      await page.mouse.wheel(0, -10000);
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
+      const beforeAdmission = await btwViewportGeometry(reply);
+      transport.releaseHeldClientRequest();
+      await expect.poll(() => stub.pending("btw")).toBe(1);
+      await expect(window.getByTestId("btw-stop")).toBeVisible();
+      await expect(scroller.getByText(delayedQuestion, { exact: true })).toBeAttached();
+      const afterAdmission = await btwViewportGeometry(reply);
+      proof.push(
+        { phase: "gesture-before-admission", ...beforeAdmission },
+        { phase: "canonical-after-gesture", ...afterAdmission },
+      );
+      expect(afterAdmission.scrollTop).toBe(beforeAdmission.scrollTop);
+      expect(afterAdmission.target.top).toBeCloseTo(beforeAdmission.target.top, 0);
+      stub.release("btw");
+      await expect(scroller.getByText("BTW_REPLY AFTER_B", { exact: true })).toHaveCount(6);
+      const afterDelayedOutput = await btwViewportGeometry(reply);
+      expect(afterDelayedOutput.scrollTop).toBe(beforeAdmission.scrollTop);
+      await window.getByTestId("scroll-to-bottom-button").click();
+      const latestReply = scroller.getByText("BTW_REPLY AFTER_B", { exact: true }).last();
+      await expectBtwTextInViewport(latestReply);
+      proof.push({
+        phase: "delayed-answer-explicit-jump",
+        ...(await btwViewportGeometry(latestReply)),
+      });
+      await captureBtw(page, info, `btw-${compact ? "compact" : "wide"}-answer-in-viewport`);
+    } finally {
+      const proofPath = info.outputPath("btw-scroll-geometry.json");
+      await writeFile(proofPath, JSON.stringify(proof, null, 2));
+      await info.attach("btw-scroll-geometry", {
+        path: proofPath,
+        contentType: "application/json",
+      });
+      transport.restore();
+      stub.release("btw");
       await closeAgent(handle);
     }
   });

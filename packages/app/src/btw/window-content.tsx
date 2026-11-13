@@ -1,12 +1,12 @@
 import { useMutation } from "@tanstack/react-query";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, type RefObject } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { Minus } from "lucide-react-native";
 import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
-import { AgentStreamView } from "@/agent-stream/view";
+import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { Button } from "@/components/ui/button";
 import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { SheetAwareTextInput } from "@/components/ui/text-input/sheet-aware";
@@ -34,6 +34,8 @@ export interface BtwContentProps {
   serverId: string;
   agentId: string;
   thread: ProviderSubagentDescriptorPayload;
+  streamViewRef: RefObject<AgentStreamViewHandle | null>;
+  onUserScrollIntent(): void;
   compact: boolean;
   draft: string;
   onDraft(text: string): void;
@@ -62,6 +64,8 @@ export function BtwWindowContent({
   serverId,
   agentId,
   thread,
+  streamViewRef,
+  onUserScrollIntent,
   compact,
   draft,
   onDraft,
@@ -154,6 +158,8 @@ export function BtwWindowContent({
       </Text>
       <View style={styles.timeline}>
         <AgentStreamView
+          ref={streamViewRef}
+          onUserScrollIntent={onUserScrollIntent}
           agentId={streamId}
           serverId={serverId}
           context={context}
@@ -163,6 +169,7 @@ export function BtwWindowContent({
           pendingPermissions={EMPTY_PERMISSIONS}
           isAuthoritativeHistoryReady
           readOnly
+          reserveTurnFooterSpace={!!timeline && timeline.tail.length + timeline.head.length > 0}
           historyPagination={historyPagination}
         />
       </View>

@@ -57,7 +57,9 @@ export const TurnFooter = memo(function TurnFooter({
   onForkSession,
   forkSessionDisabledReason,
   onForkInFlightTurn,
+  reserveTurnFooterSpace = false,
 }: {
+  reserveTurnFooterSpace?: boolean;
   isRunning: boolean;
   inFlightTurnStartedAt: Date | null;
   host: TurnFooterHost | null;
@@ -79,7 +81,11 @@ export const TurnFooter = memo(function TurnFooter({
     );
   }
   if (!host) {
-    return null;
+    return reserveTurnFooterSpace ? (
+      <TurnFooterRow>
+        <View style={stylesheet.turnFooterSlot} />
+      </TurnFooterRow>
+    ) : null;
   }
   return (
     <CompletedTurnFooterRow

@@ -23,13 +23,11 @@ export type BtwDraftAction =
       items: readonly StreamItem[];
     };
 
-function reconcilesSubmission(
-  state: BtwDraftState,
-  action: Extract<BtwDraftAction, { type: "thread" }>,
-) {
-  const submitted = state.submitted;
-  if (!submitted || (action.status !== "completed" && action.status !== "canceled")) return false;
-  const index = action.items.findIndex((item) => {
+export function findBtwSubmittedQuestionIndex(
+  submitted: NonNullable<BtwDraftState["submitted"]>,
+  items: readonly StreamItem[],
+): number {
+  return items.findIndex((item) => {
     if (item.kind !== "user_message" || item.text.trim() !== submitted.text.trim()) return false;
     if (!submitted.after) return item.timestamp.getTime() >= submitted.submittedAt;
     return (
@@ -37,6 +35,15 @@ function reconcilesSubmission(
       item.timelineCursor.seq > submitted.after.seq
     );
   });
+}
+
+function reconcilesSubmission(
+  state: BtwDraftState,
+  action: Extract<BtwDraftAction, { type: "thread" }>,
+) {
+  const submitted = state.submitted;
+  if (!submitted || (action.status !== "completed" && action.status !== "canceled")) return false;
+  const index = findBtwSubmittedQuestionIndex(submitted, action.items);
   const question = action.items[index];
   if (!question || Date.parse(action.updatedAt) < question.timestamp.getTime()) return false;
   const following = action.items.slice(index + 1);

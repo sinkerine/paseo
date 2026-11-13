@@ -1,6 +1,11 @@
 import { expect, test } from "vitest";
 import type { StreamItem } from "@/types/stream";
-import { reduceBtwDraft, type BtwDraftAction, type BtwDraftState } from "./draft";
+import {
+  findBtwSubmittedQuestionIndex,
+  reduceBtwDraft,
+  type BtwDraftAction,
+  type BtwDraftState,
+} from "./draft";
 
 const question = { kind: "ask", text: "Question 日本語" } as const;
 function apply(...actions: BtwDraftAction[]) {
@@ -182,4 +187,21 @@ test("unrelated idle metadata between failure and acknowledgement preserves reco
   );
   expect(state.text).toBe(question.text);
   expect(state.submitted?.text).toBe(question.text);
+});
+
+test("canonical ask matching excludes older repeats, other epochs and other clients", () => {
+  const state = apply(submit);
+  if (!state.submitted) throw new Error("Missing submitted ask");
+  const items: StreamItem[] = [
+    { ...user, timelineCursor: { epoch: "epoch", seq: 1 } },
+    { ...user, timelineCursor: { epoch: "old", seq: 9 } },
+    { ...user, text: "Other client" },
+    user,
+  ];
+  expect(findBtwSubmittedQuestionIndex(state.submitted, items)).toBe(3);
+  expect(findBtwSubmittedQuestionIndex(state.submitted, items.slice(0, 3))).toBe(-1);
+  const withoutCursor = { ...state.submitted, after: null, submittedAt: user.timestamp.getTime() };
+  expect(
+    findBtwSubmittedQuestionIndex(withoutCursor, [{ ...user, timestamp: new Date(0) }, user]),
+  ).toBe(1);
 });

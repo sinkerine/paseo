@@ -147,6 +147,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
     isInitialHistoryLoading,
     revealInitialHistory,
     onNearBottomChange,
+    onUserScrollIntent,
     onNearHistoryStart,
     isLoadingOlderHistory,
     hasOlderHistory,
@@ -557,6 +558,7 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
   });
 
   const handleScrollBeginDrag = useStableEvent((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    onUserScrollIntent?.();
     finishInitialFill();
     clearPendingUserScrollEnd();
     isUserScrollActiveRef.current = true;

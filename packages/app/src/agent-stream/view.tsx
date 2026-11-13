@@ -269,6 +269,10 @@ export interface AgentStreamViewProps {
   toast?: ToastApi | null;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
   readOnly?: boolean;
+  /** Retain the existing footer geometry across independently delivered child status/history. */
+  reserveTurnFooterSpace?: boolean;
+  /** Genuine user scrolling supersedes navigation waiting on canonical content. */
+  onUserScrollIntent?: () => void;
   historyPagination?: {
     hasOlder: boolean;
     isLoadingOlder: boolean;
@@ -366,6 +370,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       toast,
       onOpenWorkspaceFile,
       readOnly = false,
+      reserveTurnFooterSpace,
+      onUserScrollIntent,
       historyPagination,
     },
     ref,
@@ -1085,10 +1091,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const turnFooterNode = useMemo(
       () =>
         isTurnActive ||
+        (reserveTurnFooterSpace && !bottomTurnFooterHost) ||
         (bottomTurnFooterHost &&
           bottomTurnFooterHost.items[bottomTurnFooterHost.startIndex]?.kind !== "plugin") ? (
           <TurnFooter
             isRunning={isTurnActive}
+            reserveTurnFooterSpace={reserveTurnFooterSpace}
             inFlightTurnStartedAt={baseRenderModel.turnTiming.runningStartedAt}
             host={bottomTurnFooterHost}
             strategy={streamRenderStrategy}
@@ -1109,6 +1117,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
         isTurnActive,
         baseRenderModel.turnTiming.runningStartedAt,
         bottomTurnFooterHost,
+        reserveTurnFooterSpace,
         streamRenderStrategy,
         supportsAgentForkContextCursor,
       ],
@@ -1282,6 +1291,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                   isInitialHistoryLoading,
                   revealInitialHistory,
                   onNearBottomChange: nearBottom.set,
+                  onUserScrollIntent,
                   onReadingPositionChange: handleReadingPositionChange,
                   onNearHistoryStart: loadOlder,
                   isLoadingOlderHistory: isLoadingOlder,
@@ -1414,6 +1424,9 @@ function agentStreamViewPropsEqual(
   if (left.pendingMessageSubmissions !== right.pendingMessageSubmissions) {
     reasons.push("pendingMessageSubmissions");
   }
+  if (left.reserveTurnFooterSpace !== right.reserveTurnFooterSpace)
+    reasons.push("reserveTurnFooterSpace");
+  if (left.onUserScrollIntent !== right.onUserScrollIntent) reasons.push("onUserScrollIntent");
   if (left.turnPresentation !== right.turnPresentation) reasons.push("turnPresentation");
   if (
     !bottomAnchorRouteRequestsEqual(left.routeBottomAnchorRequest, right.routeBottomAnchorRequest)

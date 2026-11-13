@@ -15,8 +15,9 @@ import { useSendBtwCommand, type BtwCommand } from "./send";
 import { btwWindowKey, useBtwWindowStore } from "./window-store";
 import { BtwFloatingCard } from "./floating-card";
 import { BtwSheet } from "./sheet";
-import { reduceBtwDraft } from "./draft";
+import { findBtwSubmittedQuestionIndex, reduceBtwDraft } from "./draft";
 import { BtwWindowContent } from "./window-content";
+import type { AgentStreamViewHandle } from "@/agent-stream/view";
 
 export function BtwWindow({
   isComposerFullscreen = false,
@@ -77,21 +78,42 @@ function BtwThreadWindow({
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const send = useSendBtwCommand(serverId, agentId);
   const admitting = useRef(false);
+  const pendingSendLanding = useRef(false);
+  const cancelSendLanding = useCallback(() => {
+    pendingSendLanding.current = false;
+  }, []);
+  const streamViewRef = useRef<AgentStreamViewHandle>(null);
   const action = useMutation({
     mutationFn: send,
     retry: false,
     onSuccess: (_result, command) => {
       updateDraft({ type: "accepted", command });
     },
+    onError: cancelSendLanding,
     onSettled: () => {
       admitting.current = false;
     },
   });
+  // RPC acceptance precedes Pi's question row. Land once when that exact local ask arrives.
+  useEffect(() => {
+    const submitted = draft.submitted;
+    if (!pendingSendLanding.current || !submitted || !timeline) return;
+    const rejected = thread.status === "failed" || thread.status === "canceled";
+    if (rejected && Date.parse(thread.updatedAt) >= submitted.submittedAt) {
+      cancelSendLanding();
+      return;
+    }
+    const index = findBtwSubmittedQuestionIndex(submitted, [...timeline.tail, ...timeline.head]);
+    if (index < 0) return;
+    cancelSendLanding();
+    streamViewRef.current?.scrollToBottom("message-sent");
+  }, [draft.submitted, timeline, thread.status, thread.updatedAt, cancelSendLanding]);
   const { mutate } = action;
   const dispatch = useCallback(
     (command: BtwCommand) => {
       if (admitting.current) return;
       admitting.current = true;
+      pendingSendLanding.current = command.kind === "ask";
       const current = useProviderSubagentStore.getState().timelines.get(timelineKey);
       const after = current?.epoch ? { epoch: current.epoch, seq: current.lastSeq } : null;
       updateDraft({ type: "submit", command, after, submittedAt: Date.now() });
@@ -122,6 +144,8 @@ function BtwThreadWindow({
       serverId={serverId}
       agentId={agentId}
       thread={thread}
+      streamViewRef={streamViewRef}
+      onUserScrollIntent={cancelSendLanding}
       compact={compact}
       draft={draft.text}
       onDraft={editDraft}

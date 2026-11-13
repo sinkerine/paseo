@@ -5,7 +5,7 @@ import { i18n } from "@/i18n/i18next";
 import type { TurnTiming } from "@/timeline/turn-time";
 import type { StreamItem } from "@/types/stream";
 import { createNativeStreamStrategy } from "./strategy-native";
-import { CompletedTurnFooterRow } from "./turn-footer";
+import { CompletedTurnFooterRow, TurnFooter } from "./turn-footer";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -91,4 +91,37 @@ it.each([
     [input.duration]: 1,
     "Friday 11:11 PM": 1,
   });
+});
+
+it("reserves one silent footer slot across child completion gaps without changing the default", () => {
+  const strategy = createNativeStreamStrategy();
+  const completedHost = { itemId: reply.id, items: [reply], startIndex: 0 };
+  const render = (isRunning: boolean, completed: boolean, reserveTurnFooterSpace = true) =>
+    act(() =>
+      root.render(
+        <TurnFooter
+          isRunning={isRunning}
+          host={completed ? completedHost : null}
+          inFlightTurnStartedAt={null}
+          strategy={strategy}
+          supportsTimelineCursor={false}
+          reserveTurnFooterSpace={reserveTurnFooterSpace}
+        />,
+      ),
+    );
+  render(true, false);
+  const runningHeight = host.getBoundingClientRect().height;
+  expect(runningHeight).toBeGreaterThan(0);
+  render(false, false);
+  expect(host.getBoundingClientRect().height).toBe(runningHeight);
+  expect(host.querySelectorAll('[data-testid="turn-footer"]')).toHaveLength(1);
+  expect(host.textContent).toBe("");
+  expect(host.querySelector('[data-testid="turn-working-indicator"]')).toBeNull();
+  expect(host.querySelector('[role="button"]')).toBeNull();
+  render(false, true);
+  expect(host.getBoundingClientRect().height).toBe(runningHeight);
+  expect(host.querySelectorAll('[data-testid="turn-footer"]')).toHaveLength(1);
+  render(false, false, false);
+  expect(host.querySelector('[data-testid="turn-footer"]')).toBeNull();
+  expect(host.getBoundingClientRect().height).toBe(0);
 });

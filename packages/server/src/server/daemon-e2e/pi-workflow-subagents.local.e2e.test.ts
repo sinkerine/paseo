@@ -794,14 +794,15 @@ test("direct workflow streams its tree and child transcripts, then replays after
     );
 }, 240_000);
 
-test("native fork never claims the source's held workflow across isolated restart", async () => {
+async function runNativeForkWorkflowOwnership(loseHeldRunner: boolean) {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-workflow-ownership-"));
   const paseoHome = path.join(root, "home");
   const piAgent = path.join(root, "pi-agent");
   const subagentsTmp = path.join(root, "subagents-tmp");
   const cwd = path.join(root, "work");
   const gate = path.join(root, "gate");
-  const evidenceDir = process.env.PASEO_NATIVE_FORK_EVIDENCE_DIR ?? path.join(root, "evidence");
+  const evidenceRoot = process.env.PASEO_NATIVE_FORK_EVIDENCE_DIR ?? path.join(root, "evidence");
+  const evidenceDir = loseHeldRunner ? path.join(evidenceRoot, "held-runner-exit") : evidenceRoot;
   const command = isolatedPiCommand();
   const logger = pino({ level: "silent" });
   const failures: unknown[] = [];
@@ -869,7 +870,14 @@ test("native fork never claims the source's held workflow across isolated restar
       state: string;
       sessionId: string;
       pid: number;
-      steps: Array<{ workflowKey: string; status: string; sessionFile?: string }>;
+      parentWorkflowRunId?: string;
+      steps: Array<{
+        workflowKey: string;
+        status: string;
+        sessionFile?: string;
+        runId?: string;
+        parentWorkflowRunId?: string;
+      }>;
       workflow?: { stopCause?: string; resumeOrigin?: { sourceRunId: string } };
     };
     const claims = await Promise.all(
@@ -1046,9 +1054,10 @@ test("native fork never claims the source's held workflow across isolated restar
         )
         .toMatchObject({ status: "running", sessionFile: expect.any(String) });
       const resumed = await readRun(claim.newRunId);
-      const resumedChildFile = resumed.status.steps.find(
-        (step) => step.workflowKey === "T2.review",
-      )!.sessionFile!;
+      const resumedChild = resumed.status.steps.find((step) => step.workflowKey === "T2.review")!;
+      const resumedChildFile = resumedChild.sessionFile!;
+      const resumedChildRunId = resumedChild.runId;
+      if (!resumedChildRunId) throw new Error("Missing resumed child run ID");
       await expect
         .poll(() => readFile(resumedChildFile, "utf8"), { timeout: 15_000 })
         .toContain("PASEO_SCRIPTED_GATE");
@@ -1081,10 +1090,30 @@ test("native fork never claims the source's held workflow across isolated restar
         resumedChildText,
         claimantProcess,
       });
-      return { interrupted, claim, resumedWorkflow, resumedChildFile, forkBeforeRestart };
+      if (loseHeldRunner) {
+        const heldRunner = await readRun(resumedChildRunId);
+        await record("held-runner-exit", { resumedChildRunId, heldRunner });
+        killRootedProcess(heldRunner.status.pid);
+      }
+      return {
+        interrupted,
+        claim,
+        resumedWorkflow,
+        resumedChildFile,
+        resumedChildRunId,
+        resumedChildText,
+        forkBeforeRestart,
+      };
     }
-    const { interrupted, claim, resumedWorkflow, resumedChildFile, forkBeforeRestart } =
-      await restartAndResumeSourceWorkflow();
+    const {
+      interrupted,
+      claim,
+      resumedWorkflow,
+      resumedChildFile,
+      resumedChildRunId,
+      resumedChildText,
+      forkBeforeRestart,
+    } = await restartAndResumeSourceWorkflow();
 
     await writeFile(gate, "open\n");
     await expect
@@ -1097,7 +1126,44 @@ test("native fork never claims the source's held workflow across isolated restar
     expect(
       completedRun.status.steps.map(({ workflowKey, status }) => ({ workflowKey, status })),
     ).toEqual(runDefinitions.map(({ key }) => ({ workflowKey: key, status: "completed" })));
-    const completedChildText = await readFile(resumedChildFile, "utf8");
+    async function readCompletedReviewTranscript() {
+      // A child lost during daemon shutdown can be replaced after the resumed workflow publishes its first metadata.
+      const completedChild = completedRun.status.steps.find(
+        (step) => step.workflowKey === "T2.review",
+      )!;
+      if (!completedChild.sessionFile || !completedChild.runId)
+        throw new Error("Missing completed child identity");
+      const completedChildFile = completedChild.sessionFile;
+      const completedChildRun = await readRun(completedChild.runId);
+      expect(completedChildRun.status).toMatchObject({
+        mode: "single",
+        state: "complete",
+        sessionId: sourceFile,
+      });
+      expect([sourceRunId, claim.newRunId]).toContain(completedChildRun.status.parentWorkflowRunId);
+      expect(completedChild.parentWorkflowRunId).toBe(claim.newRunId);
+      expect(
+        completedRun.status.steps
+          .slice(0, 3)
+          .map(({ runId, sessionFile }) => ({ runId, sessionFile })),
+      ).toEqual(
+        beforeFork.status.steps
+          .slice(0, 3)
+          .map(({ runId, sessionFile }) => ({ runId, sessionFile })),
+      );
+      if (loseHeldRunner) {
+        expect(completedChild.runId).not.toBe(resumedChildRunId);
+        expect(completedChildFile).not.toBe(resumedChildFile);
+        expect(await readFile(resumedChildFile, "utf8")).toBe(resumedChildText);
+      }
+      const completedChildText = await readFile(completedChildFile, "utf8");
+      expect(JSON.parse(completedChildText.split("\n")[0]!)).toMatchObject({
+        parentSession: sourceFile,
+      });
+      return { completedChildFile, completedChildRun, completedChildText };
+    }
+    const { completedChildFile, completedChildRun, completedChildText } =
+      await readCompletedReviewTranscript();
     expect(completedChildText).toContain("PASEO_SCRIPTED_DONE:T2.review");
     let completedNotice: unknown;
     await expect
@@ -1136,6 +1202,8 @@ test("native fork never claims the source's held workflow across isolated restar
       resumed: completedRun,
       resumedChildFile,
       completedChildText,
+      completedChildFile,
+      completedChildRun,
       sourceFile,
       completedNotice,
       sourceTree: (await active.listProviderSubagents(source.id)).subagents,
@@ -1180,4 +1248,16 @@ test("native fork never claims the source's held workflow across isolated restar
   }
   if (failures.length > 0)
     throw new AggregateError(failures, "Native workflow ownership journey failed");
-}, 240_000);
+}
+
+test(
+  "native fork never claims the source's held workflow across isolated restart",
+  () => runNativeForkWorkflowOwnership(false),
+  240_000,
+);
+
+test(
+  "native fork never claims source work when the reattached held runner exits",
+  () => runNativeForkWorkflowOwnership(true),
+  240_000,
+);

@@ -49,7 +49,7 @@ afterEach(() => {
   host.remove();
 });
 
-function mountTimeline(historyMounted: StreamItem[]) {
+function mountTimeline(historyMounted: StreamItem[], onUserScrollIntent?: () => void) {
   const strategy = createWebStreamStrategy({ isMobileBreakpoint: true });
   const viewportRef = React.createRef<StreamViewportHandle>();
   const input: StreamRenderInput = {
@@ -67,6 +67,7 @@ function mountTimeline(historyMounted: StreamItem[]) {
     routeBottomAnchorRequest: null,
     isAuthoritativeHistoryReady: true,
     onNearBottomChange: () => {},
+    onUserScrollIntent,
     onNearHistoryStart: async () => true,
     isLoadingOlderHistory: false,
     hasOlderHistory: false,
@@ -256,5 +257,25 @@ describe("bounded end landing", () => {
     await timeline.settle();
     expect(timeline.scrollContainer.scrollTop).toBe(offset);
     expect(timeline.distanceFromEnd()).toBeGreaterThan(300);
+  });
+  it("reports genuine user intent without treating navigation or output as a gesture", async () => {
+    let gestures = 0;
+    const timeline = mountTimeline([row(1, 400)], () => {
+      gestures += 1;
+    });
+    await timeline.settle();
+    act(() => timeline.viewportRef.current!.scrollToBottom("message-sent"));
+    await timeline.settle();
+    timeline.render({ liveHead: [row(2, 400)] });
+    await timeline.settle();
+    expect(gestures).toBe(0);
+    act(() => timeline.scrollContainer.dispatchEvent(new WheelEvent("wheel", { deltaY: -20 })));
+    expect(gestures).toBe(1);
+    act(() =>
+      timeline.scrollContainer.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "PageUp", bubbles: true }),
+      ),
+    );
+    expect(gestures).toBe(2);
   });
 });

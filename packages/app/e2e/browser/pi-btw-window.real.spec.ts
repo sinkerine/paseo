@@ -7,6 +7,8 @@ import { closeAgent } from "../support/helpers/rewind-flow";
 import { submitMessageWithButton } from "../support/helpers/composer";
 import {
   askBtw,
+  btwViewportGeometry,
+  revealBtwText,
   askBtwFromRunningMainComposer,
   btwBrowserTest,
   captureBtw,
@@ -66,6 +68,9 @@ test("real Pi and configured provider answer from finished parent context while 
     const firstStates = await recordedBtwStates(btwRuntime);
     const first = firstStates.findLast((state) => state.status === "idle");
     expect(first?.boundary.parentLeafEntryId).toEqual(expect.any(String));
+    const firstAnswer = window.getByTestId("agent-chat-scroll").getByText(tokenA, { exact: true });
+    await revealBtwText(page, firstAnswer);
+    const firstViewport = await btwViewportGeometry(firstAnswer);
     await captureBtw(page, info, "live-btw-wide-parent-running");
     await page.getByTestId("btw-chip").click();
     await expect(window).toBeHidden();
@@ -90,12 +95,19 @@ test("real Pi and configured provider answer from finished parent context while 
     expect(second?.threadId).toBe(first?.threadId);
     expect(second?.boundary.prefixDigest).not.toBe(first?.boundary.prefixDigest);
     expect(second?.boundary.parentTurnIndex).toBeGreaterThan(first?.boundary.parentTurnIndex ?? 0);
+    const nextAnswer = window.getByTestId("agent-chat-scroll").getByText(tokenB, { exact: true });
+    await revealBtwText(page, nextAnswer);
+    const nextViewport = await btwViewportGeometry(nextAnswer);
+    await writeFile(
+      info.outputPath("live-answer-viewports.json"),
+      JSON.stringify({ firstViewport, nextViewport }, null, 2),
+    );
     await captureBtw(page, info, "live-btw-compact-repinned");
     await page.getByTestId("btw-sheet-chip").filter({ visible: true }).click();
     await expect(window).toBeHidden();
     await page.getByTestId("btw-chip").filter({ visible: true }).click();
     await expect(window).toHaveAttribute("aria-label", `btw:${first?.threadId}`);
-    const proof = `# Live Pi BTW proof\n\nPi: ${btwRuntime.piBinary} (1.4.0)\nProducer revision: ${btwRuntime.revision}\n\nThe actual configured provider returned ${tokenA} while the parent tool was held, then ${tokenB} after its completion.\n\nFirst boundary: ${JSON.stringify(first?.boundary)}\nNext boundary: ${JSON.stringify(second?.boundary)}\n\nWide and compact screenshots are attached. This run does not establish native keyboard or Electron window behavior.\n`;
+    const proof = `# Live Pi BTW proof\n\nPi: ${btwRuntime.piBinary} (1.4.0)\nProducer revision: ${btwRuntime.revision}\n\nThe actual configured provider returned ${tokenA} while the parent tool was held, then ${tokenB} after its completion.\n\nFirst boundary: ${JSON.stringify(first?.boundary)}\nNext boundary: ${JSON.stringify(second?.boundary)}\n\nWide and compact screenshots were captured after explicit navigation with each answer asserted inside the BTW scroll viewport. Output receipt and screen visibility are distinct: the shared stable-scroll policy does not automatically follow answers. This run does not establish native keyboard or Electron window behavior.\n`;
     const proofPath = info.outputPath("live-pi-proof.md");
     await writeFile(proofPath, proof);
     await info.attach("live-pi-proof", { path: proofPath, contentType: "text/markdown" });

@@ -313,6 +313,7 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     isInitialHistoryLoading,
     revealInitialHistory,
     onNearBottomChange,
+    onUserScrollIntent,
     onReadingPositionChange,
     onNearHistoryStart,
     isLoadingOlderHistory,
@@ -826,6 +827,7 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
   ]);
 
   const stopFollowingOutputFromUserIntent = useStableEvent(() => {
+    onUserScrollIntent?.();
     finishInitialFill();
     cancelPendingStickToBottom();
     if (followOutputRef.current) {
