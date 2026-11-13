@@ -1,7 +1,7 @@
-// The synchronous Pi adapter contract reads one named status file per tracked run per tick.
+// Poll named workflow statuses; consult a named child status when admitting a retained session.
 // eslint-disable-next-line paseo/no-sync-io
 import { readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import type { ProviderSubagentStatus } from "../../../../provider-subagents/store.js";
 import type { PiChildSessionFile, PiExtensionCustomMapping } from "../contract.js";
@@ -25,6 +25,7 @@ const Mission = z.object({ runs: z.array(z.unknown()) });
 
 const WorkflowStep = z
   .object({
+    runId: z.string().optional(),
     workflowKey: z.string().trim().min(1).optional(),
     parentWorkflowRunId: z.string().optional(),
     label: z.string().optional(),
@@ -47,11 +48,21 @@ const WorkflowStatus = z
     mode: z.literal("workflow"),
     state: z.string(),
     toolCallId: z.string().optional(),
+    sessionId: z.string().optional(),
     pid: z.number().int().positive().optional(),
     steps: z.array(WorkflowStep),
     workflowGraph: WorkflowGraph.optional(),
   })
   .passthrough();
+
+const ResumedChildStatus = z.object({
+  runId: z.string(),
+  revivedFrom: z.string().uuid(),
+  parentWorkflowRunId: z.string(),
+  workflowKey: z.string(),
+  sessionId: z.string(),
+  steps: z.array(z.object({ sessionFile: z.string().optional() })),
+});
 
 // Unknown and paused values deliberately carry no new lifecycle evidence.
 const statusPolicy = {
@@ -129,6 +140,7 @@ interface TrackedWorkflow {
   creationOrderByKey: Map<string, RunCreationOrder>;
   groups: Set<string>;
   pendingLanes: Set<string>;
+  sessionByKey: Map<string, string>;
 }
 
 interface WorkflowObservation {
@@ -148,6 +160,34 @@ function readStatus(runId: string, asyncDir: string): z.infer<typeof WorkflowSta
   const parsed = WorkflowStatus.safeParse(raw);
   if (!parsed.success || parsed.data.runId !== runId) return undefined;
   return parsed.data;
+}
+
+function isResumedChild(
+  asyncDir: string | undefined,
+  workflow: z.infer<typeof WorkflowStatus>,
+  step: z.infer<typeof WorkflowStep>,
+): boolean {
+  if (!asyncDir || !step.runId || !workflow.sessionId) return false;
+  if (!z.string().uuid().safeParse(step.runId).success) return false;
+  let raw: unknown;
+  try {
+    // The admitted workflow names this child run; never scan neighboring artifacts.
+    raw = JSON.parse(readFileSync(join(dirname(asyncDir), step.runId, "status.json"), "utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError) return false;
+    if (error instanceof Error && "code" in error) return false;
+    throw error;
+  }
+  const parsed = ResumedChildStatus.safeParse(raw);
+  if (!parsed.success) return false;
+  const child = parsed.data;
+  return (
+    child.runId === step.runId &&
+    child.parentWorkflowRunId === workflow.runId &&
+    child.workflowKey === step.workflowKey &&
+    child.sessionId === workflow.sessionId &&
+    child.steps.some((entry) => entry.sessionFile === step.sessionFile)
+  );
 }
 
 function groupStatus(
@@ -208,6 +248,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
         creationOrderByKey: new Map(),
         groups: new Set(),
         pendingLanes: new Set(),
+        sessionByKey: new Map(),
       };
       workflows.set(runId, run);
     }
@@ -222,6 +263,27 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
     if (!run.groupByKey.has(key)) run.groupByKey.set(key, undefined);
     if (!run.presentationByKey.has(key)) run.presentationByKey.set(key, { title: key });
     if (status !== undefined || !run.runStatusByKey.has(key)) run.runStatusByKey.set(key, status);
+  }
+
+  function registerChildSession(
+    run: TrackedWorkflow,
+    status: z.infer<typeof WorkflowStatus>,
+    step: z.infer<typeof WorkflowStep>,
+  ): PiChildSessionFile[] {
+    const key = step.workflowKey;
+    if (!key || !step.sessionFile || run.sessionByKey.get(key) === step.sessionFile) return [];
+    const resumed = isResumedChild(run.asyncDir, status, step);
+    if (options.readSessions.has(step.sessionFile) && !resumed) return [];
+    // A retained continuation owns a new row and reader; concurrent aliases stay deduplicated.
+    options.readSessions.add(step.sessionFile);
+    run.sessionByKey.set(key, step.sessionFile);
+    return [
+      {
+        id: workflowRunSubagentId(status.runId, key),
+        file: step.sessionFile,
+        ...(resumed ? { lifetime: "conversation" as const } : {}),
+      },
+    ];
   }
 
   function applyStatus(
@@ -257,10 +319,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
         startedAt: step.startedAt ?? previousOrder?.startedAt ?? 0,
         artifactOrder: previousOrder?.artifactOrder ?? run.creationOrderByKey.size,
       });
-      if (step.sessionFile && !options.readSessions.has(step.sessionFile)) {
-        options.readSessions.add(step.sessionFile);
-        childSessions.push({ id: workflowRunSubagentId(runId, key), file: step.sessionFile });
-      }
+      childSessions.push(...registerChildSession(run, status, step));
     }
     return { childSessions, childStatuses };
   }

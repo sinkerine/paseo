@@ -102,7 +102,10 @@ export class PiChildSessionFollower {
 
   async readNew(): Promise<ProviderSubagentInputEvent[]> {
     const conversation = this.lifetime === "conversation";
-    if (!conversation && (this.offset >= this.maxBytes || this.items >= MAX_ITEMS)) return [];
+    if (!conversation && (this.offset >= this.maxBytes || this.items >= MAX_ITEMS)) {
+      this.hasMore = false;
+      return [];
+    }
     try {
       const handle = await open(this.file, "r");
       try {

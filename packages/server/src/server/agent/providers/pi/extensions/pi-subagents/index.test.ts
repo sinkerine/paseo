@@ -979,6 +979,107 @@ describe("pi-subagents workflows", () => {
     }
   });
 
+  test("hydrates and follows a proven resumed workflow child beyond one-shot limits", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-pi-workflow-resume-"));
+    const host = createPiExtensionHost();
+    const store = new ProviderSubagentStore();
+    const resumedRunId = "cb1d0195-86ff-43dc-8971-74327b4dd39d";
+    const id = `${workflowId}/resumed`;
+    const file = join(root, "retained-session.jsonl");
+    const dir = join(root, workflowRunId);
+    const row = (index: number) =>
+      JSON.stringify({
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: `answer-${index}:${"x".repeat(10000)}` }],
+        },
+      }) + "\n";
+    host.follow((event) => applySubagentEvent(store, event));
+    try {
+      await mkdir(dir);
+      await mkdir(join(root, resumedRunId));
+      await writeFile(file, row(0));
+      await applyHostOutput(
+        store,
+        host.mapToolCall({
+          callId: "original",
+          toolName: "subagent",
+          args: { agent: "worker", task: "Original work" },
+          status: "completed",
+          result: {
+            details: {
+              mode: "single",
+              results: [{ agent: "worker", exitCode: 0, sessionFile: file }],
+            },
+          },
+        }),
+      );
+      const originalCount = workflowTimeline(store, "original").length;
+      await appendFile(file, Array.from({ length: 229 }, (_, index) => row(index + 1)).join(""));
+      await writeFile(
+        join(root, resumedRunId, "status.json"),
+        JSON.stringify({
+          runId: resumedRunId,
+          revivedFrom: "ac64039f-598b-4c0c-a5ed-69244b2b7430",
+          parentWorkflowRunId: workflowRunId,
+          workflowKey: "resumed",
+          sessionId: "owner-session",
+          steps: [{ sessionFile: file }],
+        }),
+      );
+      const status = {
+        runId: workflowRunId,
+        mode: "workflow",
+        state: "running",
+        pid: process.pid,
+        sessionId: "owner-session",
+        steps: [
+          {
+            workflowKey: "resumed",
+            parentWorkflowRunId: workflowRunId,
+            runId: resumedRunId,
+            agent: "worker",
+            status: "running",
+            sessionFile: file,
+          },
+        ],
+      };
+      await writeFile(join(dir, "status.json"), JSON.stringify(status));
+      await applyHostOutput(store, host.mapToolCall(workflowLaunch(dir)));
+      await expect.poll(() => workflowTimeline(store, id).length).toBe(230);
+      await appendFile(file, row(230));
+      await expect.poll(() => workflowTimeline(store, id).length).toBe(231);
+      expect(workflowTimeline(store, "original")).toHaveLength(originalCount);
+      // Polling the same binding must retain its offset rather than replay the file.
+      await appendFile(file, row(231));
+      await expect.poll(() => workflowTimeline(store, id).length).toBe(232);
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({
+          ...status,
+          state: "complete",
+          steps: [{ ...status.steps[0], status: "complete" }],
+        }),
+      );
+      await expect.poll(() => store.get("parent", id)?.status).toBe("completed");
+      host.close();
+      await appendFile(file, row(232));
+      const replayHost = createPiExtensionHost();
+      try {
+        const replayStore = new ProviderSubagentStore();
+        await applyHostOutput(replayStore, replayHost.mapToolCall(workflowLaunch(dir)));
+        expect(workflowTimeline(replayStore, id)).toHaveLength(233);
+      } finally {
+        replayHost.close();
+      }
+      expect(workflowTimeline(store, id)).toHaveLength(232);
+    } finally {
+      host.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("claims successful async workflow results before direct args without adding tool detail", () => {
     const host = createPiExtensionHost();
     try {

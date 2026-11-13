@@ -242,6 +242,64 @@ describe("Pi workflow tracker", () => {
     shared.launch({ runId, mode: "workflow", asyncDir: fixture.asyncDir });
     expect(shared.poll()?.childSessions).toEqual([]);
   });
+  test.each([
+    { name: "ordinary alias", changes: { revivedFrom: undefined } },
+    { name: "wrong run", changes: { runId: "unrelated" } },
+    { name: "wrong workflow", changes: { parentWorkflowRunId: "unrelated" } },
+    { name: "wrong key", changes: { workflowKey: "unrelated" } },
+    { name: "forked owner session", changes: { sessionId: "fork-session" } },
+    { name: "different transcript", changes: { steps: [{ sessionFile: "/unrelated" }] } },
+  ])(
+    "does not bind a reused file from $name, retries when resume evidence arrives",
+    ({ changes }) => {
+      const fixture = setup();
+      const sessionFile = join(fixture.root, "retained.jsonl");
+      const resumedId = "cb1d0195-86ff-43dc-8971-74327b4dd39d";
+      const childDir = join(fixture.root, resumedId);
+      mkdirSync(childDir);
+      fixture.readSessions.add(sessionFile);
+      const child = {
+        runId: resumedId,
+        revivedFrom: "ac64039f-598b-4c0c-a5ed-69244b2b7430",
+        parentWorkflowRunId: runId,
+        workflowKey: "T1-implement",
+        sessionId: "owner-session",
+        steps: [{ sessionFile }],
+      };
+      fixture.writeStatus({
+        pid: process.pid,
+        sessionId: "owner-session",
+        steps: [step({ runId: resumedId, sessionFile })],
+      });
+      fixture.launch();
+      // Missing, partial, and mismatched child artifacts cannot authorize a duplicate reader.
+      expect(fixture.tracker.poll()?.childSessions).toEqual([]);
+      writeFileSync(join(childDir, "status.json"), "{");
+      expect(fixture.tracker.poll()?.childSessions).toEqual([]);
+      writeFileSync(join(childDir, "status.json"), JSON.stringify({ ...child, ...changes }));
+      expect(fixture.tracker.poll()?.childSessions).toEqual([]);
+      writeFileSync(join(childDir, "status.json"), JSON.stringify(child));
+      expect(fixture.tracker.poll()?.childSessions).toEqual([
+        { id: childId, file: sessionFile, lifetime: "conversation" },
+      ]);
+      expect(fixture.tracker.poll()?.childSessions).toEqual([]);
+      expect(fixture.readSessions).toEqual(new Set([sessionFile]));
+    },
+  );
+
+  test("does not resolve child artifact paths outside the named run directory", () => {
+    const fixture = setup();
+    const sessionFile = "/retained.jsonl";
+    fixture.readSessions.add(sessionFile);
+    fixture.writeStatus({
+      pid: process.pid,
+      sessionId: "owner-session",
+      steps: [step({ runId: "../outside", sessionFile })],
+    });
+    fixture.launch();
+    expect(fixture.tracker.poll()?.childSessions).toEqual([]);
+  });
+
   test("resolves lane before phase without inferring groups from keys", () => {
     const status = {
       runId,

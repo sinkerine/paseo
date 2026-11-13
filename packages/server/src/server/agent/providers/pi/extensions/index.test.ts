@@ -445,6 +445,26 @@ test("conversation readers have per-read byte budgets while one-shot readers kee
     expect(await conversation.readNew()).toEqual([]);
     expect(await oneShot.readNew()).toHaveLength(1);
     expect(await oneShot.readNew()).toEqual([]);
+    expect(oneShot.hasMore).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("one-shot final drains stop when the item budget is exhausted", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paseo-pi-child-drain-"));
+  const file = join(dir, "child.jsonl");
+  try {
+    const row =
+      JSON.stringify({
+        type: "message",
+        message: { role: "assistant", content: [{ type: "text", text: "answer" }] },
+      }) + "\n";
+    await appendFile(file, row.repeat(201));
+    const reader = new PiChildSessionFollower("child", file);
+    expect(await reader.readNew()).toHaveLength(200);
+    expect(await reader.readNew()).toEqual([]);
+    expect(reader.hasMore).toBe(false);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
