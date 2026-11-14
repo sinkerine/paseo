@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
-import { projectRun, readAsyncStatus, type AsyncRun } from "./async-runs.js";
+import { matchesAsyncRun, projectRun, readAsyncStatus, type AsyncRun } from "./async-runs.js";
 import { customMessageText, noticeStatus } from "./notice.js";
 import { createPiWorkflowTracker, WorkflowLaunchDetails } from "./workflow.js";
 
@@ -113,9 +113,35 @@ export const piSubagents: PiExtension = {
       const run = details.asyncDir ? asyncRuns.get(details.asyncDir) : undefined;
       if (!run) return undefined;
       const status = readAsyncStatus(run.dir);
-      if (!status || status.mode === "workflow") return undefined;
-      if (status.toolCallId && status.toolCallId !== run.owner) return undefined;
+      if (!status || !matchesAsyncRun(run, status)) return undefined;
       return projectRun(run, status, readSessions);
+    };
+    const mapResume = (call: PiExtensionToolCall) => {
+      if (call.status !== "completed") return undefined;
+      const args = Args.safeParse(call.args);
+      if (!args.success || args.data.action !== "resume") return undefined;
+      const details = Details.safeParse(
+        typeof call.result === "object" ? call.result?.details : null,
+      );
+      if (!details.success) return undefined;
+      const { mode, runId, asyncDir } = details.data;
+      if (mode !== "single" || !runId || !asyncDir) return undefined;
+      if (!asyncRuns.has(asyncDir)) {
+        asyncRuns.set(asyncDir, {
+          dir: asyncDir,
+          owner: call.callId,
+          toolCallId: call.callId,
+          resumedRun: { id: runId, readSessions: new Set() },
+          polling: true,
+          emitted: new Map(),
+        });
+      }
+      callsByRun.set(runId, call.callId);
+      return (
+        projectAsyncSpawn(details.data) ?? {
+          subagents: [{ type: "upsert" as const, id: call.callId, status: "running" as const }],
+        }
+      );
     };
     const mapSpawn = (call: PiExtensionToolCall) => {
       const args = spawnArgs(call.args);
@@ -175,7 +201,7 @@ export const piSubagents: PiExtension = {
         if (details.success && call.status !== "failed")
           return workflows.launch(details.data, call.callId);
       }
-      return mapSpawn(call);
+      return mapResume(call) ?? mapSpawn(call);
     };
     return {
       mapToolCall(call) {
@@ -230,12 +256,7 @@ export const piSubagents: PiExtension = {
         for (const run of asyncRuns.values()) {
           if (!run.polling) continue;
           const status = readAsyncStatus(run.dir);
-          if (
-            !status ||
-            status.mode === "workflow" ||
-            (status.toolCallId && status.toolCallId !== run.owner)
-          )
-            continue;
+          if (!status || !matchesAsyncRun(run, status)) continue;
           const mapped = projectRun(run, status, readSessions);
           subagents.push(...mapped.subagents);
           childSessions.push(...mapped.childSessions);

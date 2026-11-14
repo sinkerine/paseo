@@ -54,6 +54,8 @@ export interface AsyncRun {
   /** The spawning subagent tool call id. */
   owner: string;
   toolCallId: string;
+  /** A resume receipt owns the new run, whose status can retain an earlier tool call id. */
+  resumedRun?: { id: string; readSessions: Set<string> };
   polling: boolean;
   emitted: Map<string, string>;
 }
@@ -67,6 +69,12 @@ export function readAsyncStatus(dir: string): AsyncStatus | undefined {
     // External run files can disappear or be mid-write during a poll.
     return undefined;
   }
+}
+
+export function matchesAsyncRun(run: AsyncRun, status: AsyncStatus): boolean {
+  if (status.mode === "workflow") return false;
+  if (run.resumedRun) return status.runId === run.resumedRun.id;
+  return !status.toolCallId || status.toolCallId === run.owner;
 }
 
 export function isOwnerAlive(pid: number | undefined): boolean {
@@ -148,10 +156,17 @@ export function projectRun(
     });
     if (step.sessionFile) {
       const resumed = projectedStatus === "running" && wasSettled(run.emitted.get(id));
-      // The host drops followers when a row settles, including while paused.
-      if (!readSessions.has(step.sessionFile) || resumed) {
+      const retained = run.resumedRun && !run.resumedRun.readSessions.has(step.sessionFile);
+      // A resume owns a new row even when this session has already read its retained transcript.
+      // The host also drops followers when a row settles, including while paused.
+      if (!readSessions.has(step.sessionFile) || resumed || retained) {
         readSessions.add(step.sessionFile);
-        childSessions.push({ id, file: step.sessionFile });
+        run.resumedRun?.readSessions.add(step.sessionFile);
+        childSessions.push({
+          id,
+          file: step.sessionFile,
+          ...(run.resumedRun ? { lifetime: "conversation" as const } : {}),
+        });
       }
     }
   }
