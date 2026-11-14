@@ -345,7 +345,13 @@ export class PiExtensionHost {
     mapping: PiExtensionToolMapping | PiExtensionCustomMapping,
   ): Promise<AgentStreamEvent[]> {
     const groups = await Promise.all(
-      (mapping.childSessions ?? []).map(async ({ id, file, projection }) => {
+      (mapping.childSessions ?? []).map(async (child) => {
+        if (child.lifetime === "conversation") {
+          const events: AgentStreamEvent[] = [];
+          for await (const event of this.readConversationHistory(child)) events.push(event);
+          return events;
+        }
+        const { id, file, projection } = child;
         // Charge the transcript's size, not the per-file cap, or eight small children exhaust 16 MiB.
         const size = await stat(file).then(
           (stats) => stats.size,

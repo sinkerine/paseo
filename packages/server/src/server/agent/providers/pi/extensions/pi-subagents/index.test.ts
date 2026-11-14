@@ -5,6 +5,7 @@ import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPiExtensionHost } from "../index.js";
+import { piSubagents } from "./index.js";
 import {
   parseToolArgs,
   parseToolResult,
@@ -235,6 +236,194 @@ function hasCompletedChild(events: AgentStreamEvent[]) {
 }
 
 describe("pi-subagents adapter", () => {
+  test("registers a retained single-worker resume for the subagent chip live and on replay", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-resume-"));
+    const file = join(dir, "retained.jsonl");
+    const host = createPiExtensionHost();
+    const replay = createPiExtensionHost();
+    const store = new ProviderSubagentStore();
+    const replayStore = new ProviderSubagentStore();
+    const call: PiExtensionToolCall = {
+      callId: "resume-call",
+      toolName: "subagent",
+      args: { action: "resume", id: "previous-run", message: "Continue the repair" },
+      status: "completed",
+      result: {
+        details: {
+          mode: "single",
+          runId: "resumed-run",
+          asyncId: "resumed-run",
+          asyncDir: dir,
+          results: [],
+        },
+      },
+    };
+    try {
+      const retainedMessages = Array.from({ length: 220 }, (_, index) =>
+        JSON.stringify({
+          type: "message",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: `Retained work ${index}` }],
+          },
+        }),
+      );
+      await writeFile(file, `${retainedMessages.join("\n")}\n`);
+      const status = {
+        runId: "resumed-run",
+        revivedFrom: "previous-run",
+        mode: "single",
+        state: "running",
+        pid: process.pid,
+        steps: [{ agent: "worker", status: "running", sessionFile: file }],
+      };
+      await writeFile(join(dir, "status.json"), JSON.stringify(status));
+      host.follow((event) => applySubagentEvent(store, event));
+      await applyHostOutput(store, host.mapToolCall(call));
+      expect(store.list("parent")).toEqual([
+        expect.objectContaining({ id: "resume-call", title: "worker", status: "running" }),
+      ]);
+      await expect.poll(() => workflowTimeline(store, "resume-call").length).toBe(220);
+      expect(JSON.stringify(workflowTimeline(store, "resume-call"))).toContain("Retained work 219");
+      await applyHostOutput(replayStore, replay.mapToolCall(call));
+      expect(workflowStoreState(replayStore)).toEqual(workflowStoreState(store));
+      expect(workflowTimeline(replayStore, "resume-call")).toEqual(
+        workflowTimeline(store, "resume-call"),
+      );
+      await appendFile(
+        file,
+        '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"Continued work"}]}}\n',
+      );
+      await expect
+        .poll(() => JSON.stringify(workflowTimeline(store, "resume-call")))
+        .toContain("Continued work");
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({
+          ...status,
+          state: "complete",
+          steps: [{ ...status.steps[0], status: "complete" }],
+        }),
+      );
+      await expect.poll(() => store.get("parent", "resume-call")?.status).toBe("completed");
+    } finally {
+      host.close();
+      replay.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  test("admits only successful resume receipts and waits for their exact named run", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-resume-"));
+    const session = piSubagents.createSession();
+    const call: PiExtensionToolCall = {
+      callId: "resume-call",
+      toolName: "subagent",
+      args: { action: "resume", id: "previous-run" },
+      status: "completed",
+      result: {
+        details: { mode: "single", runId: "resumed-run", asyncDir: dir, results: [] },
+      },
+    };
+    try {
+      expect(session.mapToolCall?.({ ...call, status: "running" })).toBeUndefined();
+      expect(session.mapToolCall?.({ ...call, status: "failed" })).toBeUndefined();
+      expect(
+        session.mapToolCall?.({ ...call, args: { action: "status", id: "previous-run" } }),
+      ).toBeUndefined();
+      expect(
+        session.mapToolCall?.({ ...call, result: { details: { mode: "single", results: [] } } }),
+      ).toBeUndefined();
+      expect(session.poll?.()).toBeUndefined();
+      expect(session.mapToolCall?.(call)).toEqual({
+        subagents: [{ type: "upsert", id: "resume-call", status: "running" }],
+      });
+      const status = {
+        mode: "single",
+        state: "running",
+        toolCallId: "original-call",
+        pid: process.pid,
+        steps: [{ agent: "worker", status: "running", sessionFile: join(dir, "retained.jsonl") }],
+      };
+      await writeFile(join(dir, "status.json"), JSON.stringify({ ...status, runId: "other-run" }));
+      expect(session.poll?.()).toBeUndefined();
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({ ...status, runId: "resumed-run" }),
+      );
+      const mapped = session.poll?.();
+      expect(mapped?.subagents).toEqual([
+        {
+          type: "upsert",
+          id: "resume-call",
+          toolCallId: "resume-call",
+          title: "worker",
+          description: undefined,
+          status: "running",
+        },
+      ]);
+      expect(mapped?.childSessions).toEqual([
+        { id: "resume-call", file: join(dir, "retained.jsonl"), lifetime: "conversation" },
+      ]);
+      expect(session.poll?.()).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a resumed row can discover its already-read retained transcript on a later poll", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-resume-"));
+    const file = join(dir, "retained.jsonl");
+    const session = piSubagents.createSession();
+    try {
+      session.mapToolCall?.({
+        callId: "original-call",
+        toolName: "subagent",
+        args: { agent: "worker", task: "Repair" },
+        status: "completed",
+        result: {
+          details: {
+            mode: "single",
+            results: [{ agent: "worker", exitCode: 0, sessionFile: file }],
+          },
+        },
+      });
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({
+          runId: "resumed-run",
+          mode: "single",
+          state: "running",
+          pid: process.pid,
+          steps: [{ agent: "worker", status: "running" }],
+        }),
+      );
+      const initial = session.mapToolCall?.({
+        callId: "resume-call",
+        toolName: "subagent",
+        args: { action: "resume", id: "previous-run" },
+        status: "completed",
+        result: { details: { mode: "single", runId: "resumed-run", asyncDir: dir, results: [] } },
+      });
+      expect(initial?.childSessions).toEqual([]);
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({
+          runId: "resumed-run",
+          mode: "single",
+          state: "running",
+          pid: process.pid,
+          steps: [{ agent: "worker", status: "running", sessionFile: file }],
+        }),
+      );
+      expect(session.poll?.()?.childSessions).toEqual([
+        { id: "resume-call", file, lifetime: "conversation" },
+      ]);
+      expect(session.poll?.()).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("follows async status and transcript without bg_wait", async () => {
     const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
     const file = join(dir, "child.jsonl");
