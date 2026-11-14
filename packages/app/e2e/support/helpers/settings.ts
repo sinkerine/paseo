@@ -613,3 +613,20 @@ export async function expectRestartRecoveryPrompt(page: Page, prompt: string) {
   await sheet.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(sheet).toHaveCount(0);
 }
+
+export async function toggleSettingsWithShortcut(page: import("@playwright/test").Page) {
+  const modifier = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.press(`${modifier}+Comma`);
+}
+
+export async function selectSendingOption(
+  page: import("@playwright/test").Page,
+  setting: string,
+  option: string,
+) {
+  await page.getByRole("button", { name: new RegExp(`^${setting}:`) }).click();
+  await page.getByRole("menuitem", { name: option, exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: `${setting}: ${option}`, exact: true }),
+  ).toBeVisible();
+}
