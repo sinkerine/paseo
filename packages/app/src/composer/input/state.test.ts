@@ -351,6 +351,19 @@ describe("resolveMessageInputEnterAction", () => {
     ).toBeNull();
   });
 
+  it.each(["enter", "mod-enter"] as const)(
+    "keeps Shift modifier Enter editing disabled at compact widths in %s mode",
+    (sendShortcut) => {
+      for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+        expect(
+          resolveMessageInputEnterAction(
+            enterContext({ sendShortcut, submitOnEnter: false, shiftKey: true, ...modifier }),
+          ),
+        ).toBeNull();
+      }
+    },
+  );
+
   it("still returns null when modifier Enter sends and submit on enter is disabled", () => {
     expect(
       resolveMessageInputEnterAction(
@@ -372,17 +385,17 @@ describe("resolveMessageInputEnterAction", () => {
     expect(resolveMessageInputEnterAction(enterContext({ shiftKey: true }))).toBeNull();
   });
 
-  it("returns null for Shift+Cmd+Enter and Shift+Ctrl+Enter so Shift keeps its newline", () => {
+  it("inserts a line break for Shift+Cmd+Enter and Shift+Ctrl+Enter when Enter sends", () => {
     expect(
       resolveMessageInputEnterAction(
         enterContext({ shiftKey: true, metaKey: true, isAgentRunning: true }),
       ),
-    ).toBeNull();
+    ).toBe("line-break");
     expect(
       resolveMessageInputEnterAction(
         enterContext({ shiftKey: true, ctrlKey: true, isAgentRunning: true }),
       ),
-    ).toBeNull();
+    ).toBe("line-break");
   });
 
   it("sends on Cmd+Enter and Ctrl+Enter while idle even with a queue handler", () => {
@@ -419,17 +432,17 @@ describe("resolveMessageInputEnterAction", () => {
     ).toBeNull();
   });
 
-  it("returns null for Shift+Cmd+Enter and Shift+Ctrl+Enter when modifier Enter sends", () => {
+  it("inserts a line break for Shift+Cmd+Enter and Shift+Ctrl+Enter when modifier Enter sends", () => {
     expect(
       resolveMessageInputEnterAction(
         enterContext({ sendShortcut: "mod-enter", shiftKey: true, metaKey: true }),
       ),
-    ).toBeNull();
+    ).toBe("line-break");
     expect(
       resolveMessageInputEnterAction(
         enterContext({ sendShortcut: "mod-enter", shiftKey: true, ctrlKey: true }),
       ),
-    ).toBeNull();
+    ).toBe("line-break");
   });
 
   it("sends on Cmd+Enter and Ctrl+Enter while idle when modifier Enter sends", () => {
