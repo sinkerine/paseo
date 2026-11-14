@@ -27,6 +27,9 @@ export interface PiExtensionToolMapping {
 
 export interface PiExtensionCustomMapping {
   subagents: ProviderSubagentInputEvent[];
+  timeline?: AgentTimelineItem[];
+  /** The adapter renders this custom message instead of the generic transcript row. */
+  suppressDefaultMessage?: boolean;
   childSessions?: PiChildSessionFile[];
 }
 

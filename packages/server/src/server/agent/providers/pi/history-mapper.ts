@@ -171,7 +171,8 @@ export class PiHistoryMapper {
   ): AgentStreamEvent[] {
     const extensionMapping = this.extensionHost.mapCustomMessage(message);
     const extensionEvents = this.extensionEvents(extensionMapping);
-    if (message.display === false) return extensionEvents;
+    if (message.display === false || extensionMapping?.suppressDefaultMessage)
+      return extensionEvents;
     const text = getUserMessageText(message.content);
     const mappedEvent = text ? this.hooks.mapCustomMessage?.(text, this.provider) : null;
     if (mappedEvent) {

@@ -176,6 +176,10 @@ export class PiExtensionHost {
     for (const { id, adapter } of this.sessions) {
       const mapping = this.safe(id, "replay", () => adapter.replay?.());
       if (!mapping) continue;
+      for (const item of mapping.timeline ?? []) {
+        if (this.closed) return;
+        yield { type: "timeline", provider: "pi", item };
+      }
       for (const event of mapping.subagents) {
         if (this.closed) return;
         yield { type: "provider_subagent", provider: "pi", event };
