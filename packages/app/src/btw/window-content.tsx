@@ -1,3 +1,10 @@
+import { useAppSettings } from "@/hooks/use-settings";
+import { isWeb } from "@/constants/platform";
+import {
+  handleComposerEnterKey,
+  resolveComposerSubmitOnEnter,
+  type WebTextInputKeyPressEvent,
+} from "@/composer/input/enter-key";
 import { useMutation } from "@tanstack/react-query";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
 import { useCallback, useMemo, type RefObject } from "react";
@@ -30,6 +37,7 @@ const iconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
 const ThemedMinus = withUnistyles(Minus);
 const EMPTY_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_ITEMS: StreamItem[] = [];
+const EMPTY_STREAM = { tail: EMPTY_ITEMS, head: EMPTY_ITEMS };
 export interface BtwContentProps {
   serverId: string;
   agentId: string;
@@ -76,8 +84,10 @@ export function BtwWindowContent({
   error,
 }: BtwContentProps) {
   const { t } = useTranslation();
+  const { settings } = useAppSettings();
   const key = providerSubagentKey(serverId, agentId, thread.id);
   const timeline = useProviderSubagentStore((state) => state.timelines.get(key));
+  const stream = timeline ?? EMPTY_STREAM;
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const older = useMutation({
     mutationFn: () =>
@@ -133,6 +143,22 @@ export function BtwWindowContent({
   );
   const deliveryDisabled = !canDeliverToMain({ pending, status: thread.status, timeline });
   const ask = useCallback(() => onCommand({ kind: "ask", text: draft }), [draft, onCommand]);
+  const canAsk = !pending && draft.trim() !== "";
+  const handleComposerKeyPress = useCallback(
+    (event: WebTextInputKeyPressEvent) => {
+      // BTW has no queue; modifier sends use the same ask dispatch as the button.
+      handleComposerEnterKey(event, {
+        submitOnEnter: resolveComposerSubmitOnEnter(compact),
+        sendShortcut: settings.sendShortcut,
+        isAgentRunning: false,
+        onQueue: undefined,
+        canSubmit: canAsk,
+        onDefaultSend: ask,
+        onAlternateSend: ask,
+      });
+    },
+    [compact, settings.sendShortcut, canAsk, ask],
+  );
   const abort = useCallback(() => onCommand({ kind: "abort" }), [onCommand]);
   const inject = useCallback(() => onCommand({ kind: "inject" }), [onCommand]);
   const summarize = useCallback(() => onCommand({ kind: "summarize" }), [onCommand]);
@@ -163,8 +189,8 @@ export function BtwWindowContent({
           agentId={streamId}
           serverId={serverId}
           context={context}
-          streamItems={timeline?.tail ?? EMPTY_ITEMS}
-          streamHead={timeline?.head ?? EMPTY_ITEMS}
+          streamItems={stream.tail}
+          streamHead={stream.head}
           turnPresentation={turnPresentation}
           pendingPermissions={EMPTY_PERMISSIONS}
           isAuthoritativeHistoryReady
@@ -185,17 +211,13 @@ export function BtwWindowContent({
           placeholder={t("btw.placeholder")}
           value={draft}
           onChangeText={onDraft}
+          onKeyPress={isWeb ? handleComposerKeyPress : undefined}
           multiline
           style={styles.input}
           editable={!pending}
         />
         <View style={styles.actions}>
-          <Button
-            testID="btw-send"
-            disabled={pending || !draft.trim()}
-            loading={pending}
-            onPress={ask}
-          >
+          <Button testID="btw-send" disabled={!canAsk} loading={pending} onPress={ask}>
             {t("btw.send")}
           </Button>
           {thread.status === "running" ? (
