@@ -1,0 +1,30 @@
+{
+  "provenance": {
+    "package": "pi-subagents",
+    "version": "0.84.0",
+    "sourcePath": "src/runs/background/notify.ts (formatSingleCompletion + formatCorrelationLines); src/workflows/workflow-resume-claim.ts (describeWorkflowResume)",
+    "piVersion": "1.4.0",
+    "captureDate": "2026-11-14",
+    "origin": "authored by executing the installed formatter with sanitized workflow paths and generated resume claim files"
+  },
+  "sourceRunId": "59a8fc66-dd1a-49cc-afc2-da8e82b90b9f",
+  "resumedRunId": "aa308c7c-0e64-4987-8dd1-b3db6205a269",
+  "nextRunId": "6338200f-c944-48cf-b8aa-9524e85ea64e",
+  "excerpts": [
+    {
+      "customType": "subagent-notify",
+      "content": "Background task stopped: **workflow**\nWorkflow receipt: __RUNS_ROOT__/59a8fc66-dd1a-49cc-afc2-da8e82b90b9f/workflow-receipt.json\n\nWorkflow interrupted because its owner runtime was replaced.\n\nRetention-managed async directory: __RUNS_ROOT__/59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nAuto-resumed as aa308c7c-0e64-4987-8dd1-b3db6205a269.",
+      "display": false
+    },
+    {
+      "customType": "subagent-notify",
+      "content": "Background task stopped: **workflow**\nWorkflow receipt: __RUNS_ROOT__/59a8fc66-dd1a-49cc-afc2-da8e82b90b9f/workflow-receipt.json\n\nWorkflow interrupted because its owner runtime was replaced.\n\nRetention-managed async directory: __RUNS_ROOT__/59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nWorkflow run: 59a8fc66-dd1a-49cc-afc2-da8e82b90b9f\nResumed as aa308c7c-0e64-4987-8dd1-b3db6205a269.",
+      "display": false
+    },
+    {
+      "customType": "subagent-notify",
+      "content": "Background task stopped: **workflow**\nWorkflow receipt: __RUNS_ROOT__/aa308c7c-0e64-4987-8dd1-b3db6205a269/workflow-receipt.json\n\nWorkflow interrupted because its owner runtime was replaced.\n\nRetention-managed async directory: __RUNS_ROOT__/aa308c7c-0e64-4987-8dd1-b3db6205a269\nWorkflow run: aa308c7c-0e64-4987-8dd1-b3db6205a269\nAuto-resumed as 6338200f-c944-48cf-b8aa-9524e85ea64e.",
+      "display": false
+    }
+  ]
+}
