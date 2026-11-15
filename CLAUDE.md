@@ -149,6 +149,33 @@ The desktop browser-tabs harness uses `electron`, including its build, two real 
 }
 ```
 
+## Isolated Android emulator
+
+Use `npm run android:isolated -- setup` to provision the Nix SDK and a checkout-local
+API 35 AVD on x86_64 Linux. See [docs/android.md](docs/android.md#nix-sdk-and-isolated-emulator-linux)
+for commands and isolation boundaries.
+
+The following estimate covers one headless KVM emulator (2 vCPUs, 2 GiB guest RAM),
+one private ADB server, and a lightweight command through teardown. It excludes
+Gradle/native builds, Metro, and app/daemon E2E stacks; those need their own estimate.
+The 6 GiB reservation includes the 2 GiB guest plus QEMU, software rendering,
+ADB, and launcher overhead. Gradle's separate 4 GiB heap limit also allows up to
+1 GiB metaspace and additional native/compiler memory; do not use the heap size
+as the whole-build qex claim. Build and emulator phases run separately. Reduce
+these whole-stack reservations only with a successful cgroup `memory.peak`
+measurement for the declared workload. Keep the runner in the foreground inside
+the admitted job.
+
+```qex-e2e android-emulator
+{
+  "resources": {
+    "cpu": 2,
+    "mem": "6GiB"
+  },
+  "timeout": "10m"
+}
+```
+
 ## Release branches
 
 Merge normal PRs into `main`, including while a beta soaks or a release is being finalized. Each
