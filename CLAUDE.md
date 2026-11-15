@@ -120,6 +120,23 @@ See [docs/development.md](docs/development.md) for full setup, build sync requir
 
 For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. For the [shared profile shortcut journey](docs/features/shared-profile-shortcuts-plan.md#e2e-journey), run `npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/shared-profile-shortcuts.spec.ts --project=browser`. The existing app Playwright harness owns Metro, disposable daemon homes and ports, throwaway workspaces, and cleanup; the spec adds a second isolated host with distinct profiles and seeds legacy browser storage. The spec reuses the desktop bridge fixture to expose Shortcuts settings in Chromium; this covers the desktop renderer, not a real Electron window. Its fake providers cover configuration routing, not live provider behavior. Keep evidence in ignored worktree `artifacts/`; use the [development shell](docs/development.md#nix-and-direnv) for Chromium runtime dependencies. Never touch the main daemon on 6767. See [docs/testing.md](docs/testing.md#running-tests-locally) for targeted execution and [docs/qa.md](docs/qa.md#evidence) for evidence requirements.
 
+## E2E resource admission
+
+Run E2E when a feature is first added. Future pushes and deployments of an existing
+feature do not require rerunning E2E. Existing unit tests must still run.
+
+The app Playwright harness uses isolated daemon homes, ports, and workspaces.
+Run a targeted browser spec with one worker through `agent-job run --e2e browser --
+npm run test:e2e --workspace=@getpaseo/app -- <spec> --workers=1`. The claim covers
+cold Metro setup, Chromium, isolated daemons, test agents, and teardown.
+
+```qex-e2e browser
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "30m"
+}
+```
+
 ## Release branches
 
 Merge normal PRs into `main`, including while a beta soaks or a release is being finalized. Each
