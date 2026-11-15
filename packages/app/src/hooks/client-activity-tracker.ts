@@ -1,3 +1,6 @@
+import type { ClientNotificationScope } from "@getpaseo/protocol/messages";
+import equal from "fast-deep-equal";
+
 export const HEARTBEAT_INTERVAL_MS = 15_000;
 export const ACTIVITY_HEARTBEAT_THROTTLE_MS = 5_000;
 export const DESKTOP_IDLE_POLL_INTERVAL_MS = 5_000;
@@ -9,6 +12,7 @@ export interface HeartbeatPayload {
   lastActivityAt: string;
   appVisible: boolean;
   appVisibilityChangedAt?: string;
+  notificationScope?: ClientNotificationScope;
 }
 
 export interface HeartbeatClient {
@@ -22,6 +26,7 @@ export interface ClientActivityTrackerInput {
   initialFocusedAgentId: string | null;
   initialFocusedTerminalId: string | null;
   initialAppVisible: boolean;
+  initialNotificationScope?: ClientNotificationScope;
   now: () => number;
   onAppResumed?: (awayMs: number) => void;
 }
@@ -31,6 +36,7 @@ export interface ClientActivityTracker {
   maybeSendImmediateHeartbeat(): void;
   setFocusedAgentId(id: string | null): void;
   setFocusedTerminalId(id: string | null): void;
+  setNotificationScope(scope: ClientNotificationScope | undefined): void;
   notifyAppVisibility(visible: boolean): { changed: boolean };
   notifySystemIdleMs(idleMs: number | null): void;
   sendHeartbeat(): void;
@@ -46,6 +52,7 @@ export function createClientActivityTracker(
   let backgroundedAtMs: number | null = appVisible ? null : now();
   let focusedAgentId = input.initialFocusedAgentId;
   let focusedTerminalId = input.initialFocusedTerminalId;
+  let notificationScope = input.initialNotificationScope;
   let lastImmediateHeartbeatAtMs = 0;
 
   function sendHeartbeat(): void {
@@ -57,6 +64,7 @@ export function createClientActivityTracker(
       lastActivityAt: new Date(lastActivityAtMs).toISOString(),
       appVisible,
       appVisibilityChangedAt: new Date(appVisibilityChangedAtMs).toISOString(),
+      ...(notificationScope !== undefined ? { notificationScope } : {}),
     });
   }
 
@@ -75,6 +83,11 @@ export function createClientActivityTracker(
   return {
     recordUserActivity,
     maybeSendImmediateHeartbeat,
+    setNotificationScope(scope) {
+      if (equal(notificationScope, scope)) return;
+      notificationScope = scope;
+      sendHeartbeat();
+    },
     setFocusedAgentId(id) {
       if (focusedAgentId === id) return;
       focusedAgentId = id;

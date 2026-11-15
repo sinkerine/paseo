@@ -15,6 +15,23 @@ See [agent targets and deferred opens](expo-router.md#agent-targets) for route
 ownership and workspace recovery. Notification generation, presence, and push
 eligibility remain daemon concerns.
 
+## Window eligibility
+
+The daemon elects one present client whose window's Host and Project filters include
+an attention notification's project. All projects includes every project on the
+selected hosts. Labels and Show background affect presentation only and do not
+change ownership. Overlapping windows keep the existing activity recency rule.
+
+Each connection reports its current scope on every heartbeat, including after
+reconnect. A filter change sends a heartbeat immediately without recording user
+activity. If present windows all exclude the target, the daemon drops the
+notification without sending push. Focus suppression still considers every
+present client, and push eligibility is unchanged when no client is present.
+
+Renderers must trust the daemon's `shouldNotify` decision and must not re-check
+filters locally: the matching window would otherwise never receive ownership.
+Already issued notifications and their click routing stay with the sender window.
+
 ## Native delivery
 
 Keep the router instance at module scope. Android's `singleTask` Activity can
@@ -66,6 +83,4 @@ Use the daemon's payload shape on both iOS and Android; a browser event alone
 does not test native replay or acknowledgement.
 
 Existing foreign pins belong to the reconciliation fix in
-[#6900](https://github.com/getpaseo/paseo/issues/6900). Desktop main-process window
-selection is tracked separately in
-[#6875](https://github.com/getpaseo/paseo/issues/6875).
+[#6900](https://github.com/getpaseo/paseo/issues/6900).

@@ -2877,6 +2877,7 @@ export class VoiceAssistantWebSocketServer {
         focusedAgentId: null,
         focusedTerminalId: null,
         lastActivityAtMs: null,
+        notificationProjectIds: null,
       };
     }
 
@@ -2885,7 +2886,21 @@ export class VoiceAssistantWebSocketServer {
       focusedAgentId: activity.focusedAgentId,
       focusedTerminalId: activity.focusedTerminalId,
       lastActivityAtMs: activity.lastActivityAt.getTime(),
+      notificationProjectIds: activity.notificationProjectIds,
     };
+  }
+
+  private async resolveNotificationProjectId(
+    workspaceId: string | undefined,
+  ): Promise<string | null> {
+    if (!workspaceId) return null;
+    try {
+      const workspace = await this.workspaceRegistry.get(workspaceId);
+      return workspace?.projectId ?? null;
+    } catch (err) {
+      this.logger.warn({ err, workspaceId }, "Failed to resolve notification target project");
+      return null;
+    }
   }
 
   private async broadcastAgentAttention(params: {
@@ -2930,8 +2945,10 @@ export class VoiceAssistantWebSocketServer {
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
     });
 
+    const targetProjectId = await this.resolveNotificationProjectId(agent.workspaceId);
     const plan = computeNotificationPlan({
       allStates,
+      targetProjectId,
       focusTarget: { kind: "agent", id: params.agentId },
       pushEligible: isPushEligibleAttentionReason(params.reason),
       nowMs,
@@ -3024,9 +3041,11 @@ export class VoiceAssistantWebSocketServer {
     const allStates = notificationEntries.map((e) => e.state);
     const nowMs = Date.now();
     const workspaceId = params.workspaceId;
+    const targetProjectId = await this.resolveNotificationProjectId(workspaceId);
 
     const plan = computeNotificationPlan({
       allStates,
+      targetProjectId,
       focusTarget: { kind: "terminal", id: params.terminalId },
       pushEligible: true,
       nowMs,
