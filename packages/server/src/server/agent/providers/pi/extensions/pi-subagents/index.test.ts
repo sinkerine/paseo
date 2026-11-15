@@ -236,82 +236,89 @@ function hasCompletedChild(events: AgentStreamEvent[]) {
 }
 
 describe("pi-subagents adapter", () => {
-  test("registers a retained single-worker resume for the subagent chip live and on replay", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-resume-"));
-    const file = join(dir, "retained.jsonl");
-    const host = createPiExtensionHost();
-    const replay = createPiExtensionHost();
-    const store = new ProviderSubagentStore();
-    const replayStore = new ProviderSubagentStore();
-    const call: PiExtensionToolCall = {
-      callId: "resume-call",
-      toolName: "subagent",
-      args: { action: "resume", id: "previous-run", message: "Continue the repair" },
-      status: "completed",
-      result: {
-        details: {
-          mode: "single",
-          runId: "resumed-run",
-          asyncId: "resumed-run",
-          asyncDir: dir,
-          results: [],
-        },
-      },
-    };
-    try {
-      const retainedMessages = Array.from({ length: 220 }, (_, index) =>
-        JSON.stringify({
-          type: "message",
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: `Retained work ${index}` }],
+  test.each([false, true])(
+    "follows a single worker beyond one-shot limits live and on replay (resumed: %s)",
+    async (resumed) => {
+      const dir = await mkdtemp(join(tmpdir(), "paseo-pi-resume-"));
+      const file = join(dir, "retained.jsonl");
+      const host = createPiExtensionHost();
+      const replay = createPiExtensionHost();
+      const store = new ProviderSubagentStore();
+      const replayStore = new ProviderSubagentStore();
+      const call: PiExtensionToolCall = {
+        callId: "resume-call",
+        toolName: "subagent",
+        args: resumed
+          ? { action: "resume", id: "previous-run", message: "Continue the repair" }
+          : { agent: "worker", task: "Implement the repair", async: true },
+        status: "completed",
+        result: {
+          details: {
+            mode: "single",
+            runId: "resumed-run",
+            asyncId: "resumed-run",
+            asyncDir: dir,
+            results: [],
           },
-        }),
-      );
-      await writeFile(file, `${retainedMessages.join("\n")}\n`);
-      const status = {
-        runId: "resumed-run",
-        revivedFrom: "previous-run",
-        mode: "single",
-        state: "running",
-        pid: process.pid,
-        steps: [{ agent: "worker", status: "running", sessionFile: file }],
+        },
       };
-      await writeFile(join(dir, "status.json"), JSON.stringify(status));
-      host.follow((event) => applySubagentEvent(store, event));
-      await applyHostOutput(store, host.mapToolCall(call));
-      expect(store.list("parent")).toEqual([
-        expect.objectContaining({ id: "resume-call", title: "worker", status: "running" }),
-      ]);
-      await expect.poll(() => workflowTimeline(store, "resume-call").length).toBe(220);
-      expect(JSON.stringify(workflowTimeline(store, "resume-call"))).toContain("Retained work 219");
-      await applyHostOutput(replayStore, replay.mapToolCall(call));
-      expect(workflowStoreState(replayStore)).toEqual(workflowStoreState(store));
-      expect(workflowTimeline(replayStore, "resume-call")).toEqual(
-        workflowTimeline(store, "resume-call"),
-      );
-      await appendFile(
-        file,
-        '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"Continued work"}]}}\n',
-      );
-      await expect
-        .poll(() => JSON.stringify(workflowTimeline(store, "resume-call")))
-        .toContain("Continued work");
-      await writeFile(
-        join(dir, "status.json"),
-        JSON.stringify({
-          ...status,
-          state: "complete",
-          steps: [{ ...status.steps[0], status: "complete" }],
-        }),
-      );
-      await expect.poll(() => store.get("parent", "resume-call")?.status).toBe("completed");
-    } finally {
-      host.close();
-      replay.close();
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
+      try {
+        const retainedMessages = Array.from({ length: 220 }, (_, index) =>
+          JSON.stringify({
+            type: "message",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: `Retained work ${index}:${"x".repeat(10000)}` }],
+            },
+          }),
+        );
+        await writeFile(file, `${retainedMessages.join("\n")}\n`);
+        const status = {
+          runId: "resumed-run",
+          revivedFrom: "previous-run",
+          mode: "single",
+          state: "running",
+          pid: process.pid,
+          steps: [{ agent: "worker", status: "running", sessionFile: file }],
+        };
+        await writeFile(join(dir, "status.json"), JSON.stringify(status));
+        host.follow((event) => applySubagentEvent(store, event));
+        await applyHostOutput(store, host.mapToolCall(call));
+        expect(store.list("parent")).toEqual([
+          expect.objectContaining({ id: "resume-call", title: "worker", status: "running" }),
+        ]);
+        await expect.poll(() => workflowTimeline(store, "resume-call").length).toBe(220);
+        expect(JSON.stringify(workflowTimeline(store, "resume-call"))).toContain(
+          "Retained work 219",
+        );
+        await applyHostOutput(replayStore, replay.mapToolCall(call));
+        expect(workflowStoreState(replayStore)).toEqual(workflowStoreState(store));
+        expect(workflowTimeline(replayStore, "resume-call")).toEqual(
+          workflowTimeline(store, "resume-call"),
+        );
+        await appendFile(
+          file,
+          '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"Continued work"}]}}\n',
+        );
+        await expect
+          .poll(() => JSON.stringify(workflowTimeline(store, "resume-call")))
+          .toContain("Continued work");
+        await writeFile(
+          join(dir, "status.json"),
+          JSON.stringify({
+            ...status,
+            state: "complete",
+            steps: [{ ...status.steps[0], status: "complete" }],
+          }),
+        );
+        await expect.poll(() => store.get("parent", "resume-call")?.status).toBe("completed");
+      } finally {
+        host.close();
+        replay.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
   test("admits only successful resume receipts and waits for their exact named run", async () => {
     const dir = await mkdtemp(join(tmpdir(), "paseo-pi-resume-"));
     const session = piSubagents.createSession();
@@ -1168,106 +1175,110 @@ describe("pi-subagents workflows", () => {
     }
   });
 
-  test("hydrates and follows a proven resumed workflow child beyond one-shot limits", async () => {
-    const root = await mkdtemp(join(tmpdir(), "paseo-pi-workflow-resume-"));
-    const host = createPiExtensionHost();
-    const store = new ProviderSubagentStore();
-    const resumedRunId = "cb1d0195-86ff-43dc-8971-74327b4dd39d";
-    const id = `${workflowId}/resumed`;
-    const file = join(root, "retained-session.jsonl");
-    const dir = join(root, workflowRunId);
-    const row = (index: number) =>
-      JSON.stringify({
-        type: "message",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: `answer-${index}:${"x".repeat(10000)}` }],
-        },
-      }) + "\n";
-    host.follow((event) => applySubagentEvent(store, event));
-    try {
-      await mkdir(dir);
-      await mkdir(join(root, resumedRunId));
-      await writeFile(file, row(0));
-      await applyHostOutput(
-        store,
-        host.mapToolCall({
-          callId: "original",
-          toolName: "subagent",
-          args: { agent: "worker", task: "Original work" },
-          status: "completed",
-          result: {
-            details: {
-              mode: "single",
-              results: [{ agent: "worker", exitCode: 0, sessionFile: file }],
-            },
-          },
-        }),
-      );
-      const originalCount = workflowTimeline(store, "original").length;
-      await appendFile(file, Array.from({ length: 229 }, (_, index) => row(index + 1)).join(""));
-      await writeFile(
-        join(root, resumedRunId, "status.json"),
+  test.each([false, true])(
+    "hydrates and follows a workflow child beyond one-shot limits (resumed: %s)",
+    async (resumed) => {
+      const root = await mkdtemp(join(tmpdir(), "paseo-pi-workflow-resume-"));
+      const host = createPiExtensionHost();
+      const store = new ProviderSubagentStore();
+      const resumedRunId = "cb1d0195-86ff-43dc-8971-74327b4dd39d";
+      const id = `${workflowId}/resumed`;
+      const file = join(root, "retained-session.jsonl");
+      const dir = join(root, workflowRunId);
+      const row = (index: number) =>
         JSON.stringify({
-          runId: resumedRunId,
-          revivedFrom: "ac64039f-598b-4c0c-a5ed-69244b2b7430",
-          parentWorkflowRunId: workflowRunId,
-          workflowKey: "resumed",
-          sessionId: "owner-session",
-          steps: [{ sessionFile: file }],
-        }),
-      );
-      const status = {
-        runId: workflowRunId,
-        mode: "workflow",
-        state: "running",
-        pid: process.pid,
-        sessionId: "owner-session",
-        steps: [
-          {
-            workflowKey: "resumed",
-            parentWorkflowRunId: workflowRunId,
-            runId: resumedRunId,
-            agent: "worker",
-            status: "running",
-            sessionFile: file,
+          type: "message",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: `answer-${index}:${"x".repeat(10000)}` }],
           },
-        ],
-      };
-      await writeFile(join(dir, "status.json"), JSON.stringify(status));
-      await applyHostOutput(store, host.mapToolCall(workflowLaunch(dir)));
-      await expect.poll(() => workflowTimeline(store, id).length).toBe(230);
-      await appendFile(file, row(230));
-      await expect.poll(() => workflowTimeline(store, id).length).toBe(231);
-      expect(workflowTimeline(store, "original")).toHaveLength(originalCount);
-      // Polling the same binding must retain its offset rather than replay the file.
-      await appendFile(file, row(231));
-      await expect.poll(() => workflowTimeline(store, id).length).toBe(232);
-      await writeFile(
-        join(dir, "status.json"),
-        JSON.stringify({
-          ...status,
-          state: "complete",
-          steps: [{ ...status.steps[0], status: "complete" }],
-        }),
-      );
-      await expect.poll(() => store.get("parent", id)?.status).toBe("completed");
-      host.close();
-      await appendFile(file, row(232));
-      const replayHost = createPiExtensionHost();
+        }) + "\n";
+      host.follow((event) => applySubagentEvent(store, event));
       try {
-        const replayStore = new ProviderSubagentStore();
-        await applyHostOutput(replayStore, replayHost.mapToolCall(workflowLaunch(dir)));
-        expect(workflowTimeline(replayStore, id)).toHaveLength(233);
+        await mkdir(dir);
+        await mkdir(join(root, resumedRunId));
+        await writeFile(file, row(0));
+        if (resumed)
+          await applyHostOutput(
+            store,
+            host.mapToolCall({
+              callId: "original",
+              toolName: "subagent",
+              args: { agent: "worker", task: "Original work" },
+              status: "completed",
+              result: {
+                details: {
+                  mode: "single",
+                  results: [{ agent: "worker", exitCode: 0, sessionFile: file }],
+                },
+              },
+            }),
+          );
+        const originalCount = resumed ? workflowTimeline(store, "original").length : 0;
+        await appendFile(file, Array.from({ length: 229 }, (_, index) => row(index + 1)).join(""));
+        await writeFile(
+          join(root, resumedRunId, "status.json"),
+          JSON.stringify({
+            runId: resumedRunId,
+            ...(resumed ? { revivedFrom: "ac64039f-598b-4c0c-a5ed-69244b2b7430" } : {}),
+            parentWorkflowRunId: workflowRunId,
+            workflowKey: "resumed",
+            sessionId: "owner-session",
+            steps: [{ sessionFile: file }],
+          }),
+        );
+        const status = {
+          runId: workflowRunId,
+          mode: "workflow",
+          state: "running",
+          pid: process.pid,
+          sessionId: "owner-session",
+          steps: [
+            {
+              workflowKey: "resumed",
+              parentWorkflowRunId: workflowRunId,
+              runId: resumedRunId,
+              agent: "worker",
+              status: "running",
+              sessionFile: file,
+            },
+          ],
+        };
+        await writeFile(join(dir, "status.json"), JSON.stringify(status));
+        await applyHostOutput(store, host.mapToolCall(workflowLaunch(dir)));
+        await expect.poll(() => workflowTimeline(store, id).length).toBe(230);
+        await appendFile(file, row(230));
+        await expect.poll(() => workflowTimeline(store, id).length).toBe(231);
+        if (resumed) expect(workflowTimeline(store, "original")).toHaveLength(originalCount);
+        // Polling the same binding must retain its offset rather than replay the file.
+        await appendFile(file, row(231));
+        await expect.poll(() => workflowTimeline(store, id).length).toBe(232);
+        await writeFile(
+          join(dir, "status.json"),
+          JSON.stringify({
+            ...status,
+            state: "complete",
+            steps: [{ ...status.steps[0], status: "complete" }],
+          }),
+        );
+        await expect.poll(() => store.get("parent", id)?.status).toBe("completed");
+        host.close();
+        await appendFile(file, row(232));
+        const replayHost = createPiExtensionHost();
+        try {
+          const replayStore = new ProviderSubagentStore();
+          await applyHostOutput(replayStore, replayHost.mapToolCall(workflowLaunch(dir)));
+          expect(workflowTimeline(replayStore, id)).toHaveLength(233);
+        } finally {
+          replayHost.close();
+        }
+        expect(workflowTimeline(store, id)).toHaveLength(232);
       } finally {
-        replayHost.close();
+        host.close();
+        await rm(root, { recursive: true, force: true });
       }
-      expect(workflowTimeline(store, id)).toHaveLength(232);
-    } finally {
-      host.close();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   test("claims successful async workflow results before direct args without adding tool detail", () => {
     const host = createPiExtensionHost();

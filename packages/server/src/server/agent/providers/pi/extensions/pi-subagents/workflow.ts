@@ -281,7 +281,7 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
       {
         id: workflowRunSubagentId(status.runId, key),
         file: step.sessionFile,
-        ...(resumed ? { lifetime: "conversation" as const } : {}),
+        lifetime: "conversation",
       },
     ];
   }
