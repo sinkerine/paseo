@@ -5,9 +5,10 @@ import {
   resolveComposerSubmitOnEnter,
   type WebTextInputKeyPressEvent,
 } from "@/composer/input/enter-key";
+import { focusBtwComposerInput, type BtwComposerInputRef } from "./selection-target";
 import { useMutation } from "@tanstack/react-query";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
-import { useCallback, useMemo, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useEffect, type RefObject } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -49,6 +50,8 @@ export interface BtwContentProps {
   onDraft(text: string): void;
   onHide(): void;
   onCommand(command: BtwCommand): void;
+  pendingComposerFocus?: boolean;
+  onComposerFocusHandled?: () => void;
   pending: boolean;
   feedback: string | null;
   error: string | null;
@@ -82,9 +85,17 @@ export function BtwWindowContent({
   pending,
   feedback,
   error,
+  pendingComposerFocus,
+  onComposerFocusHandled,
 }: BtwContentProps) {
   const { t } = useTranslation();
   const { settings } = useAppSettings();
+  const inputRef = useRef<BtwComposerInputRef>(null);
+  useEffect(() => {
+    if (!pendingComposerFocus || !inputRef.current) return;
+    focusBtwComposerInput(inputRef.current);
+    onComposerFocusHandled?.();
+  }, [pendingComposerFocus, onComposerFocusHandled]);
   const key = providerSubagentKey(serverId, agentId, thread.id);
   const timeline = useProviderSubagentStore((state) => state.timelines.get(key));
   const stream = timeline ?? EMPTY_STREAM;
@@ -206,6 +217,7 @@ export function BtwWindowContent({
       ) : null}
       <View style={styles.footer}>
         <SheetAwareTextInput
+          ref={inputRef}
           testID="btw-composer"
           accessibilityLabel={t("btw.placeholder")}
           placeholder={t("btw.placeholder")}
