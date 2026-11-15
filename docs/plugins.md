@@ -686,6 +686,13 @@ inside their footer; keep operation handlers in the host. The Pi native-fork bro
 uses an inline renderer fixture. Set `PASEO_BETTER_PASEO_SOURCE` to an editable Better Paseo checkout
 that uses the slot to exercise the same journey against that plugin.
 
+On web, an agent pane with a BTW conversation exposes a `data-btw-thread` ancestor marker.
+Plugins can dispatch a bubbling, cancelable `CustomEvent<{ text: string }>` named
+`paseo:btw-insert` from inside that ancestor to append a non-empty snippet to its BTW draft.
+The host acknowledges acceptance with `preventDefault()`. If the event is unhandled, the plugin
+must provide a fallback, such as copying the selection with visible feedback. There is no native
+equivalent.
+
 Transformers run synchronously and must be deterministic. When several transformers match, the
 first one that returns a result owns that source item. Plugin and registration ordering is stable.
 See `plugin-examples/timeline-items` for the complete contract.

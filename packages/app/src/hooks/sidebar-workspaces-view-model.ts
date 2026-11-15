@@ -17,6 +17,19 @@ import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
 
 const EMPTY_PROJECTS: SidebarProjectEntry[] = [];
 
+export function resolveSidebarServerIds(input: {
+  allServerIds: readonly string[];
+  hostFilters: readonly string[];
+  hostRegistryLoaded: boolean;
+}): string[] {
+  const { allServerIds, hostFilters, hostRegistryLoaded } = input;
+  if (hostFilters.length === 0) return [...allServerIds];
+  const selected = new Set(hostFilters);
+  const matched = allServerIds.filter((id) => selected.has(id));
+  // Once the registry settles, missing pinned hosts fall back to all hosts.
+  return hostRegistryLoaded && matched.length === 0 ? [...allServerIds] : matched;
+}
+
 export type SidebarStateBucket = WorkspaceDescriptor["status"];
 
 export interface SidebarWorkspacePlacement {

@@ -103,6 +103,12 @@ async function measureRails(page: Page, workflowId: string, testInfo: TestInfo, 
   if (!token) throw new Error("Shared tree indentation token is missing");
   const indent = Number(token[1]);
   const ids = [workflowId, `${workflowId}/group:T2`, `${workflowId}/T2.review`];
+  // Visibility can precede the menu's scale animation finishing.
+  await trackRow(page, workflowId).evaluate(async (row) => {
+    for (let element: Element | null = row; element; element = element.parentElement) {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    }
+  });
   const rails = [];
   for (const id of ids) {
     const body = trackRow(page, id);

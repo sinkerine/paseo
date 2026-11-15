@@ -1053,6 +1053,24 @@ async function runNativeForkWorkflowOwnership(loseHeldRunner: boolean) {
           { timeout: 60_000, interval: 100 },
         )
         .toMatchObject({ status: "running", sessionFile: expect.any(String) });
+      await expect
+        .poll(
+          async () => {
+            const rows = (await active.listProviderSubagents(source.id)).subagents;
+            return [resumedWorkflow, `${resumedWorkflow}/T2.review`].map((id) => ({
+              id,
+              status: rows.find((row) => row.id === id)?.status,
+            }));
+          },
+          { timeout: 15_000, interval: 100 },
+        )
+        .toEqual([
+          { id: resumedWorkflow, status: "running" },
+          { id: `${resumedWorkflow}/T2.review`, status: "running" },
+        ]);
+      const resumedSourceTree = (await active.listProviderSubagents(source.id)).subagents;
+      const resumedForkTree = (await active.listProviderSubagents(fork.id)).subagents;
+      expect(resumedForkTree.filter((row) => row.id.startsWith(resumedWorkflow))).toEqual([]);
       const resumed = await readRun(claim.newRunId);
       const resumedChild = resumed.status.steps.find((step) => step.workflowKey === "T2.review")!;
       const resumedChildFile = resumedChild.sessionFile!;
@@ -1089,6 +1107,8 @@ async function runNativeForkWorkflowOwnership(loseHeldRunner: boolean) {
         resumedChildFile,
         resumedChildText,
         claimantProcess,
+        sourceTree: resumedSourceTree,
+        forkTree: resumedForkTree,
       });
       if (loseHeldRunner) {
         const heldRunner = await readRun(resumedChildRunId);
@@ -1197,6 +1217,33 @@ async function runNativeForkWorkflowOwnership(loseHeldRunner: boolean) {
       state: "complete",
       sessionId: sourceFile,
     });
+    await expect
+      .poll(
+        async () => {
+          const rows = (await active.listProviderSubagents(source.id)).subagents;
+          return [resumedWorkflow, `${resumedWorkflow}/T2.review`].map((id) => ({
+            id,
+            status: rows.find((row) => row.id === id)?.status,
+          }));
+        },
+        { timeout: 15_000, interval: 100 },
+      )
+      .toEqual([
+        { id: resumedWorkflow, status: "completed" },
+        { id: `${resumedWorkflow}/T2.review`, status: "completed" },
+      ]);
+    const interruptedNotice = (await readFile(sourceFile, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find(
+        (entry) =>
+          entry.type === "custom_message" &&
+          JSON.stringify(entry).includes(`Workflow run: ${sourceRunId}`) &&
+          JSON.stringify(entry).includes(`Auto-resumed as ${claim.newRunId}`),
+      );
+    const completedForkTree = (await active.listProviderSubagents(fork.id)).subagents;
+    expect(completedForkTree.filter((row) => row.id.startsWith(resumedWorkflow))).toEqual([]);
     await record("source-completed", {
       original: sourceOwnership,
       resumed: completedRun,
@@ -1206,7 +1253,9 @@ async function runNativeForkWorkflowOwnership(loseHeldRunner: boolean) {
       completedChildRun,
       sourceFile,
       completedNotice,
+      interruptedNotice,
       sourceTree: (await active.listProviderSubagents(source.id)).subagents,
+      forkTree: completedForkTree,
     });
 
     const own = await verifyForkHistoryOwnership(active, fork.id, sourceFile, gate, sourceWorkflow);

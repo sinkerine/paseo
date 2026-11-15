@@ -7,6 +7,7 @@ export interface ClientPresenceState {
   lastActivityAtMs: number | null;
   focusedAgentId: string | null;
   focusedTerminalId: string | null;
+  notificationProjectIds: ReadonlySet<string> | null;
 }
 
 export type AttentionFocusTarget = { kind: "agent"; id: string } | { kind: "terminal"; id: string };
@@ -18,6 +19,7 @@ export interface NotificationPlan {
 
 interface ComputeNotificationPlanInput {
   allStates: ClientPresenceState[];
+  targetProjectId: string | null;
   // A present, app-visible client focused on the attention target suppresses the
   // notification entirely. Pass null when the target should not suppress notifications.
   focusTarget: AttentionFocusTarget | null;
@@ -39,12 +41,22 @@ function isFocusedOnTarget(
   return state.focusedTerminalId === target.id;
 }
 
+export function isClientInNotificationScope(
+  state: ClientPresenceState,
+  targetProjectId: string | null,
+): boolean {
+  const ids = state.notificationProjectIds;
+  return ids === null || (targetProjectId !== null && ids.has(targetProjectId));
+}
+
 export function computeNotificationPlan({
   allStates,
+  targetProjectId,
   focusTarget,
   pushEligible,
   nowMs,
 }: ComputeNotificationPlanInput): NotificationPlan {
+  let anyPresent = false;
   let mostRecentPresentIndex: number | null = null;
   let mostRecentPresentAtMs = Number.NEGATIVE_INFINITY;
 
@@ -62,6 +74,11 @@ export function computeNotificationPlan({
       return { inAppRecipientIndex: null, shouldPush: false };
     }
 
+    anyPresent = true;
+    if (!isClientInNotificationScope(state, targetProjectId)) {
+      continue;
+    }
+
     if (clampedActivityAtMs > mostRecentPresentAtMs) {
       mostRecentPresentIndex = clientIndex;
       mostRecentPresentAtMs = clampedActivityAtMs;
@@ -72,7 +89,7 @@ export function computeNotificationPlan({
     return { inAppRecipientIndex: mostRecentPresentIndex, shouldPush: false };
   }
 
-  return { inAppRecipientIndex: null, shouldPush: pushEligible };
+  return { inAppRecipientIndex: null, shouldPush: !anyPresent && pushEligible };
 }
 
 export function isPushEligibleAttentionReason(reason: AgentAttentionReason): boolean {

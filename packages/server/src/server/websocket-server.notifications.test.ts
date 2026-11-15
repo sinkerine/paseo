@@ -12,6 +12,7 @@ import type { CheckoutDiffManager } from "./checkout-diff-manager.js";
 import { asInternals, createStub } from "./test-utils/class-mocks.js";
 import { createProviderSnapshotManagerStub } from "./test-utils/session-stubs.js";
 import type { PushNotificationSender, PushPayload } from "./push/index.js";
+import type { WorkspaceRegistry, PersistedWorkspaceRecord } from "./workspace-registry.js";
 import type { WorkspaceAutoName } from "./workspace-auto-name.js";
 
 const WORKSPACE_ID = "workspace-1";
@@ -51,7 +52,7 @@ interface WebSocketServerInternals {
     agentId: string;
     reason: string;
     preview?: string;
-    providerId?: string;
+    provider: "claude";
     timestamp?: string;
   }): Promise<void>;
 }
@@ -83,7 +84,11 @@ class RecordingPushNotificationSender implements PushNotificationSender {
   }
 }
 
-function createServer(agentManagerOverrides?: Record<string, unknown>) {
+function createServer(
+  agentManagerOverrides?: Record<string, unknown>,
+  workspaceRegistry?: WorkspaceRegistry,
+) {
+  const logger = createLogger();
   const pushNotifications = new RecordingPushNotificationSender();
   const agentManager = {
     subscribe: vi.fn(() => () => {}),
@@ -108,7 +113,7 @@ function createServer(agentManagerOverrides?: Record<string, unknown>) {
 
   const server = new VoiceAssistantWebSocketServer(
     createStub<HTTPServer>({}),
-    createStub<pino.Logger>(createLogger()),
+    createStub<pino.Logger>(logger),
     "srv-test",
     createStub<AgentManager>(agentManager),
     createStub<AgentStorage>({}),
@@ -126,7 +131,7 @@ function createServer(agentManagerOverrides?: Record<string, unknown>) {
     "1.2.3-test",
     undefined,
     undefined,
-    undefined,
+    workspaceRegistry,
     createStub<ScheduleService>({}),
     createStub<CheckoutDiffManager>({
       subscribe: vi.fn(),
@@ -151,7 +156,7 @@ function createServer(agentManagerOverrides?: Record<string, unknown>) {
     createProviderSnapshotManagerStub().manager,
   );
 
-  return { server, agentManager, pushNotifications };
+  return { server, agentManager, pushNotifications, logger };
 }
 
 function createOpenSocket() {
@@ -171,11 +176,14 @@ function createSessionWithActivity(
     lastActivityAt: Date;
     appVisible: boolean;
     appVisibilityChangedAt?: Date;
+    notificationProjectIds?: ReadonlySet<string> | null;
   } | null,
   subscribed = true,
 ) {
   return {
-    getClientActivity: vi.fn(() => activity),
+    getClientActivity: vi.fn(() =>
+      activity ? { notificationProjectIds: null, ...activity } : null,
+    ),
     supports: () => false,
     supportsForSource: () => false,
     subscribesToAgent: vi.fn(async () => subscribed),
@@ -190,6 +198,7 @@ function connectClient(
     lastActivityAt: Date;
     appVisible: boolean;
     appVisibilityChangedAt?: Date;
+    notificationProjectIds?: ReadonlySet<string> | null;
   } | null,
   options: { subscribed?: boolean } = {},
 ) {
@@ -227,6 +236,122 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it("elects the in-scope client over a more recent out-of-scope client", async () => {
+    const record: PersistedWorkspaceRecord = {
+      workspaceId: WORKSPACE_ID,
+      projectId: "alpha",
+      cwd: "/tmp/alpha",
+      kind: "directory",
+      displayName: "Alpha",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+    };
+    const registry = createStub<WorkspaceRegistry>({ get: async () => record });
+    const { server, pushNotifications } = createServer(undefined, registry);
+    const alpha = connectClient(server, {
+      deviceType: "web",
+      appVisible: true,
+      focusedAgentId: null,
+      lastActivityAt: new Date(Date.now() - 1000),
+      notificationProjectIds: new Set(["alpha"]),
+    });
+    const beta = connectClient(server, {
+      deviceType: "web",
+      appVisible: true,
+      focusedAgentId: null,
+      lastActivityAt: new Date(),
+      notificationProjectIds: new Set(["beta"]),
+    });
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "finished",
+    });
+    expect(readAttentionRequiredMessage(alpha).shouldNotify).toBe(true);
+    expect(readAttentionRequiredMessage(beta).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it("drops attention without push when every present client excludes the project", async () => {
+    const registry = createStub<WorkspaceRegistry>({
+      get: async () => ({
+        workspaceId: WORKSPACE_ID,
+        projectId: "alpha",
+        cwd: "/tmp/alpha",
+        kind: "directory",
+        displayName: "Alpha",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        archivedAt: null,
+      }),
+    });
+    const { server, pushNotifications } = createServer(undefined, registry);
+    const client = connectClient(server, {
+      deviceType: "web",
+      appVisible: true,
+      focusedAgentId: null,
+      lastActivityAt: new Date(),
+      notificationProjectIds: new Set(["beta"]),
+    });
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "finished",
+    });
+    expect(readAttentionRequiredMessage(client).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it.each(["missing", "rejecting"] as const)(
+    "admits only unrestricted clients for a %s workspace lookup",
+    async (lookup) => {
+      const failure = new Error("workspace read failed");
+      const requestedIds: string[] = [];
+      const registry = createStub<WorkspaceRegistry>({
+        get: async (workspaceId) => {
+          requestedIds.push(workspaceId);
+          if (lookup === "rejecting") throw failure;
+          return null;
+        },
+      });
+      const { server, pushNotifications, logger } = createServer(
+        { getAgent: () => ({ workspaceId: "current-workspace", pendingPermissions: new Map() }) },
+        registry,
+      );
+      const unrestricted = connectClient(server, {
+        deviceType: "web",
+        appVisible: true,
+        focusedAgentId: null,
+        lastActivityAt: new Date(Date.now() - 1000),
+      });
+      const scoped = connectClient(server, {
+        deviceType: "web",
+        appVisible: true,
+        focusedAgentId: null,
+        lastActivityAt: new Date(),
+        notificationProjectIds: new Set(["alpha"]),
+      });
+      await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason: "finished",
+      });
+      expect(requestedIds).toEqual(["current-workspace"]);
+      expect(readAttentionRequiredMessage(unrestricted).shouldNotify).toBe(true);
+      expect(readAttentionRequiredMessage(scoped).shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toEqual([]);
+      if (lookup === "rejecting") {
+        expect(logger.warn).toHaveBeenCalledWith(
+          { err: failure, workspaceId: "current-workspace" },
+          "Failed to resolve notification target project",
+        );
+      } else {
+        expect(logger.warn).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it("does not emit attention or include presence without an agent-directory subscription", async () => {
     const { server, pushNotifications } = createServer();

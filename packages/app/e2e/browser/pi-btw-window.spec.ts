@@ -143,8 +143,16 @@ for (const compact of [false, true]) {
           .toBe(false);
       }
       await previousWindow.dispose();
-      await expect(window).toHaveCount(1);
-      await expect(window).toHaveAttribute("aria-label", threadId ?? "");
+      // Count and identity must share one read while the previous sheet dismisses.
+      await expect
+        .poll(() =>
+          window.evaluateAll((elements) => {
+            const threadIds = [];
+            for (const element of elements) threadIds.push(element.getAttribute("aria-label"));
+            return threadIds;
+          }),
+        )
+        .toEqual([threadId ?? ""]);
       expect(
         (
           await client.fetchProviderSubagentTimeline(handle.agentId, threadId ?? "", { limit: 0 })

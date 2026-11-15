@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACTIVITY_HEARTBEAT_THROTTLE_MS,
+  HEARTBEAT_INTERVAL_MS,
   createClientActivityTracker,
   type ClientActivityTracker,
   type ClientActivityTrackerInput,
@@ -67,6 +68,7 @@ function buildTracker(
     initialFocusedAgentId: overrides.initialFocusedAgentId ?? "agent-1",
     initialFocusedTerminalId: overrides.initialFocusedTerminalId ?? null,
     initialAppVisible: overrides.initialAppVisible ?? true,
+    initialNotificationScope: overrides.initialNotificationScope,
     now: clock.now,
     onAppResumed: overrides.onAppResumed,
   });
@@ -74,6 +76,72 @@ function buildTracker(
 }
 
 describe("client activity tracker", () => {
+  it("scope change sends one heartbeat without moving lastActivityAt and bypasses the throttle", () => {
+    const { tracker, client, clock } = buildTracker();
+    tracker.maybeSendImmediateHeartbeat();
+    client.reset();
+    clock.advance(1);
+    tracker.setNotificationScope({ projectIds: ["alpha"] });
+    expect(client.recordedHeartbeats).toHaveLength(1);
+    expect(client.latest()).toMatchObject({
+      notificationScope: { projectIds: ["alpha"] },
+      lastActivityAt: new Date(START_MS).toISOString(),
+    });
+  });
+
+  it("deep-equal scope sends nothing and clearing the scope sends an unrestricted heartbeat", () => {
+    const { tracker, client } = buildTracker();
+    tracker.setNotificationScope({ projectIds: ["alpha"] });
+    client.reset();
+    tracker.setNotificationScope({ projectIds: ["alpha"] });
+    expect(client.recordedHeartbeats).toEqual([]);
+    tracker.setNotificationScope(undefined);
+    expect(client.recordedHeartbeats).toHaveLength(1);
+    expect(client.latest()).not.toHaveProperty("notificationScope");
+    client.reset();
+    tracker.setNotificationScope(undefined);
+    expect(client.recordedHeartbeats).toEqual([]);
+    tracker.setNotificationScope({ projectIds: [] });
+    expect(client.recordedHeartbeats).toHaveLength(1);
+    expect(client.latest().notificationScope).toEqual({ projectIds: [] });
+  });
+
+  it("scope set while disconnected is sent with the first connected heartbeat", () => {
+    const client = createFakeHeartbeatClient();
+    client.isConnected = false;
+    const { tracker } = buildTracker({ client });
+    tracker.setNotificationScope({ projectIds: ["alpha"] });
+    expect(client.recordedHeartbeats).toEqual([]);
+    client.isConnected = true;
+    tracker.sendHeartbeat();
+    expect(client.recordedHeartbeats).toHaveLength(1);
+    expect(client.latest()).toMatchObject({
+      notificationScope: { projectIds: ["alpha"] },
+      lastActivityAt: new Date(START_MS).toISOString(),
+    });
+  });
+
+  it("initial and interval heartbeats carry the current scope without recording activity", () => {
+    const { tracker, client, clock } = buildTracker({
+      initialNotificationScope: { projectIds: ["alpha"] },
+    });
+    tracker.sendHeartbeat();
+    clock.advance(HEARTBEAT_INTERVAL_MS);
+    tracker.sendHeartbeat();
+    tracker.setNotificationScope({ projectIds: ["beta"] });
+    clock.advance(HEARTBEAT_INTERVAL_MS);
+    tracker.sendHeartbeat();
+    expect(client.recordedHeartbeats.map((payload) => payload.notificationScope)).toEqual([
+      { projectIds: ["alpha"] },
+      { projectIds: ["alpha"] },
+      { projectIds: ["beta"] },
+      { projectIds: ["beta"] },
+    ]);
+    expect(client.recordedHeartbeats.map((payload) => payload.lastActivityAt)).toEqual(
+      Array(4).fill(new Date(START_MS).toISOString()),
+    );
+  });
+
   it("includes the latest user-activity time in the next heartbeat", () => {
     const { tracker, client, clock } = buildTracker();
 

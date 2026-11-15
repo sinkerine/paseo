@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { ClientNotificationScope } from "@getpaseo/protocol/messages";
 import { getIsElectron, isWeb, isNative } from "@/constants/platform";
 import { readDesktopSystemIdleTimeMs } from "@/desktop/electron/idle";
 import { invokeDesktopCommand } from "@/desktop/electron/invoke";
@@ -15,6 +16,7 @@ interface ClientActivityOptions {
   client: DaemonClient;
   focusedAgentId: string | null;
   focusedTerminalId: string | null;
+  notificationScope?: ClientNotificationScope;
   onAppResumed?: (awayMs: number) => void;
 }
 
@@ -28,6 +30,7 @@ export function useClientActivity({
   client,
   focusedAgentId,
   focusedTerminalId,
+  notificationScope,
   onAppResumed,
 }: ClientActivityOptions): void {
   const onAppResumedRef = useRef(onAppResumed);
@@ -41,6 +44,7 @@ export function useClientActivity({
       initialFocusedAgentId: focusedAgentId,
       initialFocusedTerminalId: focusedTerminalId,
       initialAppVisible: AppState.currentState === "active",
+      initialNotificationScope: notificationScope,
       now: () => Date.now(),
       onAppResumed: (awayMs) => onAppResumedRef.current?.(awayMs),
     });
@@ -121,6 +125,10 @@ export function useClientActivity({
   useEffect(() => {
     tracker.setFocusedTerminalId(focusedTerminalId);
   }, [focusedTerminalId, tracker]);
+
+  useEffect(() => {
+    tracker.setNotificationScope(notificationScope);
+  }, [notificationScope, tracker]);
 
   // Periodic heartbeat gated by connection status.
   useEffect(() => {

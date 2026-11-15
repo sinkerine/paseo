@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { StreamItem } from "@/types/stream";
 import {
+  appendBtwDraftSnippet,
   findBtwSubmittedQuestionIndex,
   reduceBtwDraft,
   type BtwDraftAction,
@@ -204,4 +205,43 @@ test("canonical ask matching excludes older repeats, other epochs and other clie
   expect(
     findBtwSubmittedQuestionIndex(withoutCursor, [{ ...user, timestamp: new Date(0) }, user]),
   ).toBe(1);
+});
+
+test("appendBtwDraftSnippet joins empty and newline-terminated drafts with at most one blank line", () => {
+  const snippet = "> quote\n\n";
+  for (const [draft, expected] of [
+    ["", snippet],
+    ["Note", "Note\n\n" + snippet],
+    ["Note\n", "Note\n\n" + snippet],
+    ["Note\n\n", "Note\n\n" + snippet],
+    ["Note\n\n\n", "Note\n\n\n" + snippet],
+  ]) {
+    expect(appendBtwDraftSnippet(draft, snippet)).toBe(expected);
+  }
+});
+test("insert after a failed ask appends to the restored question", () => {
+  const failed = apply(submit, accepted, failure);
+  const inserted = reduceBtwDraft(failed, { type: "insert", text: "> quote\n\n" });
+  expect(inserted).toEqual({ ...failed, text: question.text + "\n\n> quote\n\n" });
+});
+test("insert during an in-flight ask survives answer reconciliation and clears only after its own send reconciles", () => {
+  const snippet = "> quote\n\n";
+  const inserted = apply(
+    submit,
+    accepted,
+    { type: "insert", text: snippet },
+    { type: "thread", status: "completed", updatedAt: "2026-01-03", items: [user, answer] },
+  );
+  expect(inserted).toEqual({ text: snippet, submitted: null, failed: false });
+  const command = { kind: "ask", text: snippet } as const;
+  const sent = reduceBtwDraft(inserted, { ...submit, command });
+  const cleared = reduceBtwDraft(sent, { type: "accepted", command });
+  const reconciled = reduceBtwDraft(cleared, {
+    type: "thread",
+    status: "completed",
+    updatedAt: "2026-01-03",
+    items: [{ ...user, text: snippet }, answer],
+  });
+  expect(reconciled).toEqual({ text: "", submitted: null, failed: false });
+  expect(reduceBtwDraft(reconciled, { type: "insert", text: snippet }).text).toBe(snippet);
 });
