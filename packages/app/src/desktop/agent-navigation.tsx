@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { i18n } from "@/i18n/i18next";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { getDesktopHost } from "@/desktop/host";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -104,7 +105,7 @@ async function fetchWorkspaceId({ serverId, agentId }: AgentTarget): Promise<str
   await runtime.prepareAgentRoute(serverId, agentId);
   const client = runtime.getClient(serverId);
   if (!client || !isHostRuntimeConnected(runtime.getSnapshot(serverId)))
-    throw new Error("Host is not connected");
+    throw new Error(i18n.t("workspace.terminal.hostDisconnected"));
   return (await client.fetchAgent({ agentId }))?.agent.workspaceId ?? null;
 }
 

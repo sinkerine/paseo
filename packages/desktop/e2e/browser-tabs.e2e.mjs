@@ -1503,6 +1503,21 @@ async function startWindowManager({ runtimeDir, artifactDir, children }) {
   }
 }
 
+function desktopLaunchCommand(inspectorPort) {
+  const desktopArgs = [
+    process.execPath,
+    devRunner,
+    `--inspect=127.0.0.1:${inspectorPort}`,
+    ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+  ];
+  const desktopCommand = process.platform === "linux" ? "xvfb-run" : desktopArgs.shift();
+  const desktopCommandArgs =
+    process.platform === "linux"
+      ? ["-a", "--server-args=-screen 0 1280x800x24", ...desktopArgs]
+      : desktopArgs;
+  return { command: desktopCommand, args: desktopCommandArgs };
+}
+
 async function main() {
   const artifactDir =
     process.env.PASEO_DESKTOP_E2E_ARTIFACT_DIR ??
@@ -1596,17 +1611,8 @@ async function main() {
     children.push(remoteDaemon);
     await waitForPort(remotePort, "remote daemon", remoteDaemon);
 
-    const desktopArgs = [
-      process.execPath,
-      devRunner,
-      `--inspect=127.0.0.1:${inspectorPort}`,
-      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
-    ];
-    const desktopCommand = process.platform === "linux" ? "xvfb-run" : desktopArgs.shift();
-    const desktopCommandArgs =
-      process.platform === "linux"
-        ? ["-a", "--server-args=-screen 0 1280x800x24", ...desktopArgs]
-        : desktopArgs;
+    const { command: desktopCommand, args: desktopCommandArgs } =
+      desktopLaunchCommand(inspectorPort);
     if (tabFocusOnly) {
       const metro = spawnLogged(
         "metro",
