@@ -102,8 +102,8 @@
             udev
           ];
         in
-        {
-          default = pkgs.mkShell {
+        let
+          baseShell = pkgs.mkShell {
             packages = with pkgs; [
               nodejs_22
               python3
@@ -123,6 +123,11 @@
               export FONTCONFIG_FILE="${pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; }}"
             '';
           };
+        in
+        {
+          default = baseShell;
+        } // pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          android = import ./nix/android-shell.nix { inherit pkgs baseShell; };
         }
       );
     };

@@ -36,7 +36,9 @@ install after Playwright upgrades. Do not point `PLAYWRIGHT_BROWSERS_PATH` at
 Nixpkgs' browser bundle: its Playwright version can differ from the checkout's.
 On Linux, the shell supplies shared libraries through `LD_LIBRARY_PATH`; no
 `playwright install --with-deps` or system package installation is needed for
-Chromium. Native Android and iOS builds still require their platform SDKs.
+Chromium. For Android on x86_64 Linux, use `nix develop .#android` and the
+[checkout-isolated Android runner](android.md#nix-sdk-and-isolated-emulator-linux).
+iOS builds still require Xcode.
 
 ## Running the dev server
 
