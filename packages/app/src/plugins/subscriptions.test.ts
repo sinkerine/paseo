@@ -3,7 +3,6 @@ import type { PluginSubscriptionClosed } from "@getpaseo/plugin/client";
 import { subscribePluginRpc } from "@getpaseo/plugin/client/host";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { SubscriptionObserver } from "@getpaseo/client";
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { expect, it } from "vitest";
 import { z } from "zod";
 import { createPluginSubscribe } from "./subscriptions";
@@ -66,7 +65,7 @@ class HostSubscription {
     this.observer?.update({
       type: "plugin.rpc.event",
       payload: { subscriptionId: "s", event },
-    } as SessionOutboundMessage);
+    });
   }
 
   bytes(payload: Uint8Array) {
@@ -77,7 +76,7 @@ class HostSubscription {
     this.observer?.update({
       type: "plugin.rpc.closed",
       payload: { subscriptionId: "s", ...(error ? { error } : {}) },
-    } as SessionOutboundMessage);
+    });
   }
 
   async release() {

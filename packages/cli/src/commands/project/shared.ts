@@ -6,6 +6,7 @@ export interface ProjectRow {
   name: string;
   kind: "git" | "non_git" | "directory";
   path: string;
+  defaultIsolation: "local" | "worktree" | null;
 }
 
 export const projectSchema: OutputSchema<ProjectRow> = {
@@ -13,6 +14,7 @@ export const projectSchema: OutputSchema<ProjectRow> = {
   columns: [
     { header: "PROJECT ID", field: "projectId", width: 20 },
     { header: "NAME", field: "name", width: 24 },
+    { header: "ISOLATION", field: (row) => row.defaultIsolation ?? "-", width: 12 },
     { header: "KIND", field: "kind", width: 10 },
     { header: "PATH", field: "path", width: 42 },
   ],
@@ -24,5 +26,6 @@ export function toProjectRow(project: WorkspaceProjectDescriptorPayload): Projec
     name: project.projectDisplayName,
     kind: project.projectKind,
     path: project.projectRootPath,
+    defaultIsolation: project.projectDefaultIsolation ?? null,
   };
 }

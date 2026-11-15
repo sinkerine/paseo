@@ -1,8 +1,8 @@
 import type {
-  AgentSnapshotPayload,
-  CreationSnapshot,
-  WorkspaceCreateResponse,
-} from "@getpaseo/protocol/messages";
+  NormalizedCreationSnapshot as CreationSnapshot,
+  NormalizedWorkspaceCreateResponse as WorkspaceCreateResponse,
+} from "../workspace-descriptors.js";
+import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import type { CreateAgentRequestOptions, CreateWorkspaceRequestOptions } from "../daemon-client.js";
 
 type Kind = CreationSnapshot["kind"];

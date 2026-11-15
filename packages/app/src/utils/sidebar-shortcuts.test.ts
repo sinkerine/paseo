@@ -59,6 +59,7 @@ function project(projectKey: string, workspaces: SidebarWorkspaceEntry[]): Sideb
         projectId: projectKey,
         iconWorkingDir: workspaces[0]?.workspaceDirectory ?? "",
         worktreeSupport: "supported" as const,
+        defaultIsolation: null,
       },
     ],
     workspaces,
@@ -196,6 +197,7 @@ describe("buildSidebarShortcutModel", () => {
     directoryProject.hosts = directoryProject.hosts.map((host) => ({
       ...host,
       worktreeSupport: "unsupported" as const,
+      defaultIsolation: null,
     }));
 
     const model = buildSidebarShortcutModel({

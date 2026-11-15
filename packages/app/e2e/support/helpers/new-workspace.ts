@@ -29,6 +29,7 @@ type NewWorkspaceDaemonClient = Pick<
   | "enablePlugin"
   | "inspectWorkspaceRecovery"
   | "listProjects"
+  | "setProjectIsolation"
   | "listTerminals"
   | "on"
   | "patchDaemonConfig"

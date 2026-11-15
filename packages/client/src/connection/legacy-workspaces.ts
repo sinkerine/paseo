@@ -1,5 +1,6 @@
+import type { NormalizedSessionOutboundMessage as SessionOutboundMessage } from "../workspace-descriptors.js";
 import { AgentSnapshotPayloadSchema } from "@getpaseo/protocol/messages";
-import type { AgentSnapshotPayload, SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { AgentSnapshotPayload } from "@getpaseo/protocol/messages";
 import {
   deriveAgentStateBucket,
   getWorkspaceStateBucketPriority,

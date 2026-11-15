@@ -1,3 +1,4 @@
+import { resolveProjectIsolationIntent } from "./isolation.js";
 import path from "node:path";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -55,6 +56,7 @@ describe("project commands", () => {
       "create",
       "ls",
       "rename",
+      "isolation",
       "delete",
       "icon",
     ]);
@@ -71,6 +73,7 @@ describe("project commands", () => {
     expect(result.data).toEqual({
       projectId: "project-1",
       name: "Paseo",
+      defaultIsolation: null,
       kind: "git",
       path: "/tmp/paseo",
     });
@@ -207,4 +210,18 @@ describe("project commands", () => {
       removedWorkspaceIds: ["workspace-1"],
     });
   });
+});
+
+it("parses project isolation reads, pins, resets and rejects ambiguous input", () => {
+  expect(resolveProjectIsolationIntent({})).toEqual({ kind: "get" });
+  expect(resolveProjectIsolationIntent({ isolation: "worktree" })).toEqual({
+    kind: "set",
+    defaultIsolation: "worktree",
+  });
+  expect(resolveProjectIsolationIntent({ reset: true })).toEqual({
+    kind: "set",
+    defaultIsolation: null,
+  });
+  expect(() => resolveProjectIsolationIntent({ reset: true, isolation: "local" })).toThrow();
+  expect(() => resolveProjectIsolationIntent({ isolation: "auto" })).toThrow();
 });

@@ -18,6 +18,10 @@ import { runAppearanceFontSizeRegression } from "./appearance-font-size.electron
 import { runAdaptiveThemeRegression } from "./appearance-theme.electron.mjs";
 import { runSettingsScrollRegression } from "./settings-scroll.electron.mjs";
 import { buildFillFixture, verifyReactFormFill } from "./browser-fill.electron.mjs";
+import {
+  prepareProjectIsolationFixture,
+  runProjectIsolationRegression,
+} from "./project-isolation.electron.mjs";
 import { runSettingsMemoryRegression } from "./settings-memory.electron.mjs";
 
 import { seedPluginLinks, runPluginLinksRegression } from "./plugin-links.electron.mjs";
@@ -1248,6 +1252,10 @@ async function main() {
   ]);
   const listen = `127.0.0.1:${daemonPort}`;
   seedPaseoHome(paseoHome, listen, workspaceRoot);
+  const isolationProject =
+    process.env.PASEO_DESKTOP_PROJECT_ISOLATION_ONLY === "1"
+      ? prepareProjectIsolationFixture(paseoHome)
+      : null;
   const target = await startTargetPage();
   seedPluginLinks(paseoHome, workspaceIds[0], target.url, workspaceIds[1]);
   const remoteHome = path.join(runtimeDir, "remote-home");
@@ -1362,6 +1370,23 @@ async function main() {
       const pluginLinks = await checkPluginLinks();
       writeJson(path.join(artifactDir, "result.json"), { pluginLinks });
       console.log("Plugin external links and workspace browser passed.");
+      return;
+    }
+    if (isolationProject) {
+      const projectIsolation = await runProjectIsolationRegression({
+        page,
+        paseoHome,
+        project: isolationProject,
+        artifactDir,
+      });
+      writeJson(path.join(artifactDir, "result.json"), { projectIsolation });
+      console.log("Desktop project isolation regression passed.");
+      return;
+    }
+    if (process.env.PASEO_DESKTOP_SETTINGS_MEMORY_ONLY === "1") {
+      const settingsMemory = await runSettingsMemoryRegression(page);
+      writeJson(path.join(artifactDir, "result.json"), { settingsMemory });
+      console.log("Desktop Settings memory regression passed.");
       return;
     }
     const settingsScroll = await runSettingsScrollRegression(page, (size) =>

@@ -378,6 +378,7 @@ describe("wire compatibility", () => {
             projectId: "project-1",
             projectDisplayName: "Favorite project",
             projectCustomName: "Favorite project",
+            projectDefaultIsolation: null,
             projectCustomIconRevision: null,
             projectIconRevision: "automatic:none:v1",
             projectRootPath: "/tmp/project",

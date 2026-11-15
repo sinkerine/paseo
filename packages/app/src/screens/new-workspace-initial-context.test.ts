@@ -19,6 +19,7 @@ function projectFor(serverId: string, key = "project"): HostProjectListItem {
         projectId: key,
         iconWorkingDir: `/work/${key}`,
         worktreeSupport: "supported" as const,
+        defaultIsolation: null,
       },
     ],
     workspaceKeys: [],

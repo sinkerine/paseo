@@ -7,6 +7,7 @@ export {
   filterWorkspaceProjectsForHost,
   getHostProjectSourceDirectory,
   getHostProjectId,
+  getDefaultIsolationForHostProject,
   getWorktreeSupportForHostProject,
   hostProjectFromRoute,
   hostProjectFromWorkspace,

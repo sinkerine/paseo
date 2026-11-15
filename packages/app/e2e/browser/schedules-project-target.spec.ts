@@ -1,3 +1,7 @@
+import {
+  openNewWorkspaceComposer,
+  selectWorkspaceIsolation,
+} from "../support/helpers/new-workspace";
 import { expect, test, type Page } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { addScheduleHostAndReload, createScheduleHost } from "../support/helpers/schedule-host";
@@ -338,6 +342,67 @@ test.describe("Schedules project target", () => {
     await page.getByLabel("Schedule name").fill(`Cross host model ${Date.now()}`);
     await page.getByLabel("Prompt").fill("Run on the secondary host project.");
     await expect(page.getByRole("button", { name: "Create schedule" })).toBeDisabled();
+  });
+
+  test("project defaults clear schedule overrides and preserve saved edit isolation", async ({
+    page,
+  }) => {
+    const alpha = await seedWorkspace({ repoPrefix: "schedule-isolation-alpha-" });
+    const beta = await seedWorkspace({ repoPrefix: "schedule-isolation-beta-" });
+    const gamma = await seedWorkspace({ repoPrefix: "schedule-isolation-unpinned-" });
+    cleanupTasks.push(
+      () => alpha.cleanup(),
+      () => beta.cleanup(),
+      () => gamma.cleanup(),
+    );
+    const name = `Pinned isolation ${Date.now()}`;
+    cleanupTasks.push(() => deleteScheduleByName(alpha, name));
+    await alpha.client.setProjectIsolation(alpha.projectId, "worktree");
+    await beta.client.setProjectIsolation(beta.projectId, "local");
+    await gotoAppShell(page);
+    await waitForSidebarHydration(page);
+    await openNewWorkspaceComposer(page, gamma);
+    await selectWorkspaceIsolation(page, "local");
+    await page.getByRole("button", { name: "Schedules", exact: true }).click();
+    await page.getByTestId("schedules-empty-new").click();
+    const selectProject = async (workspace: SeededWorkspace) => {
+      await page.getByTestId("schedule-project-trigger").click();
+      await page
+        .getByTestId(`schedule-project-option-${projectEquivalenceViewKey(workspace.projectKey)}`)
+        .click();
+    };
+    await selectProject(alpha);
+    const isolation = page.getByTestId("schedule-isolation-trigger");
+    await expect(isolation).toContainText("Worktree");
+    await isolation.click();
+    await page.getByTestId("schedule-isolation-local").click();
+    await selectProject(beta);
+    await expect(isolation).toContainText("Local");
+    await selectProject(alpha);
+    await expect(isolation).toContainText("Worktree");
+    await selectModelByLabel(page, "Ten second stream");
+    await page.getByLabel("Schedule name").fill(name);
+    await page.getByLabel("Prompt").fill("Use the configured project isolation");
+    await page.getByTestId("schedule-cadence-preset-trigger").click();
+    await page.getByTestId("schedule-cadence-preset-every-hour").click();
+    await page.getByRole("button", { name: "Create schedule" }).click();
+    await expect(page.getByTestId("schedule-form-sheet")).toHaveCount(0, { timeout: 30_000 });
+    await expectScheduleKnobs({
+      workspace: alpha,
+      name,
+      archiveOnFinish: true,
+      isolation: "worktree",
+    });
+    expect(
+      await page.evaluate(
+        () => JSON.parse(localStorage.getItem("@paseo:create-agent-preferences") ?? "{}").isolation,
+      ),
+    ).toBe("local");
+    await alpha.client.setProjectIsolation(alpha.projectId, "local");
+    const id = await findScheduleIdByName(alpha, name);
+    await page.getByTestId(`schedule-row-${id}`).click();
+    await expect(isolation).toContainText("Worktree");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
   test("creates and edits schedule isolation and archive cleanup knobs", async ({ page }) => {

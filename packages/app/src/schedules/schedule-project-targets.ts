@@ -1,3 +1,4 @@
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import type { ProjectSummary } from "@/utils/projects";
 import { shortenPath } from "@/utils/shorten-path";
 
@@ -11,6 +12,7 @@ export interface ScheduleProjectTarget {
   projectName: string;
   cwd: string;
   isGit: boolean;
+  defaultIsolation: ProjectIsolation | null;
 }
 
 export function buildProjectOptionId(serverId: string, projectViewKey: string): string {
@@ -39,7 +41,8 @@ export function buildScheduleProjectTargets(
         projectViewKey: project.viewKey,
         projectName: host.projectName,
         cwd,
-        isGit: Boolean(host.gitRuntime),
+        isGit: host.projectKind === "git" || Boolean(host.gitRuntime),
+        defaultIsolation: host.defaultIsolation,
       });
     }
   }

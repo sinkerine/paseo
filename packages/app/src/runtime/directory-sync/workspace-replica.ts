@@ -168,6 +168,7 @@ export class WorkspaceDirectoryReplica {
         ...workspace,
         projectDisplayName: project.projectDisplayName,
         projectCustomName: project.projectCustomName,
+        projectDefaultIsolation: project.projectDefaultIsolation,
         projectCustomIconRevision: project.projectCustomIconRevision,
         projectRootPath: project.projectRootPath,
         projectKind: project.projectKind,

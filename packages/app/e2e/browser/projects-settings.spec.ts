@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect, test as base, type Page } from "../support/fixtures";
 import { connectSeedClient, seedWorkspace } from "../support/helpers/seed-client";
 import {
+  holdProjectIsolationSave,
   blockPaseoConfigWrites,
   bumpPaseoConfigOnDisk,
   chooseProjectIconImage,
@@ -53,6 +54,7 @@ import {
 } from "../support/helpers/add-project-flow";
 import { createTempGitRepo } from "../support/helpers/workspace";
 import {
+  buildProjectSettingsRoute,
   buildOpenProjectRoute,
   buildProjectsSettingsRoute,
   buildSettingsRoute,
@@ -198,7 +200,201 @@ async function openProjectSettingsFromSidebar(page: Page, projectId: string): Pr
   await openSettingsItem.click();
 }
 
+async function switchProjectSettingsTarget(
+  page: Page,
+  projectId: string,
+  name: string,
+): Promise<void> {
+  const originalDocument = await page.locator("html").elementHandle();
+  await page.evaluate(
+    (route) => {
+      window.history.pushState(null, "", route);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+    buildProjectSettingsRoute(getServerId(), projectId),
+  );
+  await expectProjectTitle(page, name);
+  expect(await originalDocument!.evaluate((element) => element.isConnected)).toBe(true);
+  await originalDocument!.dispose();
+}
+
 test.describe("Projects settings", () => {
+  test("hides isolation for non-Git projects", async ({ page }) => {
+    const workspace = await seedWorkspace({ repoPrefix: "isolation-nongit-settings-", git: false });
+    try {
+      await openProjects(page);
+      await navigateToProjectSettings(page, workspace.projectDisplayName);
+      await expectProjectSettingsFormVisible(page);
+      await expect(page.getByTestId("project-isolation-card")).toHaveCount(0);
+    } finally {
+      await workspace.cleanup();
+    }
+  });
+
+  test("project isolation stays editable with invalid paseo.json", async ({
+    page,
+    editableProject,
+  }) => {
+    await corruptPaseoConfig(editableProject.path);
+    await openProjects(page);
+    await navigateToProjectSettings(page, editableProject.name);
+    await expect(page.getByTestId("invalid-callout")).toBeVisible();
+    const row = page.getByTestId("project-isolation-row");
+    await row.getByRole("button").click();
+    await page.getByRole("menuitem", { name: "Local", exact: true }).click();
+    await expect(row).toContainText("Local");
+    await expect(page.getByText("Workspace isolation updated", { exact: true })).toBeVisible();
+    await expectNoUncommittedSetupWarning(page);
+    await page.reload();
+    await expect(page.getByTestId("invalid-callout")).toBeVisible();
+    await expect(page.getByTestId("project-isolation-row")).toContainText("Local");
+  });
+
+  test("surfaces inline error when project isolation save fails and recovers on retry", async ({
+    page,
+    editableProject,
+  }) => {
+    const gate = await holdProjectIsolationSave(page);
+    await openProjects(page);
+    await openProjectSettings(page, editableProject.name);
+    const row = page.getByTestId("project-isolation-row");
+    const trigger = row.getByRole("button");
+    await expect(row).toContainText("Remember last");
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+    await expect(trigger).toBeDisabled();
+    gate.fail();
+    await expect(row.getByRole("alert")).toHaveText("Disk full");
+    await expect(trigger).toBeEnabled();
+    await expect(row).toContainText("Remember last");
+    gate.recover();
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "Local", exact: true }).click();
+    await expect(row.getByRole("alert")).toHaveCount(0);
+    await expect(row).toContainText("Local");
+    await expect(page.getByText("Workspace isolation updated", { exact: true })).toBeVisible();
+  });
+
+  test("isolation error belongs to the settings target after direct project navigation", async ({
+    page,
+    editableProject,
+  }) => {
+    const other = await seedWorkspace({ repoPrefix: "isolation-other-target-" });
+    try {
+      const gate = await holdProjectIsolationSave(page);
+      await openProjects(page);
+      await openProjectSettings(page, editableProject.name);
+      const row = page.getByTestId("project-isolation-row");
+      await row.getByRole("button").click();
+      await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+      gate.fail();
+      await expect(row.getByRole("alert")).toHaveText("Disk full");
+      await switchProjectSettingsTarget(page, other.projectId, other.projectDisplayName);
+      await expect(row.getByRole("alert")).toHaveCount(0);
+      await expect(row.getByRole("button")).toBeEnabled();
+    } finally {
+      await other.cleanup();
+    }
+  });
+
+  test("abandoned isolation save does not toast on the next settings target", async ({
+    page,
+    editableProject,
+  }) => {
+    const other = await seedWorkspace({ repoPrefix: "isolation-pending-target-" });
+    try {
+      const gate = await holdProjectIsolationSave(page);
+      await openProjects(page);
+      await openProjectSettings(page, editableProject.name);
+      const row = page.getByTestId("project-isolation-row");
+      await row.getByRole("button").click();
+      await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+      await expect(row.getByRole("button")).toBeDisabled();
+      await switchProjectSettingsTarget(page, other.projectId, other.projectDisplayName);
+      await gate.commit();
+      await gate.acknowledge();
+      await expect(row.getByRole("button")).toBeEnabled();
+      await expect(row).toContainText("Remember last");
+      await expect(page.getByText("Workspace isolation updated", { exact: true })).toHaveCount(0);
+    } finally {
+      await other.cleanup();
+    }
+  });
+
+  test("committed external isolation update clears a failed save alert", async ({
+    page,
+    editableProject,
+  }) => {
+    const client = await connectSeedClient();
+    try {
+      const gate = await holdProjectIsolationSave(page);
+      await openProjects(page);
+      await openProjectSettings(page, editableProject.name);
+      const row = page.getByTestId("project-isolation-row");
+      await row.getByRole("button").click();
+      await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+      gate.fail();
+      await expect(row.getByRole("alert")).toHaveText("Disk full");
+      const projectId = (await client.fetchWorkspaces()).entries.find(
+        (entry) => entry.projectRootPath === editableProject.path,
+      )?.projectId;
+      if (!projectId) throw new Error("Missing settings project");
+      await client.setProjectIsolation(projectId, "local");
+      await expect(row).toContainText("Local");
+      await expect(row.getByRole("alert")).toHaveCount(0);
+      await expect(row.getByRole("button")).toBeEnabled();
+    } finally {
+      await client.close();
+    }
+  });
+
+  test("isolation success still toasts when committed update arrives before acknowledgement", async ({
+    page,
+    editableProject,
+  }) => {
+    const gate = await holdProjectIsolationSave(page);
+    await openProjects(page);
+    await openProjectSettings(page, editableProject.name);
+    const row = page.getByTestId("project-isolation-row");
+    await row.getByRole("button").click();
+    await page.getByRole("menuitem", { name: "Local", exact: true }).click();
+    await expect(row.getByRole("button")).toBeDisabled();
+    await gate.commit();
+    await expect(row).toContainText("Local");
+    await expect(row.getByRole("button")).toBeDisabled();
+    await gate.acknowledge();
+    await expect(row.getByRole("button")).toBeEnabled();
+    await expect(page.getByText("Workspace isolation updated", { exact: true })).toBeVisible();
+  });
+
+  test("project isolation persists independently of paseo.json", async ({
+    page,
+    editableProject,
+  }) => {
+    const before = await readProjectConfigFile(editableProject);
+    await gotoAppShell(page);
+    const projectRow = page
+      .locator('[data-testid^="sidebar-project-row-"]')
+      .filter({ hasText: editableProject.name })
+      .first();
+    await expect(projectRow).toBeVisible({ timeout: 30_000 });
+    const testId = await projectRow.getAttribute("data-testid");
+    if (!testId) throw new Error("Sidebar project row has no identity");
+    await openProjectSettingsFromSidebar(page, testId.replace("sidebar-project-row-", ""));
+    const row = page.getByTestId("project-isolation-row");
+    await expect(row).toBeVisible();
+    await expect(page.getByTestId("save-button")).toBeEnabled();
+    await row.getByRole("button").click();
+    await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+    await expect(page.getByText("Workspace isolation updated", { exact: true })).toBeVisible();
+    await expect(row).toContainText("New worktree");
+    expect(await readProjectConfigFile(editableProject)).toBe(before);
+    await expect(page.getByTestId("save-button")).toBeEnabled();
+    await page.screenshot({ path: test.info().outputPath("project-isolation-settings.png") });
+    await page.reload();
+    await expect(page.getByTestId("project-isolation-row")).toContainText("New worktree");
+  });
+
   test("freshly-added project with no workspace is editable from the sidebar without a reload", async ({
     page,
   }) => {
@@ -336,6 +532,27 @@ test.describe("Projects settings", () => {
 
 test.describe("Projects settings — compact navigation", () => {
   test.use({ viewport: { width: 390, height: 844 } });
+
+  test("project isolation saves through compact Settings navigation", async ({
+    page,
+    editableProject,
+  }) => {
+    await gotoAppShell(page);
+    await openCompactSettings(page, buildOpenProjectRoute());
+    await page.getByRole("button", { name: "Projects", exact: true }).click();
+    await openProjectSettings(page, editableProject.name);
+    const row = page.getByTestId("project-isolation-row");
+    await expect(row).toContainText("Remember last");
+    await row.getByRole("button").click();
+    await page.getByRole("menuitem", { name: "Local", exact: true }).click();
+    await expect(row).toContainText("Local");
+    await page.reload();
+    await expect(row).toContainText("Local");
+    await row.getByRole("button").click();
+    await page.getByRole("menuitem", { name: "Remember last", exact: true }).click();
+    await expect(row).toContainText("Remember last");
+    await expect(page.getByTestId("save-button")).toBeEnabled();
+  });
 
   test("project Back returns through Projects and Settings without reopening the project", async ({
     page,

@@ -122,6 +122,100 @@ Default E2E to the [background headless Playwright workflow](docs/testing.md#bac
 
 For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. For the [shared profile shortcut journey](docs/features/shared-profile-shortcuts-plan.md#e2e-journey), run `npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/shared-profile-shortcuts.spec.ts --project=browser`. The existing app Playwright harness owns Metro, disposable daemon homes and ports, throwaway workspaces, and cleanup; the spec adds a second isolated host with distinct profiles and seeds legacy browser storage. The spec reuses the desktop bridge fixture to expose Shortcuts settings in Chromium; this covers the desktop renderer, not a real Electron window. Its fake providers cover configuration routing, not live provider behavior. Keep evidence in ignored worktree `artifacts/`; use the [development shell](docs/development.md#nix-and-direnv) for Chromium runtime dependencies. Never touch the main daemon on 6767. See [docs/testing.md](docs/testing.md#running-tests-locally) for targeted execution and [docs/qa.md](docs/qa.md#evidence) for evidence requirements.
 
+## Shared E2E resource estimates
+
+Run E2E when a feature is first added, including required repairs and reruns. Future
+pushes and deployments of that feature do not require fresh E2E runs. Existing unit
+tests still run. Every E2E execution requires actual qex admission before setup,
+with the reservation held through teardown; see `~/.config/qex/AGENT.md`.
+
+`browser-one-worker` covers one targeted app Playwright worker, cold Metro,
+Chromium, disposable daemon homes and ports, a secondary test host when needed,
+and fixture providers through cleanup. Use the documented background headless
+Playwright workflow in `docs/testing.md`.
+
+```qex-e2e browser-one-worker
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "90m"
+}
+```
+
+`electron-one-worker` covers the existing real-Electron browser-tabs runner with
+one Electron instance, its separate display, Metro, isolated daemon, fixture
+providers, prerequisite setup, and cleanup. Keep one journey active at a time.
+
+```qex-e2e electron-one-worker
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "90m"
+}
+```
+
+`daemon-serial` covers targeted daemon/MCP/SDK integration files with one Vitest
+worker and no parallel files, temporary repositories and managed worktrees,
+fixture providers, and cleanup. It may include serial companion unit checks.
+
+```qex-e2e daemon-serial
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "90m"
+}
+```
+
+`android-isolated` covers the reduced-memory Android recipe below when one job
+runs its phases serially: provisioning, x86_64 debug compilation, then the owned
+emulator journey. Its claim is the largest phase estimate, not a measured peak.
+Use a 3 GiB Gradle heap, 768 MiB metaspace, in-process Kotlin, one Gradle/Ninja
+worker, and a 2 GiB, two-vCPU emulator. All build processes must exit before
+starting the emulator, Metro, isolated daemon/ADB, and automation. Preserve
+whole-stack measurement, hard ceilings, and teardown. This declaration does not
+cover multi-ABI builds, larger heaps/guests, or overlapping build/runtime stacks;
+those require their own estimates. Tool installation, SDK licenses, and device
+ownership gates still apply. Prefer the phase-specific declarations below when
+the runner submits each phase separately.
+
+```qex-e2e android-isolated
+{
+  "resources": { "cpu": 4, "mem": "16GiB", "claims": { "heavy-io": 1 } },
+  "timeout": "4h"
+}
+```
+
+The project-isolation Android recipe in ignored
+`artifacts/project-isolation/android-memory/` uses three smaller executing stacks.
+Provisioning runs serialized SDK/private snapshot preparation only. The build is
+x86_64 debug with a 3 GiB Gradle heap, 768 MiB metaspace, in-process Kotlin, one
+Gradle worker and one Ninja job, with no emulator or runtime stack. The emulator
+phase uses a 2 GiB, two-vCPU owned AVD and one Metro worker after all build
+processes exit. These claims are conservative calibration estimates for that
+changed workload; record whole-stack cgroup peaks and OOM events under a hard
+ceiling before treating them as measured capacity. Keep source/APK manifests,
+assert the effective configuration, and retain each reservation through teardown.
+If the bounded configuration cannot fit, preserve that failure and reassess;
+do not increase heaps or reduce claims silently.
+
+```qex-e2e android-project-isolation-provision
+{
+  "resources": { "cpu": 4, "mem": "8GiB", "claims": { "heavy-io": 1 } },
+  "timeout": "90m"
+}
+```
+
+```qex-e2e android-project-isolation-serial-build
+{
+  "resources": { "cpu": 4, "mem": "16GiB", "claims": { "heavy-io": 1 } },
+  "timeout": "3h"
+}
+```
+
+```qex-e2e android-project-isolation-emulator-only
+{
+  "resources": { "cpu": 4, "mem": "12GiB" },
+  "timeout": "90m"
+}
+```
+
 ## Release branches
 
 Merge normal PRs into `main`, including while a beta soaks or a release is being finalized. Each

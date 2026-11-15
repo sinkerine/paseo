@@ -24,6 +24,8 @@ function makeHost(overrides: Partial<ProjectSummary["hosts"][number]>) {
     projectId: "project-1",
     projectName: "Project",
     projectCustomName: null,
+    projectKind: "non_git" as const,
+    defaultIsolation: null,
     serverName: "Host 1",
     isOnline: true,
     repoRoot: "/tmp/project",

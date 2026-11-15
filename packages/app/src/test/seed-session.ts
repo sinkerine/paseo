@@ -14,6 +14,7 @@ function projectFromWorkspace(workspace: WorkspaceDescriptor): ProjectDescriptor
     projectKey: workspace.projectId,
     projectDisplayName: workspace.projectDisplayName,
     projectCustomName: workspace.projectCustomName ?? null,
+    projectDefaultIsolation: null,
     projectRootPath: workspace.projectRootPath,
     projectKind: workspace.projectKind,
   };

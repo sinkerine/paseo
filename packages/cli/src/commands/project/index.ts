@@ -1,3 +1,4 @@
+import { runIsolationCommand } from "./isolation.js";
 import { Command } from "commander";
 import { withOutput } from "../../output/index.js";
 import { addJsonAndDaemonHostOptions } from "../../utils/command-options.js";
@@ -30,6 +31,16 @@ export function createProjectCommand(): Command {
       .option("--reset", "Clear the custom name and use the directory name")
       .allowExcessArguments(false),
   ).action(withOutput(runRenameCommand));
+
+  addJsonAndDaemonHostOptions(
+    project
+      .command("isolation")
+      .description("Read, set, or reset the project workspace isolation default")
+      .argument("<project-id>", "Project id")
+      .argument("[isolation]", "local or worktree")
+      .option("--reset", "Remember the caller's last isolation choice")
+      .allowExcessArguments(false),
+  ).action(withOutput(runIsolationCommand));
 
   addJsonAndDaemonHostOptions(
     project

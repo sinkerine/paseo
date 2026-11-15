@@ -38,7 +38,12 @@ function workspace(overrides: Partial<SidebarWorkspaceEntry> = {}): SidebarWorks
 }
 
 type ProjectOverrides = Omit<Partial<SidebarProjectEntry>, "hosts"> & {
-  hosts?: Array<Omit<SidebarProjectEntry["hosts"][number], "projectId"> & { projectId?: string }>;
+  hosts?: Array<
+    Omit<SidebarProjectEntry["hosts"][number], "projectId" | "defaultIsolation"> & {
+      projectId?: string;
+      defaultIsolation?: SidebarProjectEntry["hosts"][number]["defaultIsolation"];
+    }
+  >;
 };
 
 function project(overrides: ProjectOverrides = {}): SidebarProjectEntry {
@@ -49,9 +54,13 @@ function project(overrides: ProjectOverrides = {}): SidebarProjectEntry {
         serverId: "srv",
         iconWorkingDir: "/repo",
         worktreeSupport: projectKind === "git" ? "supported" : "unsupported",
+        defaultIsolation: null,
       },
     ],
-    (host) => Object.assign({}, host, { projectId: host.projectId ?? `project-${host.serverId}` }),
+    (host) =>
+      Object.assign({ defaultIsolation: null }, host, {
+        projectId: host.projectId ?? `project-${host.serverId}`,
+      }),
   );
   return {
     viewKey: "project-1",
@@ -183,6 +192,7 @@ describe("buildSidebarProjectRowModel", () => {
             serverId: "host-a",
             iconWorkingDir: "/repo/a",
             worktreeSupport: "unsupported" as const,
+            defaultIsolation: null,
           },
           { serverId: "host-b", iconWorkingDir: "/repo/b", worktreeSupport: "supported" as const },
         ],
@@ -207,11 +217,13 @@ describe("buildSidebarProjectRowModel", () => {
             serverId: "host-a",
             iconWorkingDir: "/repo/a",
             worktreeSupport: "unsupported" as const,
+            defaultIsolation: null,
           },
           {
             serverId: "host-b",
             iconWorkingDir: "/repo/b",
             worktreeSupport: "unsupported" as const,
+            defaultIsolation: null,
           },
         ],
       }),
@@ -275,6 +287,7 @@ describe("buildSidebarProjectRowModel", () => {
             serverId: "host-b",
             iconWorkingDir: "/repo/b",
             worktreeSupport: "supported" as const,
+            defaultIsolation: null,
             iconRevision: "effective-revision",
           },
         ],
@@ -298,6 +311,7 @@ describe("buildSidebarProjectRowModel", () => {
           serverId: "remote",
           iconWorkingDir: "/remote/repo",
           worktreeSupport: "supported" as const,
+          defaultIsolation: null,
         },
         { serverId: "local", iconWorkingDir: "/local/repo", worktreeSupport: "supported" as const },
       ],

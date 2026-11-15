@@ -3170,6 +3170,14 @@ export const es: TranslationResources = {
       },
     },
     project: {
+      workspaces: {
+        title: "Espacios de trabajo",
+        info: "Aislamiento predeterminado para los nuevos espacios de trabajo en este host",
+        defaultIsolation: "Aislamiento del nuevo espacio de trabajo",
+        defaultIsolationHint: "Recordar último utiliza tu última elección de aislamiento",
+        savedToast: "Aislamiento del espacio de trabajo actualizado",
+        options: { rememberLast: "Recordar último" },
+      },
       noEditableTarget: "Este proyecto no se puede editar en este host.",
       backToProjects: "Volver a proyectos",
       edit: {

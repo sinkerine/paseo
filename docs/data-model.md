@@ -429,18 +429,19 @@ One file per schedule. ID is 8 hex characters.
 
 Array of project records.
 
-| Field                | Type                        | Description                                                                                                                                |
-| -------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `projectId`          | `string`                    | Host-local primary key; new records use opaque `prj_<16 hex>` IDs                                                                          |
-| `projectKey`         | `string \| null`            | Persisted opaque cross-host grouping key; reconciliation backfills absent values                                                           |
-| `rootPath`           | `string`                    | Exact lexically normalized selected root; never realpathed                                                                                 |
-| `kind`               | `"git" \| "non_git"`        | Mutable Git observation about `rootPath`, never a membership key                                                                           |
-| `displayName`        | `string`                    | Selected-root basename, stable across remote and Git changes                                                                               |
-| `customName`         | `string \| null`            | User-set override layered over `displayName`. Null means "use the derived name".                                                           |
-| `customIconRevision` | `string \| null`            | Identifies the host-local custom icon stored under `projects/icons/`. Null means the icon is discovered by scanning the project directory. |
-| `createdAt`          | `string` (ISO 8601)         |                                                                                                                                            |
-| `updatedAt`          | `string` (ISO 8601)         |                                                                                                                                            |
-| `archivedAt`         | `string \| null` (ISO 8601) | Soft-delete timestamp; required nullable                                                                                                   |
+| Field                | Type                            | Description                                                                                                                                |
+| -------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `projectId`          | `string`                        | Host-local primary key; new records use opaque `prj_<16 hex>` IDs                                                                          |
+| `projectKey`         | `string \| null`                | Persisted opaque cross-host grouping key; reconciliation backfills absent values                                                           |
+| `rootPath`           | `string`                        | Exact lexically normalized selected root; never realpathed                                                                                 |
+| `kind`               | `"git" \| "non_git"`            | Mutable Git observation about `rootPath`, never a membership key                                                                           |
+| `displayName`        | `string`                        | Selected-root basename, stable across remote and Git changes                                                                               |
+| `customName`         | `string \| null`                | User-set override layered over `displayName`. Null means "use the derived name".                                                           |
+| `defaultIsolation`   | `"local" \| "worktree" \| null` | Host-local creation default; null defers to the caller/client preference. Git reconciliation preserves this value across `.git` changes.   |
+| `customIconRevision` | `string \| null`                | Identifies the host-local custom icon stored under `projects/icons/`. Null means the icon is discovered by scanning the project directory. |
+| `createdAt`          | `string` (ISO 8601)             |                                                                                                                                            |
+| `updatedAt`          | `string` (ISO 8601)             |                                                                                                                                            |
+| `archivedAt`         | `string \| null` (ISO 8601)     | Soft-delete timestamp; required nullable                                                                                                   |
 
 Uploading a file and pasting a website or image URL are two ways of _acquiring_ the same custom
 icon. The client fetches URL imports and sends their bytes through the upload RPC. The daemon never

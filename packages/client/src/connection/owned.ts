@@ -1,4 +1,4 @@
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { NormalizedSessionOutboundMessage as SessionOutboundMessage } from "../workspace-descriptors.js";
 
 export type SubscriptionSnapshot<T> = T & { subscriptionId: string };
 

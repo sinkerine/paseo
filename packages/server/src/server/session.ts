@@ -3254,6 +3254,8 @@ export class Session {
     switch (msg.type) {
       case "fetch_workspaces_request":
         return this.handleFetchWorkspacesRequest(msg);
+      case "project.isolation.set.request":
+        return this.handleProjectIsolationSetRequest(msg);
       case "project.list.request":
         return this.handleProjectListRequest(msg);
       case "project.suggestions.request":
@@ -3843,6 +3845,53 @@ export class Session {
     }
   }
 
+  private async handleProjectIsolationSetRequest(
+    request: Extract<SessionInboundMessage, { type: "project.isolation.set.request" }>,
+  ): Promise<void> {
+    const { projectId, requestId, defaultIsolation } = request;
+    try {
+      let changed = false;
+      const updated = await this.projectRegistry.update(projectId, (existing) => {
+        if (existing.archivedAt !== null) throw new Error("Project not found");
+        if (defaultIsolation === "worktree" && existing.kind !== "git") {
+          throw new Error("Worktree isolation requires a Git project");
+        }
+        if (existing.defaultIsolation === defaultIsolation) return existing;
+        changed = true;
+        return { ...existing, defaultIsolation, updatedAt: new Date().toISOString() };
+      });
+      if (!updated) throw new Error("Project not found");
+      this.emit({
+        type: "project.isolation.set.response",
+        payload: {
+          requestId,
+          projectId,
+          accepted: true,
+          defaultIsolation: updated.defaultIsolation,
+          error: null,
+        },
+      });
+      if (!changed) return;
+      await this.emitProjectUpdate({ kind: "upsert", project: updated });
+      const workspaces = await this.workspaceRegistry.listActive();
+      const ids = workspaces
+        .filter((workspace) => workspace.projectId === projectId)
+        .map((workspace) => workspace.workspaceId);
+      if (ids.length > 0) await this.emitWorkspaceUpdatesForWorkspaceIds(ids);
+    } catch (error) {
+      this.emit({
+        type: "project.isolation.set.response",
+        payload: {
+          requestId,
+          projectId,
+          accepted: false,
+          defaultIsolation: null,
+          error: getErrorMessage(error),
+        },
+      });
+    }
+  }
+
   private async handleProjectRenameRequest(
     projectId: string,
     customName: string | null,
@@ -3872,12 +3921,12 @@ export class Session {
       const trimmed = customName?.trim() ?? "";
       const nextCustomName = trimmed.length === 0 ? null : trimmed;
 
-      const updated = {
-        ...existing,
+      const updated = await this.projectRegistry.update(projectId, (current) => ({
+        ...current,
         customName: nextCustomName,
         updatedAt: new Date().toISOString(),
-      };
-      await this.projectRegistry.upsert(updated);
+      }));
+      if (!updated) throw new Error("Project not found");
 
       this.emit({
         type: "project.rename.response",
@@ -5946,11 +5995,7 @@ export class Session {
     const resolvedProjectRecord =
       projectRecord ?? (await this.projectRegistry.get(workspace.projectId));
 
-    let diffStat: { additions: number; deletions: number } | null = null;
-    const snapshot = this.workspaceRuntimeStore.get(workspace.cwd);
-    if (snapshot?.git.diffStat) {
-      diffStat = snapshot.git.diffStat;
-    }
+    const diffStat = this.workspaceRuntimeStore.get(workspace.cwd)?.git.diffStat ?? null;
 
     const worktreeSlug =
       workspace.isPaseoOwnedWorktree && workspace.worktreeRoot
@@ -5964,12 +6009,13 @@ export class Session {
         ? resolveProjectDisplayName(resolvedProjectRecord)
         : workspace.projectId,
       projectCustomName: resolvedProjectRecord?.customName ?? null,
+      projectDefaultIsolation: resolvedProjectRecord?.defaultIsolation ?? null,
       projectCustomIconRevision: resolvedProjectRecord?.customIconRevision ?? null,
       projectRootPath: resolvedProjectRecord?.rootPath ?? workspace.cwd,
       workspaceDirectory: workspace.cwd,
       setupStatus: this.workspaceSetupObservation.status(workspace),
       worktreeSlug,
-      projectKind: (resolvedProjectRecord?.kind ?? "directory") === "git" ? "git" : "non_git",
+      projectKind: resolvedProjectRecord?.kind === "git" ? "git" : "non_git",
       workspaceKind: workspace.kind,
       name: resolveWorkspaceDisplayName(workspace),
       title: workspace.title,
@@ -6057,6 +6103,7 @@ export class Session {
         ? resolveProjectDisplayName(projectRecord)
         : result.workspace.projectId,
       projectCustomName: projectRecord?.customName ?? null,
+      projectDefaultIsolation: projectRecord?.defaultIsolation ?? null,
       projectCustomIconRevision: projectRecord?.customIconRevision ?? null,
       projectRootPath: projectRecord?.rootPath ?? result.repoRoot,
       workspaceDirectory: result.workspace.cwd,
@@ -6247,6 +6294,7 @@ export class Session {
       ...(project.projectKey ? { projectKey: project.projectKey } : {}),
       projectDisplayName: resolveProjectDisplayName(project),
       projectCustomName: project.customName ?? null,
+      projectDefaultIsolation: project.defaultIsolation ?? null,
       projectCustomIconRevision: project.customIconRevision ?? null,
       projectIconRevision: icon.revision,
       projectRootPath: project.rootPath,

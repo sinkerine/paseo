@@ -61,6 +61,82 @@ describe("resolveWorkspaceName", () => {
 });
 
 describe("workspace registries", () => {
+  test("reloads project defaults and serializes rename and isolation without field loss", async () => {
+    const project = createPersistedProjectRecord({
+      projectId: "isolation",
+      rootPath: "/tmp/isolation",
+      kind: "git",
+      displayName: "isolation",
+      createdAt: "2026-03-01",
+      updatedAt: "2026-03-01",
+    });
+    expect(project.defaultIsolation).toBe(null);
+    await projectRegistry.upsert(project);
+    await Promise.all([
+      projectRegistry.update(project.projectId, (current) => ({ ...current, customName: "Name" })),
+      projectRegistry.update(project.projectId, (current) => ({
+        ...current,
+        defaultIsolation: "worktree",
+      })),
+    ]);
+    expect(await projectRegistry.get(project.projectId)).toMatchObject({
+      customName: "Name",
+      defaultIsolation: "worktree",
+    });
+    const reloaded = new FileBackedProjectRegistry(
+      path.join(tmpDir, "projects", "projects.json"),
+      logger,
+    );
+    await reloaded.initialize();
+    expect(await reloaded.get(project.projectId)).toMatchObject({ defaultIsolation: "worktree" });
+  });
+
+  test("legacy project records normalize isolation and unchanged updates do not write", async () => {
+    const file = path.join(tmpDir, "projects", "projects.json");
+    await writeJsonFileAtomic(file, [
+      {
+        projectId: "legacy",
+        rootPath: "/tmp/legacy",
+        kind: "git",
+        displayName: "Legacy",
+        createdAt: "2026-03-01",
+        updatedAt: "2026-03-01",
+        archivedAt: null,
+      },
+    ]);
+    let writes = 0;
+    const registry = new FileBackedProjectRegistry(file, logger, {
+      writeRecords: async (target, records) => {
+        writes += 1;
+        await writeJsonFileAtomic(target, records);
+      },
+    });
+    await registry.initialize();
+    expect(await registry.get("legacy")).toMatchObject({ defaultIsolation: null });
+    const notifications: string[] = [];
+    registry.subscribeToMutations((event) => {
+      notifications.push(event.projectId);
+    });
+    for (const defaultIsolation of [null, "worktree"] as const) {
+      await registry.update("legacy", (current) =>
+        current.defaultIsolation === defaultIsolation ? current : { ...current, defaultIsolation },
+      );
+      notifications.length = 0;
+      const beforeWrites = writes;
+      await registry.update("legacy", (current) => current);
+      expect(writes).toBe(beforeWrites);
+      expect(notifications).toEqual([]);
+    }
+    writes = 0;
+    await Promise.all([
+      registry.update("legacy", (current) => ({ ...current, defaultIsolation: "worktree" })),
+      registry.update("legacy", (current) => ({ ...current, defaultIsolation: "local" })),
+    ]);
+    expect(writes).toBe(2);
+    expect(notifications).toEqual(["legacy", "legacy"]);
+    expect(await registry.get("legacy")).toMatchObject({ defaultIsolation: "local" });
+  });
+
   let tmpDir: string;
   let projectRegistry: FileBackedProjectRegistry;
   let workspaceRegistry: FileBackedWorkspaceRegistry;

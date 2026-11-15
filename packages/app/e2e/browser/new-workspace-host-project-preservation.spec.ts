@@ -1,3 +1,5 @@
+import { selectSettingsHost } from "../support/helpers/settings";
+import { openProjectSettings } from "../support/helpers/project-settings";
 import { expect, test as base } from "../support/fixtures";
 import { openProjectDirectoryWithHosts } from "../support/helpers/project-grouping";
 import { projectPlacementViewKey } from "../support/helpers/project-view-key";
@@ -7,6 +9,8 @@ import {
 } from "../support/helpers/isolated-host-daemon";
 import {
   expectNewWorkspaceProjectSelected,
+  expectWorkspaceIsolationSelected,
+  selectWorkspaceIsolation,
   openGlobalNewWorkspaceComposer,
   selectNewWorkspaceHost,
   selectNewWorkspaceProject,
@@ -31,6 +35,8 @@ interface CreatedProject {
 interface CrossHostProjectScenario {
   contextWorkspaceId: string;
   primarySharedWorkspaceId: string;
+  primaryProjectId: string;
+  secondaryProjectId: string;
   selectedProjectViewKey: string;
   sharedProjectKey: string;
   secondaryHost: {
@@ -149,9 +155,13 @@ const test = base.extend<{ crossHostProject: CrossHostProjectScenario }>({
         throw new Error("Expected the Paseo clones to have the same equivalence key");
       }
 
+      await primaryClient.setProjectIsolation(primarySharedProject.projectId, "local");
+      await secondaryClient.setProjectIsolation(secondarySharedProject.projectId, "worktree");
       await provide({
         contextWorkspaceId: contextProject.workspaceId,
         primarySharedWorkspaceId: primarySharedProject.workspaceId,
+        primaryProjectId: primarySharedProject.projectId,
+        secondaryProjectId: secondarySharedProject.projectId,
         selectedProjectViewKey: projectPlacementViewKey(
           getServerId(),
           primarySharedProject.projectId,
@@ -185,6 +195,55 @@ const test = base.extend<{ crossHostProject: CrossHostProjectScenario }>({
 test.describe("New workspace host project preservation", () => {
   test.describe.configure({ timeout: 180_000 });
 
+  test("project settings save only the selected host placement", async ({
+    page,
+    crossHostProject,
+  }) => {
+    await openProjectDirectoryWithHosts(page, {
+      hosts: [crossHostProject.secondaryHost],
+      primaryLabel: PRIMARY_HOST_LABEL,
+    });
+    const primary = await connectSeedClient();
+    const secondary = await connectSeedClient({ port: crossHostProject.secondaryHost.port });
+    try {
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await selectSettingsHost(page, getServerId());
+      await page
+        .getByRole("navigation", { name: "Settings" })
+        .getByRole("button", { name: "Projects", exact: true })
+        .click();
+      await openProjectSettings(page, SHARED_PROJECT_NAME);
+      const row = page.getByTestId("project-isolation-row");
+      await expect(row).toContainText("Local");
+      await row.getByRole("button").click();
+      await page.getByRole("menuitem", { name: "Remember last", exact: true }).click();
+      await expect(row).toContainText("Remember last");
+      expect(
+        (await secondary.listProjects()).projects.find(
+          (project) => project.projectId === crossHostProject.secondaryProjectId,
+        )?.projectDefaultIsolation,
+      ).toBe("worktree");
+      await selectSettingsHost(page, crossHostProject.secondaryHost.serverId);
+      await page
+        .getByRole("navigation", { name: "Settings" })
+        .getByRole("button", { name: "Projects", exact: true })
+        .click();
+      await openProjectSettings(page, SHARED_PROJECT_NAME);
+      await expect(row).toContainText("New worktree");
+      await row.getByRole("button").click();
+      await page.getByRole("menuitem", { name: "Local", exact: true }).click();
+      await expect(row).toContainText("Local");
+      expect(
+        (await primary.listProjects()).projects.find(
+          (project) => project.projectId === crossHostProject.primaryProjectId,
+        )?.projectDefaultIsolation,
+      ).toBe(null);
+    } finally {
+      await primary.close();
+      await secondary.close();
+    }
+  });
+
   test("keeps the equivalent project selected when one host has another clone", async ({
     page,
     crossHostProject,
@@ -195,7 +254,12 @@ test.describe("New workspace host project preservation", () => {
       projectViewKey: crossHostProject.selectedProjectViewKey,
       projectDisplayName: SHARED_PROJECT_NAME,
     });
+    await expectWorkspaceIsolationSelected(page, "local");
+    await selectWorkspaceIsolation(page, "worktree");
     await selectNewWorkspaceHost(page, SECONDARY_HOST_LABEL);
+    await expectWorkspaceIsolationSelected(page, "worktree");
+    await selectNewWorkspaceHost(page, PRIMARY_HOST_LABEL);
+    await expectWorkspaceIsolationSelected(page, "local");
 
     await expectNewWorkspaceProjectSelected(page, SHARED_PROJECT_NAME);
   });

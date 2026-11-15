@@ -1,3 +1,4 @@
+import { normalizeWorkspaceDescriptors } from "@getpaseo/client/internal/daemon-client";
 import type { OwnedSubscription, SubscriptionObserver } from "@getpaseo/client";
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
 
@@ -13,14 +14,14 @@ export function subscriptionFixture<T>(
   let released = false;
   const stop = listen((message) => {
     if (!current) updates.push(message);
-    else for (const observer of observers) observer.update(message);
+    else for (const observer of observers) observer.update(normalizeWorkspaceDescriptors(message));
   });
   const ready = snapshot.then((value) => {
     current = { ...value, subscriptionId };
     if (!released) {
       for (const observer of observers) {
         observer.snapshot(current);
-        for (const message of updates) observer.update(message);
+        for (const message of updates) observer.update(normalizeWorkspaceDescriptors(message));
       }
     }
     return current;

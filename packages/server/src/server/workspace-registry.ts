@@ -43,6 +43,11 @@ const PersistedProjectRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  defaultIsolation: z
+    .enum(["local", "worktree"])
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
@@ -249,7 +254,10 @@ class FileBackedRegistry<TRecord extends RegistryRecord> {
     return this.mutateCache((records) => {
       const existing = records.get(id);
       if (!existing) return null;
-      const next = this.schema.parse(updater(existing));
+      const updated = updater(existing);
+      // Zod clones records; preserve identity so unchanged updates do not write.
+      if (updated === existing) return existing;
+      const next = this.schema.parse(updated);
       records.set(id, next);
       return next;
     });
@@ -484,9 +492,14 @@ export class FileBackedProjectRegistry
     projectId: string,
     updater: (record: PersistedProjectRecord) => PersistedProjectRecord,
   ): Promise<PersistedProjectRecord | null> {
-    const project = await super.update(projectId, updater);
+    let changed = false;
+    const project = await super.update(projectId, (existing) => {
+      const updated = updater(existing);
+      changed = updated !== existing;
+      return updated;
+    });
     if (!project) return null;
-    await this.notifyMutation({ kind: "upsert", projectId, project });
+    if (changed) await this.notifyMutation({ kind: "upsert", projectId, project });
     return project;
   }
 
@@ -662,6 +675,7 @@ export function createPersistedProjectRecord(input: {
   customName?: string | null;
   projectKey?: string | null;
   customIconRevision?: string | null;
+  defaultIsolation?: "local" | "worktree" | null;
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;

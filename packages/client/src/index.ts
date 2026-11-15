@@ -1,3 +1,10 @@
+import type {
+  NormalizedWorkspaceDescriptor as WorkspaceDescriptorPayload,
+  NormalizedCreationSnapshot as CreationSnapshot,
+  NormalizedProjectPlacement as ProjectPlacementPayload,
+  NormalizedSessionOutboundMessage as SessionOutboundMessage,
+} from "./workspace-descriptors.js";
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import { workspaceLabelKey } from "@getpaseo/protocol/workspace-labels";
 export type { TerminalReplayEvent, TerminalStreamEvent } from "./terminal-stream-router.js";
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
@@ -12,7 +19,6 @@ import type { DaemonClientConfig } from "./daemon-client.js";
 import type { AgentPermissionResponse } from "@getpaseo/protocol/agent-types";
 import type {
   AgentSnapshotPayload,
-  CreationSnapshot,
   CreateAgentRequestMessage,
   FetchWorkspacesRequestMessage,
   FetchWorkspacesResponseMessage,
@@ -29,11 +35,8 @@ import type {
   MutableDaemonConfigPatch,
   ProviderDiagnosticResponseMessage,
   ProviderUsageListResponseMessage,
-  ProjectPlacementPayload,
   WorkspaceProjectDescriptorPayload,
   RefreshProvidersSnapshotResponseMessage,
-  SessionOutboundMessage,
-  WorkspaceDescriptorPayload,
   WorkspaceCreateRequest,
 } from "@getpaseo/protocol/messages";
 import { DaemonClient, type CreateAgentRequestOptions } from "./daemon-client.js";
@@ -208,6 +211,11 @@ export interface PaseoWorkspaceHandle {
 }
 
 export interface PaseoProjectActions {
+  setIsolation(
+    projectId: string,
+    defaultIsolation: ProjectIsolation | null,
+    options?: { requestId?: string },
+  ): Promise<{ defaultIsolation: ProjectIsolation | null }>;
   list(options?: PaseoProjectListOptions): Promise<PaseoProjectListResult>;
   subscribe(handler: PaseoProjectUpdateHandler): () => void;
 }
@@ -772,6 +780,8 @@ export function createPaseoApi(
     observeEvents,
     terminals,
     projects: {
+      setIsolation: (projectId, defaultIsolation, options) =>
+        daemonClient.setProjectIsolation(projectId, defaultIsolation, options?.requestId),
       list: (options) => daemonClient.listProjects(options),
       subscribe: (handler) => {
         return subscribeEvent("project.update", (message) => {

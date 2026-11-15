@@ -6,7 +6,7 @@ import { getRealpathAwareRelativePath, normalizePathForIdentity } from "../utils
 export function deriveProjectKey(input: {
   rootPath: string;
   remoteUrl: string | null;
-  worktreeRoot: string | null;
+  worktreeRoot?: string | null;
   mainRepoRoot: string | null;
   serverId?: string;
 }): string {
@@ -35,7 +35,7 @@ export function deriveProjectKey(input: {
 export function deriveProjectGroupingDisplayName(input: {
   rootPath: string;
   remoteUrl: string | null;
-  worktreeRoot: string | null;
+  worktreeRoot?: string | null;
 }): string {
   const selectedPath = input.worktreeRoot
     ? getRealpathAwareRelativePath(input.worktreeRoot, input.rootPath)

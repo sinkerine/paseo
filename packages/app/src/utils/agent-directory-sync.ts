@@ -2,7 +2,7 @@ import type { FetchAgentsEntry } from "@getpaseo/client/internal/daemon-client";
 import type { Agent } from "@/stores/session-store";
 import { derivePendingPermissionKey, normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { resolveProjectPlacement } from "@/utils/project-placement";
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { NormalizedSessionOutboundMessage as SessionOutboundMessage } from "@getpaseo/client/internal/daemon-client";
 
 type AgentDirectoryFetchEntry = FetchAgentsEntry;
 export type AgentDirectoryDelta = Extract<

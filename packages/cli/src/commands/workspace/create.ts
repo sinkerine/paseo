@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import type { WorkspaceProjectDescriptorPayload } from "@getpaseo/protocol/messages";
 import type { Command } from "commander";
 import { connectToDaemon, getDaemonHost } from "../../utils/client.js";
 import { resolveCallerAgentId } from "../../utils/caller-agent.js";
@@ -121,15 +123,33 @@ function buildWorktreeWorkspaceSource(options: WorkspaceCreateOptions, path: str
   }
 }
 
-export function buildWorkspaceSource(options: WorkspaceCreateOptions) {
+export function buildWorkspaceSource(options: WorkspaceCreateOptions, projectRootPath?: string) {
   if (options.isolation === "local") {
-    return buildLocalWorkspaceSource(options, options.path ?? process.cwd());
+    if (options.project && options.path === undefined && projectRootPath === undefined) {
+      throw new Error("Project root path is required for project-only local creation");
+    }
+    return buildLocalWorkspaceSource(options, options.path ?? projectRootPath ?? process.cwd());
   }
   if (options.isolation === "worktree") {
     const sourcePath = options.path ?? (options.project ? undefined : process.cwd());
     return buildWorktreeWorkspaceSource(options, sourcePath);
   }
   throw new Error(`Unsupported workspace isolation: ${String(options.isolation)}`);
+}
+
+export function resolveCliWorkspaceIsolation(input: {
+  explicitIsolation: string | undefined;
+  projectId: string | undefined;
+  resolvedPath: string;
+  projects: readonly WorkspaceProjectDescriptorPayload[];
+}): string {
+  if (input.explicitIsolation !== undefined) return input.explicitIsolation;
+  const project = input.projects.find((entry) =>
+    input.projectId
+      ? entry.projectId === input.projectId
+      : resolve(entry.projectRootPath) === resolve(input.resolvedPath),
+  );
+  return project?.projectKind === "git" ? (project.projectDefaultIsolation ?? "local") : "local";
 }
 
 export async function runCreateCommand(
@@ -146,9 +166,23 @@ export async function runCreateCommand(
   });
 
   try {
+    const needsProjects =
+      options.isolation === undefined ||
+      (options.isolation === "local" &&
+        options.project !== undefined &&
+        options.path === undefined);
+    const projects = needsProjects ? (await client.listProjects()).projects : [];
+    const project = projects.find((entry) => entry.projectId === options.project);
+    if (options.project && needsProjects && !project) throw new Error("Project not found");
+    const isolation = resolveCliWorkspaceIsolation({
+      explicitIsolation: options.isolation,
+      projectId: options.project,
+      resolvedPath: options.path ?? process.cwd(),
+      projects,
+    });
     const callerAgentId = await resolveCallerAgentId(client);
     const payload = await client.createWorkspace({
-      source: buildWorkspaceSource(options),
+      source: buildWorkspaceSource({ ...options, isolation }, project?.projectRootPath),
       ...(options.title ? { title: options.title } : {}),
       ...(options.background !== undefined ? { background: options.background } : {}),
       ...(callerAgentId ? { callerAgentId } : {}),

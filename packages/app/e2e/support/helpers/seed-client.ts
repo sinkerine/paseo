@@ -6,6 +6,7 @@ import { withProjectOwnership } from "./project-ownership";
 import { createTempDirectory, createTempGitRepo } from "./workspace";
 
 export interface SeedWorkspaceDescriptor {
+  workspaceKind: "directory" | "local_checkout" | "checkout" | "worktree";
   id: string;
   name: string;
   projectId: string;
@@ -17,6 +18,7 @@ export interface SeedWorkspaceDescriptor {
 }
 
 interface SeedProjectDescriptor {
+  projectDefaultIsolation?: "local" | "worktree" | null;
   projectId: string;
   projectKey?: string;
 }
@@ -44,6 +46,10 @@ export interface SeedDaemonClient {
     error: string | null;
   }>;
   removeProject(projectId: string): Promise<{ removedWorkspaceIds: string[] }>;
+  setProjectIsolation(
+    projectId: string,
+    defaultIsolation: "local" | "worktree" | null,
+  ): Promise<{ defaultIsolation: "local" | "worktree" | null }>;
   renameProject(projectId: string, customName: string | null): Promise<void>;
   fetchWorkspaces(options?: { filter?: { projectId?: string } }): Promise<{
     entries: SeedWorkspaceDescriptor[];

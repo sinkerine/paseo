@@ -996,6 +996,36 @@ describe("ReplicaCache", () => {
     });
   });
 
+  it.each([null, "local", "worktree"] as const)(
+    "hydrates isolation %s without invalidating directory cursors",
+    async (isolation) => {
+      const storage = new MemoryStorage();
+      const writer = createCache(storage);
+      const baseline = directory({
+        projects: { generation: "g", afterSeq: 4 },
+        workspaces: { generation: "g", afterSeq: 8 },
+      });
+      baseline.projects.get("project-1")!.projectDefaultIsolation = isolation;
+      baseline.workspaces.get("workspace-1")!.projectDefaultIsolation = isolation;
+      commitDirectory(writer, SERVER_ID, baseline);
+      await writer.flush();
+      const restored = await createCache(storage).readDirectory(SERVER_ID);
+      expect(restored.projects.get("project-1")?.projectDefaultIsolation).toBe(isolation);
+      expect(restored.workspaces.get("workspace-1")?.projectDefaultIsolation).toBe(isolation);
+      expect(restored.checkpoint).toEqual(baseline.checkpoint);
+      for (const [key, row] of storage.rows) {
+        if (row.kind !== "project" && row.kind !== "workspace") continue;
+        const payload: Record<string, unknown> = JSON.parse(row.payload);
+        delete payload.projectDefaultIsolation;
+        storage.rows.set(key, { ...row, payload: JSON.stringify(payload) });
+      }
+      const legacy = await createCache(storage).readDirectory(SERVER_ID);
+      expect(legacy.projects.get("project-1")?.projectDefaultIsolation).toBe(null);
+      expect(legacy.workspaces.get("workspace-1")?.projectDefaultIsolation).toBe(null);
+      expect(legacy.checkpoint).toEqual(baseline.checkpoint);
+    },
+  );
+
   it("commits directory rows and their checkpoint in one storage transaction", async () => {
     const storage = new MemoryStorage();
     const cache = createCache(storage);
@@ -1228,3 +1258,36 @@ it.each([undefined, false, true])(
     );
   },
 );
+
+it("normalizes cached future mergeability without losing the workspace checkpoint", async () => {
+  const storage = new MemoryStorage();
+  const writer = createCache(storage);
+  const baseline = directory({ workspaces: { generation: "g", afterSeq: 8 } });
+  commitDirectory(writer, SERVER_ID, baseline);
+  await writer.flush();
+  const key = `${SERVER_ID}:workspace:workspace-1`;
+  const row = storage.rows.get(key)!;
+  const payload = JSON.parse(row.payload) as Record<string, unknown>;
+  payload.githubRuntime = {
+    pullRequest: {
+      url: "https://forge/pull/1",
+      title: "Change",
+      state: "OPEN",
+      baseRefName: "main",
+      headRefName: "branch",
+      isMerged: false,
+      mergeable: { future: true },
+    },
+  };
+  storage.rows.set(key, { ...row, payload: JSON.stringify(payload) });
+  const reader = createCache(storage);
+  const restored = await reader.readDirectory(SERVER_ID);
+  expect(restored.checkpoint).toEqual(baseline.checkpoint);
+  expect(restored.workspaces.get("workspace-1")?.githubRuntime?.pullRequest?.mergeable).toBe(
+    "UNKNOWN",
+  );
+  expect(
+    (await reader.readWorkspace(SERVER_ID, "workspace-1"))?.workspace.githubRuntime?.pullRequest
+      ?.mergeable,
+  ).toBe("UNKNOWN");
+});

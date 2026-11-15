@@ -13,6 +13,7 @@ function project(input: {
     projectKey: input.key,
     projectDisplayName: input.name ?? "acme/app",
     projectCustomName: null,
+    projectDefaultIsolation: null,
     projectRootPath: input.root,
     projectKind: "git",
   };
@@ -26,6 +27,7 @@ function workspace(id: string, projectId: string, root: string): WorkspaceDescri
     projectId,
     projectDisplayName: "acme/app",
     projectCustomName: null,
+    projectDefaultIsolation: null,
     projectRootPath: root,
     workspaceDirectory: root,
     projectKind: "git",

@@ -1,10 +1,10 @@
+import type { NormalizedSessionOutboundMessage as SessionOutboundMessage } from "../workspace-descriptors.js";
 import type { AgentModelDefinition, ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import { normalizeAgentModelDefinition } from "@getpaseo/protocol/agent-types";
 import { expandProviderSnapshot } from "@getpaseo/protocol/provider-snapshot-codec";
 import type {
   GetProvidersSnapshotResponseMessage,
   ListProviderModelsResponseMessage,
-  SessionOutboundMessage,
 } from "@getpaseo/protocol/messages";
 
 type ListProviderModelsPayload = ListProviderModelsResponseMessage["payload"];

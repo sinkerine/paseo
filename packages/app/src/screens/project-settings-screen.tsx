@@ -1,3 +1,5 @@
+import { SettingsCard, SettingsSelect } from "@/components/settings";
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -121,7 +123,7 @@ export default function ProjectSettingsScreen({
     selectedHost.serverId.trim().length > 0 &&
     selectedHost.repoRoot.trim().length > 0;
 
-  if (!project || !selectedHost || !client || !canEdit) {
+  if (!project || !selectedHost || !client || !canEdit || isHostGone) {
     return (
       <NoEditableTarget
         onBackToProjects={onBackToProjects}
@@ -301,6 +303,14 @@ function ProjectSettingsBody({
         snapshot={editSnapshot}
       />
 
+      {selectedHost.projectKind === "git" ? (
+        <ProjectWorkspacesGroup
+          key={`${selectedHost.serverId}:${selectedHost.projectId}`}
+          selectedHost={selectedHost}
+          client={client}
+        />
+      ) : null}
+
       {renderContent({
         readQuery,
         loadedConfig,
@@ -316,6 +326,63 @@ function ProjectSettingsBody({
         showBackToProjects,
       })}
     </View>
+  );
+}
+
+function ProjectWorkspacesGroup({
+  selectedHost,
+  client,
+}: {
+  selectedHost: ProjectHostEntry;
+  client: DaemonClient;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const mutation = useMutation({
+    mutationFn: (defaultIsolation: ProjectIsolation | null) =>
+      client.setProjectIsolation(selectedHost.projectId, defaultIsolation),
+  });
+  const [observedIsolation, setObservedIsolation] = useState(selectedHost.defaultIsolation);
+  if (observedIsolation !== selectedHost.defaultIsolation) {
+    setObservedIsolation(selectedHost.defaultIsolation);
+    // A live commit recovers a failed save. Keep pending observers attached so
+    // broadcasts before the RPC acknowledgement do not suppress its toast.
+    if (mutation.isError) mutation.reset();
+  }
+  const handleIsolationChange = useCallback(
+    (value: string) => {
+      mutation.mutate(value === "local" || value === "worktree" ? value : null, {
+        // Per-call callbacks stop when this target's observer unmounts.
+        onSuccess: () =>
+          toast.show(t("settings.project.workspaces.savedToast"), { variant: "success" }),
+      });
+    },
+    [mutation, t, toast],
+  );
+  const options = [
+    { value: "remember", label: t("settings.project.workspaces.options.rememberLast") },
+    { value: "local", label: t("newWorkspace.isolation.local") },
+    { value: "worktree", label: t("newWorkspace.isolation.worktree") },
+  ];
+  return (
+    <SettingsGroup
+      title={t("settings.project.workspaces.title")}
+      info={t("settings.project.workspaces.info")}
+      testID="project-workspaces-group"
+    >
+      <SettingsCard testID="project-isolation-card">
+        <SettingsSelect
+          testID="project-isolation-row"
+          label={t("settings.project.workspaces.defaultIsolation")}
+          hint={t("settings.project.workspaces.defaultIsolationHint")}
+          error={mutation.error?.message}
+          value={selectedHost.defaultIsolation ?? "remember"}
+          options={options}
+          disabled={mutation.isPending}
+          onValueChange={handleIsolationChange}
+        />
+      </SettingsCard>
+    </SettingsGroup>
   );
 }
 

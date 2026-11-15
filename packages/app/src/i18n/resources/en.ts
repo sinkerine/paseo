@@ -3235,6 +3235,14 @@ export const en = {
       },
     },
     project: {
+      workspaces: {
+        title: "Workspaces",
+        info: "Default isolation for new workspaces on this host",
+        defaultIsolation: "New workspace isolation",
+        defaultIsolationHint: "Remember last uses your last workspace isolation choice",
+        savedToast: "Workspace isolation updated",
+        options: { rememberLast: "Remember last" },
+      },
       noEditableTarget: "This project isn't editable on this host.",
       backToProjects: "Back to projects",
       edit: {

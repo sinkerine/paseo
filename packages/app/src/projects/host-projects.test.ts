@@ -3,6 +3,7 @@ import type { HostProjectListItem } from "./host-project-model";
 import {
   canCreateWorkspaceForHostProject,
   getHostProjectId,
+  getDefaultIsolationForHostProject,
   getHostProjectSourceDirectory,
   getWorktreeSupportForHostProject,
   hostProjectFromRoute,
@@ -24,12 +25,14 @@ function project(): HostProjectListItem {
         projectId: "prj_a",
         iconWorkingDir: "/repo/a",
         worktreeSupport: "supported" as const,
+        defaultIsolation: null,
       },
       {
         serverId: "host-b",
         projectId: "prj_b",
         iconWorkingDir: "/repo/b",
         worktreeSupport: "supported" as const,
+        defaultIsolation: null,
       },
     ],
     workspaceKeys: [],
@@ -62,6 +65,19 @@ describe("host project lookups", () => {
     }
   });
 
+  test("keeps isolation on each host placement of an equivalent project", () => {
+    const grouped = project();
+    grouped.hosts[0] = { ...grouped.hosts[0]!, defaultIsolation: "local" };
+    grouped.hosts[1] = { ...grouped.hosts[1]!, defaultIsolation: "worktree" };
+    expect(getDefaultIsolationForHostProject({ project: grouped, serverId: "host-a" })).toBe(
+      "local",
+    );
+    expect(getDefaultIsolationForHostProject({ project: grouped, serverId: "host-b" })).toBe(
+      "worktree",
+    );
+    expect(getDefaultIsolationForHostProject({ project: grouped, serverId: "missing" })).toBe(null);
+  });
+
   test("returns host-local ids and roots without falling back to the grouping key", () => {
     expect(getHostProjectId(project(), "host-b")).toBe("prj_b");
     expect(getHostProjectSourceDirectory(project(), "host-b")).toBe("/repo/b");
@@ -83,6 +99,7 @@ describe("host project lookups", () => {
     groupedProject.hosts[1] = {
       ...groupedProject.hosts[1]!,
       worktreeSupport: "unsupported" as const,
+      defaultIsolation: null,
     };
 
     expect(getWorktreeSupportForHostProject({ project: groupedProject, serverId: "host-a" })).toBe(
