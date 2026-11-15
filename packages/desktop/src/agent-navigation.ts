@@ -12,7 +12,15 @@ export function parseAgentDeepLinkFromArgv(argv: string[]): AgentDeepLinkTarget 
 
 export class AgentNavigationInbox {
   private readonly readyWindows = new Set<number>();
-  private readonly pendingByWindow = new Map<number, AgentDeepLinkTarget>();
+  private readonly pendingForegroundByWindow = new Map<number, AgentDeepLinkTarget>();
+
+  private readonly pendingBackgroundByWindow = new Map<number, AgentDeepLinkTarget[]>();
+
+  drainBackground(webContentsId: number): AgentDeepLinkTarget[] {
+    const pending = this.pendingBackgroundByWindow.get(webContentsId) ?? [];
+    this.pendingBackgroundByWindow.delete(webContentsId);
+    return pending;
+  }
 
   windowLoading(webContentsId: number): void {
     this.readyWindows.delete(webContentsId);
@@ -20,8 +28,17 @@ export class AgentNavigationInbox {
 
   windowReady(webContentsId: number): AgentDeepLinkTarget | null {
     this.readyWindows.add(webContentsId);
-    const pending = this.pendingByWindow.get(webContentsId) ?? null;
-    this.pendingByWindow.delete(webContentsId);
+    const pending = this.pendingForegroundByWindow.get(webContentsId) ?? null;
+    this.pendingForegroundByWindow.delete(webContentsId);
+    if (pending) {
+      const background = this.pendingBackgroundByWindow.get(webContentsId) ?? [];
+      this.pendingBackgroundByWindow.set(
+        webContentsId,
+        background.filter(
+          (target) => target.serverId !== pending.serverId || target.agentId !== pending.agentId,
+        ),
+      );
+    }
     return pending;
   }
 
@@ -29,12 +46,28 @@ export class AgentNavigationInbox {
     if (this.readyWindows.has(webContentsId)) {
       return target;
     }
-    this.pendingByWindow.set(webContentsId, target);
+    const matches = (candidate: AgentDeepLinkTarget) =>
+      candidate.serverId === target.serverId && candidate.agentId === target.agentId;
+    const background = this.pendingBackgroundByWindow.get(webContentsId) ?? [];
+    if (target.focus === false) {
+      if (!background.some(matches)) {
+        this.pendingBackgroundByWindow.set(webContentsId, [
+          ...background,
+          { serverId: target.serverId, agentId: target.agentId, focus: false },
+        ]);
+      }
+    } else {
+      this.pendingForegroundByWindow.set(webContentsId, {
+        serverId: target.serverId,
+        agentId: target.agentId,
+      });
+    }
     return null;
   }
 
   removeWindow(webContentsId: number): void {
     this.readyWindows.delete(webContentsId);
-    this.pendingByWindow.delete(webContentsId);
+    this.pendingForegroundByWindow.delete(webContentsId);
+    this.pendingBackgroundByWindow.delete(webContentsId);
   }
 }

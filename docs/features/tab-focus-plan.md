@@ -124,7 +124,8 @@ and multi-window storage established four concrete mechanisms behind unwanted fo
   queued non-focusing opens (`focus === false`) in a separate per-window deduplicated FIFO queue
   flushed when `paseo:agent-navigation:ready` fires — prevents multiple rapid background opens from
   dropping each other or clobbering a startup foreground deep link — cost if wrong: ~20 lines of
-  state in `AgentNavigationInbox`.
+  state in `AgentNavigationInbox`. Final foreground delivery removes its matching background
+  target only when readiness is acknowledged; an intermediate foreground target never removes it.
 - **D7. Background agent-tab open bypasses Expo Router navigation and `pendingOpenByWorkspace`.**
   Ruling: when `AgentNavigationListener` receives `focus === false`, it resolves `workspaceId` via
   `useSessionStore` or `client.fetchAgent({ agentId })`, waits for `useWorkspaceLayoutStore`
@@ -166,7 +167,14 @@ and multi-window storage established four concrete mechanisms behind unwanted fo
   the latest valid envelope in `backingStorage` — prevents Window 2 from clobbering Window 1's saved
   tab selection in other workspaces on reload/restart — cost if wrong: one `backingStorage.getItem`
   read per actual layout mutation (unchanged reconciliations remain skipped before serialization via
-  `skipUnchanged`).
+  `skipUnchanged`). Review repair ruling: inactive-workspace entry and fallback mutation first
+  synchronize that workspace from durable storage, after pending local writes. Sidebar focus and
+  pending-open consumption wait for entry readiness. Reconciliation cannot write until sync
+  succeeds; failure retains the existing request for an explicit retry. Active windows remain
+  independent. A newer foreground action or workspace leave cancels delayed focus, and pending
+  requests retain their existing latest-wins identity and exactly-once handoff. Hydrated direct
+  foreground opens to inactive or unready workspaces defer the original input through that same
+  handoff; active ready opens remain synchronous.
 - **Gates:**
   - **G0 (Visible Design tab open):** Resolved (`paseo agent open` returned `status: "opened"`).
   - **G1 (Human design input / approval):** Not required; no ambiguous product scope or user
@@ -322,10 +330,11 @@ export class AgentNavigationInbox {
 - When not yet ready:
   - `target.focus === false`: appends `{ serverId: target.serverId, agentId: target.agentId, focus: false }`
     to `pendingBackgroundByWindow` unless an entry with the same `serverId` and `agentId` is already
-    queued (nor equal to `pendingForegroundByWindow`'s target), and returns `null`.
+    queued, and returns `null`.
   - `target.focus !== false`: overwrites `pendingForegroundByWindow.set(webContentsId, { serverId: target.serverId, agentId: target.agentId })`,
-    removes any matching `(serverId, agentId)` from `pendingBackgroundByWindow` (since foreground
-    supersedes background for the same agent), and returns `null`.
+    leaves the background queue intact, and returns `null`.
+- `windowReady` removes the final foreground target's matching `(serverId, agentId)` from the
+  background queue. A superseded foreground target cannot erase a background delivery.
 - On `ipcMain.handle("paseo:agent-navigation:ready")`, main reads `const foreground = inbox.windowReady(id)`
   and `for (const bg of inbox.drainBackground(id)) event.sender.send("paseo:event:open-agent", bg)`,
   returning `foreground`.
@@ -449,10 +458,11 @@ Matching optional methods are added to `DesktopAgentNavigationBridge` in
 
 ```ts
 export interface OpenAgentTabInBackgroundDeps {
+  isHostReady: (serverId: string) => boolean;
   readCachedWorkspaceId: (target: { serverId: string; agentId: string }) => string | null;
   fetchWorkspaceId: (target: { serverId: string; agentId: string }) => Promise<string | null>;
   subscribeHostReady: (serverId: string, onChange: () => void) => () => void;
-  waitForLayoutHydration: () => Promise<void>;
+  prepareWorkspace: (workspaceKey: string) => Promise<void>;
   openBackgroundTab: (input: { workspaceKey: string; agentId: string }) => void;
 }
 
@@ -468,11 +478,16 @@ export function createBackgroundAgentTabOpener(deps: OpenAgentTabInBackgroundDep
   connecting (throws connection error or client not yet ready), subscribes via `subscribeHostReady`
   and retries when the host session becomes connected; if the daemon responds `null` (agent not
   found), drops the request cleanly without opening a tab.
-- Once `workspaceId` resolves and `waitForLayoutHydration()` settles, calls
+- Once `workspaceId` resolves and `prepareWorkspace(workspaceKey)` settles, calls
   `useWorkspaceLayoutStore.getState().openTab({ workspaceKey, target: { kind: "agent", agentId }, intent: "background", pin: true })`.
 - Also syncs `useActiveWorkspaceSelection()` to `host.agentNavigation?.setActiveWorkspace` and
   responds to `onResolveWorkspaceRequest` using the same `readCachedWorkspaceId` + `fetchWorkspaceId`
   lookup.
+- `prepareWorkspace` waits for hydration, then calls `syncWorkspaceFromStorage(workspaceKey)`
+  only for an inactive workspace. Disposal is checked after this preparation, before `openTab`.
+- Lookup failures that started while connected settle the key so an explicit delivery can retry.
+  Disconnected attempts subscribe once, recheck readiness after registration, and safely clean up
+  synchronous callbacks. Each retry re-evaluates readiness; a connected RPC failure cannot loop.
 
 #### Browser new-tab request contracts
 
@@ -520,12 +535,12 @@ export function shouldFocusBrowserNewTabRequest(input: {
 // getFocusedBrowserId(input.workspaceLayout) === input.request.sourceBrowserId
 ```
 
-In `packages/app/src/screens/workspace/workspace-screen.tsx`, `handleOpenUrlInBrowserTab` becomes
-`(request: BrowserNewTabRequest) => void`: resolves `sourcePane = findPaneContainingTab(...)` for
-`request.sourceBrowserId`, uses `{ mode: "prefer", paneId: sourcePane.id }` (falling back to
-`FOCUSED_PANE_PLACEMENT` when focusing or `AMBIENT_PLACEMENT` when background), and calls
-`openWorkspaceTabFocused` when `shouldFocusBrowserNewTabRequest` is `true` vs
-`openWorkspaceTabInBackground` when `false`.
+`useDesktopBrowserNewTabRequests` takes `{ enabled, workspaceKey, openUrl }` and validates
+against `useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey]` at delivery time.
+The screen calls `openBrowserNewTabRequest({ request, workspaceKey, isRouteFocused, createBrowser })`.
+That existing browser request module reads the current store for focus and source-pane placement,
+then opens the created browser with `intent: "reveal"` or `"background"`. A queued IPC event cannot
+use a React render's previous tab or parked-focus state.
 
 #### Workspace layout actions & multi-window persistence merge
 
@@ -553,6 +568,23 @@ In `packages/app/src/screens/workspace/workspace-screen.tsx`, `handleOpenUrlInBr
 
 - Add non-persisted `reconciledWorkspaceKeys: Set<string>` to `WorkspaceLayoutStore` (cleared per
   key in `purgeWorkspace`).
+- `activateWorkspace(workspaceKey: string | null): Promise<void>` records entry/leave and calls
+  `syncWorkspaceFromStorage(workspaceKey: string): Promise<void>` once on entry. The screen's
+  layout effect runs before the pending-open hook. Non-persisted `activeWorkspaceKey`,
+  `syncingWorkspaceKeys`, and `failedWorkspaceSyncKeys` gate entry reconciliation and the existing
+  pending-open consume/onOpened handoff. Repeated activation awaits an in-flight read; failed
+  entry is retryable. `focusWorkspace` prepares inactive entry before its normal foreground focus,
+  canceled on leave/re-entry or a newer foreground intent. It never manufactures a pending open.
+- Sync normalizes only the incoming workspace through the hydration path. It adopts that key's
+  normalized baseline before publishing state, preserves parked focus tokens, and queues the latest
+  reconciliation snapshot until successful entry. Pending opens keep their existing occurrence;
+  a newer explicit tab action supersedes one still waiting. No route ownership or public navigation
+  API changes. Direct foreground `openTab` in a lifecycle-managed store defers its complete
+  original input when the workspace is inactive or synchronization has not succeeded, and starts
+  or reuses that workspace's sync. It returns null as the existing accepted-deferred result; the
+  matched ready screen performs the same reveal after exactly-once consumption. Active ready
+  create/retarget/import/file opens keep their synchronous tab IDs. Request state, parent,
+  insertion, placement and pin fields remain part of the existing input without reconstruction.
 - In `getOpenTabPlacement`: accept `intent: WorkspaceTabOpenIntent`; default `placement` when
   omitted is `intent === "background" ? AMBIENT_PLACEMENT : FOCUSED_PANE_PLACEMENT`, and when
   `resolvedPlacement.mode === "ambient"`, mirror the `DEFAULT_PANE_ID`-first pane selection.
@@ -569,7 +601,16 @@ In `packages/app/src/screens/workspace/workspace-screen.tsx`, `handleOpenUrlInBr
 ```ts
 export function createWorkspaceLayoutPersistStorage(
   backingStorage: StateStorage,
-): PersistStorage<WorkspaceLayoutPersistedState>;
+): PersistStorage<WorkspaceLayoutPersistedState> & {
+  setHydratedBaseline(state: WorkspaceLayoutPersistedState): void;
+  setWorkspaceBaseline(key: string, state: WorkspaceLayoutPersistedState): void;
+  syncWorkspace(
+    name: string,
+    key: string,
+    current: () => WorkspaceLayoutPersistedState,
+    accept: (state: WorkspaceLayoutPersistedState) => void,
+  ): Promise<void>;
+};
 ```
 
 - Wraps `backingStorage` using `WorkspaceLayoutPersistedStateSchema` validation (`skipUnchanged: true`).
@@ -583,6 +624,10 @@ export function createWorkspaceLayoutPersistStorage(
   and `version === WORKSPACE_LAYOUT_PERSIST_VERSION`, overlays `changedWorkspaceKeys` and deletes
   `purgedWorkspaceKeys` onto the stored state before writing; otherwise writes the current
   projection directly.
+- A rejected asynchronous write keeps its caller rejected and permits the next queued commit.
+  Only a successful write advances the baseline. Sync waits for this queue, retries reads invalidated
+  by local writes, compares schema-normalized projections, and refuses to replace unpublished local
+  workspace edits. It does not synchronize a continuously active workspace.
 
 ### Protected behavior and invariants
 
@@ -825,7 +870,8 @@ plus orchestrator **Agent A-Orch**) and **Workspace B** (containing active root 
    - **Expected:** Neither Window 1 nor Window 2 changes OS focus, workspace route, active tab,
      composer focus, or draft; no duplicate tab is created.
 3. **J3 — Unseen workspace, minimized window, archived agent, and zero-window / cold-launch background opens (`AC2`):**
-   - **J3a (Unseen workspace & minimized window):** Create **Workspace C** with subagent **Agent C-Sub**.
+   - **J3a (Unseen workspace & minimized window):** Create **Workspace C** with root **Agent C** and
+     same-workspace subagent **Agent C-Sub** (`parentAgentId = Agent C.id`).
      Minimize Window 1, keep Window 2 focused on **Workspace B**, and run
      `paseo agent open <Agent C-Sub.id> --no-focus --json`. Assert minimized Window 1 stays minimized
      (`isMinimized() === true`), Window 2 stays on **Workspace B**, and navigating Window 1 later to
