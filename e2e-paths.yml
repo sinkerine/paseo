@@ -1,0 +1,149 @@
+# Agents run E2E only for web and Android. Do not run iOS, real Electron, or
+# standalone daemon/CLI/relay E2E suites. Web/Android harnesses may start their
+# own isolated daemon and other dependencies. GitHub Actions job routing remains
+# in .github/ci-paths.yml; this file also covers journeys with no CI job.
+# Match repository-relative paths using picomatch-style globs. A group matches
+# when any shared or group path matches and that path is not in its exclude list.
+# Matches are additive: choose affected specs from every matched group, not full
+# suites. Entries with required_tests require those exact tests as well.
+# Inspect the complete change, including uncommitted/untracked files and old/new
+# paths for renames and deletions. Record triggering paths, tests and results.
+# Review this map for every feature; update gaps in the same change. Patterns are
+# minimum coverage: trace changed behavior to additional journeys when needed.
+# Reuse passing evidence only while its source, environment and artifacts match.
+# Push/deploy alone does not require a fresh local run; unit tests remain required.
+# Commands and prerequisites belong to the referenced docs and existing harnesses.
+# Every execution still needs a valid root AGENTS.md qex declaration and admission.
+version: 1
+platforms: [web, android]
+
+# Toolchain changes can affect every runtime. Map platform-specific tooling in
+# its owning group instead of making every script change select every platform.
+shared:
+  - "package.json"
+  - "package-lock.json"
+  - ".mise.toml"
+  - ".tool-versions"
+  - "tsconfig.json"
+  - "tsconfig.base.json"
+  - "patches/**"
+
+groups:
+  browser:
+    platform: web
+    paths:
+      - "packages/app/src/**"
+      - "packages/app/assets/**"
+      - "packages/app/public/**"
+      - "packages/app/index.ts"
+      - "packages/app/*config.{cjs,js,ts}"
+      - "packages/app/package.json"
+      - "packages/app/e2e/browser/**"
+      - "packages/app/e2e/support/**"
+      - "packages/client/**"
+      - "packages/protocol/**"
+      - "packages/plugin/**"
+      - "packages/server/src/server/agent/**"
+      - "packages/server/src/server/session/**"
+      - "packages/server/src/server/plugins/**"
+      - "packages/server/src/executable-resolution/**"
+      - "packages/relay/**"
+      - "packages/server/src/server/daemon-e2e/*relay*"
+    exclude:
+      - "packages/app/src/desktop/**"
+      - "packages/app/src/**/*.electron.*"
+      - "packages/app/src/**/*.native.*"
+      - "packages/app/src/**/*.android.*"
+      - "packages/app/src/**/*.ios.*"
+    tests:
+      - "packages/app/e2e/browser/*.spec.ts"
+    docs: "docs/testing.md#background-e2e-workflow"
+
+  website:
+    platform: web
+    paths:
+      - "packages/website/**"
+    tests:
+      - "packages/website/e2e/**"
+    docs: "docs/testing.md#running-tests-locally"
+
+  # Shared React Native code must select device coverage too. A browser pass
+  # cannot prove IME, gestures, native modules, lifecycle or native rendering.
+  android:
+    platform: android
+    paths:
+      - "packages/app/src/**"
+      - "packages/app/assets/**"
+      - "packages/app/index.ts"
+      - "packages/app/*config.{cjs,js,ts}"
+      - "packages/app/package.json"
+      - "packages/app/eas.json"
+      - "packages/app/android/**"
+      - "packages/app/modules/**"
+      - "packages/app/plugins/**"
+      - "packages/app/e2e/mobile/**"
+      - "packages/app/maestro/**"
+      - "packages/expo-*/**"
+      - "packages/client/**"
+      - "packages/protocol/**"
+      - "packages/highlight/**"
+      - "packages/plugin/**"
+      - "scripts/android-isolated.*"
+      - "scripts/build-apk.mjs"
+      - "scripts/test-mobile-agent-device.sh"
+      - "nix/android-shell.nix"
+      - "flake.lock"
+    exclude:
+      - "packages/app/src/desktop/**"
+      - "**/*.web.*"
+      - "**/*.electron.*"
+      - "**/*.ios.*"
+      - "**/ios/**"
+    tests:
+      - "packages/app/e2e/mobile/**"
+      - "packages/app/maestro/**"
+    docs: "docs/mobile-testing.md"
+    environment: "Disposable Android emulator or dedicated device; follow docs/android.md. Select Android journeys and satisfy their preconditions. The android-emulator qex declaration alone does not cover an app/Metro/daemon stack or native build."
+
+  android-composer-keyboard:
+    platform: android
+    paths:
+      - "packages/app/src/composer/**"
+      - "packages/app/src/components/ui/floating-panel*"
+      - "packages/app/src/hooks/*keyboard*"
+      - "packages/app/modules/paseo-hardware-keyboard/**"
+      - "packages/app/e2e/mobile/composer-keyboard/**"
+    exclude:
+      - "**/*.web.*"
+      - "**/*.electron.*"
+      - "**/*.ios.*"
+      - "**/ios/**"
+    required_tests:
+      - "packages/app/e2e/mobile/composer-keyboard/android.sh"
+    docs: "docs/mobile-testing.md"
+
+  pi-workflow:
+    platform: web
+    paths:
+      - "packages/server/src/server/agent/providers/pi/**"
+      - "packages/server/src/server/daemon-e2e/pi-workflow*"
+      - "packages/app/e2e/browser/pi-workflow*"
+      - "packages/app/src/**/*workflow*"
+      - "packages/app/src/subagents/**"
+      - "packages/app/src/panels/provider-subagent-panel.tsx"
+      - "packages/app/src/stores/workspace-subagents*"
+    required_tests:
+      - "packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts"
+    docs: "docs/features/pi-workflow-subagents-plan.md"
+    environment: "Use the current Pi and pi-subagents versions with the real-provider harness."
+
+  shared-profile-shortcuts:
+    platform: web
+    paths:
+      - "packages/app/src/agent-profiles/**"
+      - "packages/app/src/keyboard/**"
+      - "packages/app/src/screens/settings/*shortcut*"
+      - "packages/app/e2e/browser/shared-profile-shortcuts.spec.ts"
+    required_tests:
+      - "packages/app/e2e/browser/shared-profile-shortcuts.spec.ts"
+    docs: "docs/features/shared-profile-shortcuts-plan.md#e2e-journey"
