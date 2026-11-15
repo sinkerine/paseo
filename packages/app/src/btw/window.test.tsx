@@ -41,7 +41,10 @@ vi.mock("@/constants/layout", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/constants/layout")>()),
   useIsCompactFormFactor: () => false,
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 vi.mock("./floating-card", () => ({
   BtwFloatingCard: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
     visible ? <div>{children}</div> : null,

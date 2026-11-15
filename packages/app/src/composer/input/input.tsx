@@ -1,3 +1,8 @@
+import {
+  handleComposerEnterKey,
+  resolveComposerSubmitOnEnter,
+  type WebTextInputKeyPressEvent,
+} from "./enter-key";
 import { useKeyboardFocusSurface } from "@/keyboard";
 import type { SendShortcut } from "@/hooks/use-settings";
 import {
@@ -12,7 +17,6 @@ import {
   Text,
   useWindowDimensions,
   NativeSyntheticEvent,
-  TextInputKeyPressEventData,
   TextInputSelectionChangeEventData,
   type LayoutChangeEvent,
 } from "react-native";
@@ -112,7 +116,6 @@ import {
   resolveAlternateSendAction,
   resolveComposerSurfacePresentation,
   resolveComposerSurfaceText,
-  resolveMessageInputEnterAction,
   resolveRetainedSelection,
   runAlternateSendAction,
   runDefaultSendAction,
@@ -241,17 +244,6 @@ const MIN_INPUT_HEIGHT_DESKTOP = 46;
 const DEFAULT_MAX_INPUT_HEIGHT = 160;
 const MAX_INPUT_VIEWPORT_RATIO = 0.5;
 const MIN_INPUT_HEIGHT = isWeb ? MIN_INPUT_HEIGHT_DESKTOP : MIN_INPUT_HEIGHT_MOBILE;
-type WebTextInputKeyPressEvent = NativeSyntheticEvent<
-  TextInputKeyPressEventData & {
-    metaKey?: boolean;
-    ctrlKey?: boolean;
-    shiftKey?: boolean;
-    altKey?: boolean;
-    // Web-only: present on DOM KeyboardEvent during IME composition (CJK input).
-    isComposing?: boolean;
-    keyCode?: number;
-  }
->;
 
 interface TextAreaHandle {
   value?: string;
@@ -486,26 +478,15 @@ function handleDesktopKeyPressImpl(
     if (handled) return;
   }
 
-  if (event.nativeEvent.key !== "Enter") return;
-
-  const action = resolveMessageInputEnterAction({
+  handleComposerEnterKey(event, {
     submitOnEnter: ctx.submitOnEnter,
     sendShortcut: ctx.sendShortcut,
-    shiftKey: shiftKey ?? false,
-    metaKey: metaKey ?? false,
-    ctrlKey: ctrlKey ?? false,
     isAgentRunning: ctx.isAgentRunning,
     onQueue: ctx.onQueue,
+    canSubmit: !(ctx.isSubmitDisabled || ctx.isSubmitLoading || ctx.disabled),
+    onDefaultSend: ctx.handleDefaultSendAction,
+    onAlternateSend: ctx.handleAlternateSendAction,
   });
-  if (action === null) return;
-
-  if (ctx.isSubmitDisabled || ctx.isSubmitLoading || ctx.disabled) return;
-  event.preventDefault();
-  if (action === "alternate-send") {
-    ctx.handleAlternateSendAction();
-    return;
-  }
-  ctx.handleDefaultSendAction();
 }
 
 function getTextInputNativeElement(current: ComposerTextInputHandle | null): HTMLElement | null {
@@ -1839,7 +1820,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     );
 
     const shouldHandleWebKeyPress = isWeb;
-    const shouldSubmitOnEnter = isWeb && !isCompact;
+    const shouldSubmitOnEnter = resolveComposerSubmitOnEnter(isCompact);
 
     const handleDesktopKeyPress = useCallback(
       (event: WebTextInputKeyPressEvent) => {

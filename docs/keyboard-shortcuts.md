@@ -14,9 +14,10 @@ Keyboard navigation needs the sidebar's filtered workspace model even when its v
 panel is hidden. Retain that model while keyboard navigation is active; gating it on
 panel visibility leaves number shortcuts with no targets after a compact startup.
 
-Composer send-key customization remains a separate capability. Native retains its
-existing Return submission path; advertising its web-only customization would expose
-settings the native composer does not implement.
+The agent composer and BTW share `handleComposerEnterKey` and the Send shortcut
+preference. `Shift+Mod+Enter` inserts a line break explicitly because Chromium
+textareas have no default for that chord. Compact web and native keep their
+existing Return path; native does not expose send-key customization.
 
 ## Native sources
 
