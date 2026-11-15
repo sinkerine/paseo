@@ -56,7 +56,24 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
       ipcRenderer.invoke("paseo:agent-navigation:ready") as Promise<{
         serverId: string;
         agentId: string;
+        focus?: boolean;
       } | null>,
+    setActiveWorkspace: (selection: { serverId: string; workspaceId: string } | null) =>
+      ipcRenderer.invoke("paseo:window:setActiveWorkspace", selection) as Promise<void>,
+    onResolveWorkspaceRequest: (
+      handler: (requestId: string, target: { serverId: string; agentId: string }) => void,
+    ) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        requestId: string,
+        target: { serverId: string; agentId: string },
+      ) => handler(requestId, target);
+      ipcRenderer.on("paseo:agent-navigation:resolve-workspace-request", listener);
+      return () =>
+        ipcRenderer.removeListener("paseo:agent-navigation:resolve-workspace-request", listener);
+    },
+    replyResolveWorkspace: (requestId: string, response: { workspaceId: string | null }) =>
+      ipcRenderer.invoke("paseo:agent-navigation:resolve-workspace-reply", requestId, response),
   },
   events: {
     on: (event: string, handler: EventHandler): Promise<() => void> => {

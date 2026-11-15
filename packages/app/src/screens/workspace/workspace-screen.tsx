@@ -157,7 +157,11 @@ import {
   useWorkspaceNewTabKeyboardAction,
   type WorkspaceDesktopTabRowItem,
 } from "@/screens/workspace/workspace-desktop-tabs-row";
-import { useDesktopBrowserNewTabRequests } from "@/desktop/browser/new-tab-requests";
+import {
+  useDesktopBrowserNewTabRequests,
+  openBrowserNewTabRequest,
+  type BrowserNewTabRequest,
+} from "@/desktop/browser/new-tab-requests";
 import type { WorkspaceTabDescriptor } from "@/screens/workspace/workspace-tabs-types";
 import {
   resolveWorkspaceExplorerToggleOwner,
@@ -1122,6 +1126,25 @@ function WorkspaceScreenContent({
       }),
     [normalizedServerId, normalizedWorkspaceId],
   );
+  const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
+  const isWorkspaceSyncing = useWorkspaceLayoutStore((state) =>
+    Boolean(
+      persistenceKey &&
+      (state.syncingWorkspaceKeys.has(persistenceKey) ||
+        state.failedWorkspaceSyncKeys.has(persistenceKey)),
+    ),
+  );
+  useLayoutEffect(() => {
+    if (!isRouteFocused || !persistenceKey || !hasHydratedWorkspaceLayoutStore) return;
+    void useWorkspaceLayoutStore
+      .getState()
+      .activateWorkspace(persistenceKey)
+      .catch(() => undefined);
+    return () => {
+      if (useWorkspaceLayoutStore.getState().activeWorkspaceKey === persistenceKey)
+        void useWorkspaceLayoutStore.getState().activateWorkspace(null);
+    };
+  }, [isRouteFocused, persistenceKey, hasHydratedWorkspaceLayoutStore]);
   const openTab = useWorkspaceLayoutStore((state) => state.openTab);
   const replaceWorkspaceTabTarget = useWorkspaceLayoutStore((state) => state.replaceTab);
   const openWorkspaceTabFocused = useCallback(
@@ -1333,7 +1356,6 @@ function WorkspaceScreenContent({
     explorerSidebarPaneId,
   });
   const lastMainPaneId = lastMainPaneRef.current.paneId;
-  const hasHydratedWorkspaceLayoutStore = useWorkspaceLayoutStoreHydrated();
   const workspaceSetupStatus = getWorkspaceSetupStatus(workspaceDescriptor);
   const claimFailedSetupSurface = useWorkspaceSetupStore((state) => state.claimFailedSetupSurface);
   const supportsSetupObservation = useHostFeature(normalizedServerId, "workspaceSetupObservation");
@@ -1541,7 +1563,7 @@ function WorkspaceScreenContent({
     if (!normalizedServerId || !normalizedWorkspaceId || !persistenceKey) {
       return;
     }
-    if (!hasHydratedWorkspaceLayoutStore) {
+    if (!hasHydratedWorkspaceLayoutStore || isWorkspaceSyncing) {
       return;
     }
 
@@ -1578,6 +1600,7 @@ function WorkspaceScreenContent({
     pendingByDraftId,
     persistenceKey,
     reconcileWorkspaceTabs,
+    isWorkspaceSyncing,
     knownTerminalIds,
     standaloneTerminalIds,
     terminalsQuery.isSuccess,
@@ -1908,10 +1931,23 @@ function WorkspaceScreenContent({
     [openWorkspaceTabFocused, persistenceKey],
   );
 
+  const handleBrowserNewTabRequest = useCallback(
+    (request: BrowserNewTabRequest) => {
+      if (!persistenceKey || !getIsElectron()) return;
+      openBrowserNewTabRequest({
+        request,
+        workspaceKey: persistenceKey,
+        isRouteFocused,
+        createBrowser: (initialUrl) => createWorkspaceBrowser({ initialUrl }).browserId,
+      });
+    },
+    [persistenceKey, isRouteFocused],
+  );
+
   useDesktopBrowserNewTabRequests({
     enabled: Boolean(persistenceKey),
-    workspaceLayout,
-    openUrl: handleOpenUrlInBrowserTab,
+    workspaceKey: persistenceKey,
+    openUrl: handleBrowserNewTabRequest,
   });
 
   const handleSelectSwitcherTab = useCallback(

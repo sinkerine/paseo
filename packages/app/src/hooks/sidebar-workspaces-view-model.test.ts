@@ -3,6 +3,7 @@ import type { Agent, WorkspaceDescriptor } from "@/stores/session-store";
 import type { WorkspaceStructureProject } from "@/projects/workspace-structure";
 import { buildWorkspaceAgentActivityIndex } from "@/utils/workspace-agent-activity";
 import {
+  resolveSidebarServerIds,
   appendMissingOrderKeys,
   applyStoredOrdering,
   buildSidebarWorkspaceEntries,
@@ -1005,4 +1006,20 @@ it("prepends newly discovered manual workspaces without dropping filtered saved 
   expect(
     computeSidebarOrderUpdates({ projects, persistedProjectOrder: ["p"] }).workspaceOrders,
   ).toEqual([]);
+});
+
+describe("resolveSidebarServerIds", () => {
+  it.each([
+    { hostFilters: [], hostRegistryLoaded: true, expected: ["a", "b"] },
+    { hostFilters: ["b", "missing"], hostRegistryLoaded: true, expected: ["b"] },
+    { hostFilters: ["missing"], hostRegistryLoaded: true, expected: ["a", "b"] },
+    { hostFilters: ["missing"], hostRegistryLoaded: false, expected: [] },
+  ])(
+    "resolves the sidebar host filter $hostFilters with loaded=$hostRegistryLoaded",
+    ({ hostFilters, hostRegistryLoaded, expected }) => {
+      expect(
+        resolveSidebarServerIds({ allServerIds: ["a", "b"], hostFilters, hostRegistryLoaded }),
+      ).toEqual(expected);
+    },
+  );
 });

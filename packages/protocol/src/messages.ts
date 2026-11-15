@@ -3107,6 +3107,12 @@ export const ClearAgentAttentionMessageSchema = z.object({
   requestId: z.string().optional(),
 });
 
+export const ClientNotificationScopeSchema = z.object({
+  // Host-local project ids this connection's window currently shows. Empty means none.
+  projectIds: z.array(z.string()),
+});
+export type ClientNotificationScope = z.infer<typeof ClientNotificationScopeSchema>;
+
 export const ClientHeartbeatMessageSchema = z.object({
   type: z.literal("client_heartbeat"),
   deviceType: z.enum(["web", "mobile"]),
@@ -3116,6 +3122,8 @@ export const ClientHeartbeatMessageSchema = z.object({
   lastActivityAt: z.string(),
   appVisible: z.boolean(),
   appVisibilityChangedAt: z.string().optional(),
+  // Absent means every project on this host.
+  notificationScope: ClientNotificationScopeSchema.optional(),
 });
 
 export const PingMessageSchema = z.object({

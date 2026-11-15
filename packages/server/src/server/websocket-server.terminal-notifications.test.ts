@@ -112,6 +112,8 @@ function workspaceRecord(overrides?: Partial<PersistedWorkspaceRecord>): Persist
 function createWorkspaceRegistry(records: PersistedWorkspaceRecord[]): WorkspaceRegistry {
   return createStub<WorkspaceRegistry>({
     list: vi.fn(async () => records),
+    get: async (workspaceId) =>
+      records.find((record) => record.workspaceId === workspaceId) ?? null,
   });
 }
 
@@ -195,7 +197,14 @@ function createOpenSocket() {
   };
 }
 
-function connectClient(server: VoiceAssistantWebSocketServer, subscribed = true) {
+function connectClient(
+  server: VoiceAssistantWebSocketServer,
+  subscribed = true,
+  activity: {
+    notificationProjectIds: ReadonlySet<string> | null;
+    lastActivityAt: Date;
+  } | null = null,
+) {
   const ws = createOpenSocket();
   const delivery = new SessionDelivery(() => {});
   delivery.attach(ws, false);
@@ -204,7 +213,17 @@ function connectClient(server: VoiceAssistantWebSocketServer, subscribed = true)
     session: {
       delivery,
       wantsSourceNotification: () => true,
-      getClientActivity: vi.fn(() => null),
+      getClientActivity: vi.fn(() =>
+        activity
+          ? {
+              deviceType: "web",
+              appVisible: true,
+              focusedAgentId: null,
+              focusedTerminalId: null,
+              ...activity,
+            }
+          : null,
+      ),
       subscribesToTerminalDirectory: vi.fn(async () => subscribed),
     },
     clientId: "client-test",
@@ -281,6 +300,77 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it("elects the in-scope terminal client over a more recent excluded client", async () => {
+    const { manager } = createTerminalManager();
+    const { server, pushNotifications } = createServer(
+      manager,
+      createWorkspaceRegistry([workspaceRecord()]),
+    );
+    const included = connectClient(server, true, {
+      lastActivityAt: new Date(Date.now() - 1000),
+      notificationProjectIds: new Set(["project-1"]),
+    });
+    const excluded = connectClient(server, true, {
+      lastActivityAt: new Date(),
+      notificationProjectIds: new Set(["other"]),
+    });
+    await asInternals<{
+      broadcastTerminalAttention(params: {
+        terminalId: string;
+        cwd: string;
+        workspaceId?: string;
+        terminalName: string;
+        reason: "finished";
+      }): Promise<void>;
+    }>(server).broadcastTerminalAttention({
+      terminalId: "term-1",
+      cwd: CWD,
+      workspaceId: "ws-1",
+      terminalName: "bash",
+      reason: "finished",
+    });
+    expect(readTerminalAttentionMessage(included).shouldNotify).toBe(true);
+    expect(readTerminalAttentionMessage(excluded).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it.each([undefined, "unknown-workspace"])(
+    "admits only unrestricted clients for terminal workspace %s",
+    async (workspaceId) => {
+      const { manager } = createTerminalManager();
+      const { server, pushNotifications } = createServer(
+        manager,
+        createWorkspaceRegistry([workspaceRecord()]),
+      );
+      const unrestricted = connectClient(server, true, {
+        lastActivityAt: new Date(Date.now() - 1000),
+        notificationProjectIds: null,
+      });
+      const scoped = connectClient(server, true, {
+        lastActivityAt: new Date(),
+        notificationProjectIds: new Set(["project-1"]),
+      });
+      await asInternals<{
+        broadcastTerminalAttention(params: {
+          terminalId: string;
+          cwd: string;
+          workspaceId?: string;
+          terminalName: string;
+          reason: "finished";
+        }): Promise<void>;
+      }>(server).broadcastTerminalAttention({
+        terminalId: "term-1",
+        cwd: CWD,
+        workspaceId,
+        terminalName: "bash",
+        reason: "finished",
+      });
+      expect(readTerminalAttentionMessage(unrestricted).shouldNotify).toBe(true);
+      expect(readTerminalAttentionMessage(scoped).shouldNotify).toBe(false);
+      expect(pushNotifications.sent).toEqual([]);
+    },
+  );
 
   it("does not emit attention without a matching terminal-directory subscription", async () => {
     const { manager, emit } = createTerminalManager();
@@ -369,7 +459,7 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     expect(readTerminalAttentionMessage(ws).workspaceId).toBe("ws-1");
   });
 
-  it("does not derive terminal attention ownership from the workspace registry", async () => {
+  it("keeps the event workspaceId when the registry has other records", async () => {
     const { manager, emit } = createTerminalManager();
     const { server } = createServer(
       manager,

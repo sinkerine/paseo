@@ -4,18 +4,20 @@ interface ReadyToShowWindow {
     once(event: "did-finish-load", listener: () => void): unknown;
   };
   show(): void;
+  showInactive?(): void;
   isDestroyed(): boolean;
 }
 
 export function showWindowWhenReady(
   win: ReadyToShowWindow,
-  options: { showOnLoad: boolean },
+  options: { showOnLoad: boolean; showInactive?: boolean },
 ): void {
   let shown = false;
   const show = () => {
     if (shown || win.isDestroyed()) return;
     shown = true;
-    win.show();
+    if (options.showInactive && win.showInactive) win.showInactive();
+    else win.show();
   };
 
   win.once("ready-to-show", show);

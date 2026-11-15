@@ -10,7 +10,7 @@ export type BrowserWindowOpenDisposition =
 export type BrowserWindowOpenDecision =
   | { kind: "deny" }
   | { kind: "popup" }
-  | { kind: "workspace-tab"; url: string };
+  | { kind: "workspace-tab"; url: string; background?: true };
 
 const MAX_PENDING_WINDOW_OPEN_REQUESTS_PER_GUEST = 20;
 const POPUP_WINDOW_GEOMETRY_FEATURE_NAMES = new Set([
@@ -42,10 +42,15 @@ const NON_POPUP_WINDOW_FEATURE_NAMES = new Set([
   "popup",
 ]);
 
-export class PendingBrowserWindowOpenRequests {
-  private readonly urlsByWebContentsId = new Map<number, string[]>();
+export interface PendingBrowserWindowOpenRequest {
+  url: string;
+  background?: true;
+}
 
-  public add(webContentsId: number, url: string): void {
+export class PendingBrowserWindowOpenRequests {
+  private readonly urlsByWebContentsId = new Map<number, PendingBrowserWindowOpenRequest[]>();
+
+  public add(webContentsId: number, url: string, options?: { background?: boolean }): void {
     if (!isAllowedBrowserWebviewUrl(url)) {
       return;
     }
@@ -53,11 +58,11 @@ export class PendingBrowserWindowOpenRequests {
     if (urls.length >= MAX_PENDING_WINDOW_OPEN_REQUESTS_PER_GUEST) {
       return;
     }
-    urls.push(url);
+    urls.push({ url, ...(options?.background ? { background: true } : {}) });
     this.urlsByWebContentsId.set(webContentsId, urls);
   }
 
-  public take(webContentsId: number): string[] {
+  public take(webContentsId: number): PendingBrowserWindowOpenRequest[] {
     const urls = this.urlsByWebContentsId.get(webContentsId) ?? [];
     this.urlsByWebContentsId.delete(webContentsId);
     return urls;
@@ -107,7 +112,11 @@ export function decideBrowserWindowOpenRequest(input: {
     return { kind: "popup" };
   }
 
-  return { kind: "workspace-tab", url: input.url };
+  return {
+    kind: "workspace-tab",
+    url: input.url,
+    ...(input.disposition === "background-tab" ? { background: true } : {}),
+  };
 }
 
 function getBrowserWindowFeatureIntent(features: string): {

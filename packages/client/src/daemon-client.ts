@@ -42,6 +42,7 @@ import {
 } from "./connection/index.js";
 import { CreationClient } from "./creation/index.js";
 import type { NormalizedCreationSnapshot as CreationSnapshot } from "./workspace-descriptors.js";
+import type { ClientNotificationScope } from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { LocalSpeechModel } from "@getpaseo/protocol/speech/rpc-schemas";
@@ -2553,6 +2554,7 @@ export class DaemonClient {
     lastActivityAt: string;
     appVisible: boolean;
     appVisibilityChangedAt?: string;
+    notificationScope?: ClientNotificationScope;
   }): void {
     this.sendSessionMessage({
       type: "client_heartbeat",
@@ -2562,6 +2564,9 @@ export class DaemonClient {
       lastActivityAt: params.lastActivityAt,
       appVisible: params.appVisible,
       appVisibilityChangedAt: params.appVisibilityChangedAt,
+      ...(params.notificationScope !== undefined
+        ? { notificationScope: params.notificationScope }
+        : {}),
     });
   }
 

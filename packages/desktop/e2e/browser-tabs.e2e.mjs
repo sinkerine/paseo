@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { createServer } from "node:http";
 import net from "node:net";
@@ -23,6 +24,7 @@ import {
   runProjectIsolationRegression,
 } from "./project-isolation.electron.mjs";
 import { runSettingsMemoryRegression } from "./settings-memory.electron.mjs";
+import { runTabFocusMultiwindowRegression } from "./tab-focus-multiwindow.electron.mjs";
 
 import { seedPluginLinks, runPluginLinksRegression } from "./plugin-links.electron.mjs";
 
@@ -37,6 +39,48 @@ const workspaceIds = [
   "desktop-browser-evict-three",
 ];
 const timeoutMs = 90_000;
+const processOwner = randomUUID();
+const tabFocusOnly = process.env.PASEO_DESKTOP_TAB_FOCUS_ONLY === "1";
+if (tabFocusOnly && process.platform === "linux" && process.env.PASEO_TAB_FOCUS_XVFB !== "1") {
+  const displayOwner = randomUUID();
+  const artifactDir =
+    process.env.PASEO_DESKTOP_E2E_ARTIFACT_DIR ??
+    path.join(rootDir, "artifacts/tab-focus/electron");
+  fs.mkdirSync(artifactDir, { recursive: true });
+  const display = spawn(
+    "xvfb-run",
+    [
+      "-a",
+      "--server-args=-screen 0 1920x1080x24",
+      process.execPath,
+      fileURLToPath(import.meta.url),
+    ],
+    {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        PASEO_TAB_FOCUS_XVFB: "1",
+        PASEO_DESKTOP_E2E_ARTIFACT_DIR: artifactDir,
+        PASEO_DESKTOP_E2E_DISPLAY_OWNER: displayOwner,
+      },
+    },
+  );
+  let code;
+  try {
+    code = await new Promise((resolve, reject) => {
+      display.once("error", reject);
+      display.once("close", (exitCode) => resolve(exitCode ?? 1));
+    });
+  } finally {
+    await stopOwnedProcesses({
+      owner: displayOwner,
+      marker: "PASEO_DESKTOP_E2E_DISPLAY_OWNER",
+      children: [],
+      artifactPath: path.join(artifactDir, "display-teardown.json"),
+    });
+  }
+  process.exit(code);
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -145,28 +189,210 @@ function spawnLogged(name, command, args, options, logDir) {
   const log = fs.createWriteStream(logPath, { flags: "a" });
   const child = spawn(command, args, {
     ...options,
+    env: { ...process.env, ...options.env, PASEO_DESKTOP_E2E_PROCESS_OWNER: processOwner },
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
-  let openStreams = 2;
-  const closeLogStream = () => {
-    openStreams -= 1;
-    if (openStreams === 0) log.end();
-  };
   child.stdout.pipe(log, { end: false });
   child.stderr.pipe(log, { end: false });
-  child.stdout.once("end", closeLogStream);
-  child.stderr.once("end", closeLogStream);
-  return { child, logPath };
+  const closed = new Promise((resolve, reject) => {
+    log.once("error", reject);
+    log.once("finish", resolve);
+    child.once("error", reject);
+    child.once("close", () => log.end());
+  });
+  // Teardown awaits this promise even when a process fails during setup.
+  void closed.catch(() => undefined);
+  return { child, logPath, closed, name };
 }
 
-function stopProcess(child) {
-  if (!child?.pid || child.exitCode !== null) return;
+function ownedProcessInventory(owner, marker, homes = []) {
+  if (process.platform !== "linux") return [];
+  const owned = [];
+  for (const entry of fs.readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const directory = `/proc/${entry}`;
+      if (fs.statSync(directory).uid !== process.getuid()) continue;
+      const environment = fs.readFileSync(`${directory}/environ`, "utf8").split("\0");
+      const marked = environment.includes(`${marker}=${owner}`);
+      if (!marked && !homes.some((home) => environment.includes(`PASEO_HOME=${home}`))) continue;
+      const stat = fs.readFileSync(`${directory}/stat`, "utf8");
+      const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+      if (fields[0] === "Z") continue;
+      owned.push({
+        pid: Number(entry),
+        parentPid: Number(fields[1]),
+        processGroup: Number(fields[2]),
+        startTime: fields[19],
+        name: stat.slice(stat.indexOf("(") + 1, stat.lastIndexOf(")")),
+      });
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ESRCH" && error.code !== "EACCES") throw error;
+    }
+  }
+  return owned;
+}
+
+function signalOwnedProcess(record, signal) {
   try {
-    if (process.platform === "win32") child.kill("SIGTERM");
-    else process.kill(-child.pid, "SIGTERM");
-  } catch {
-    // The process may exit between the liveness check and signal delivery.
+    const stat = fs.readFileSync(`/proc/${record.pid}/stat`, "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    if (fields[19] === record.startTime) process.kill(record.pid, signal);
+  } catch (error) {
+    if (error.code !== "ENOENT" && error.code !== "ESRCH") throw error;
+  }
+}
+
+function signalManagedProcess(managed, signal) {
+  try {
+    if (process.platform === "win32") managed.child.kill(signal);
+    else process.kill(-managed.child.pid, signal);
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
+  }
+}
+
+function signalUnclosedManagedProcesses(children, closed, signal) {
+  for (const managed of children.toReversed()) {
+    if (!closed.has(managed)) signalManagedProcess(managed, signal);
+  }
+}
+
+async function stopOwnedProcesses({
+  owner,
+  marker = "PASEO_DESKTOP_E2E_PROCESS_OWNER",
+  children,
+  homes = [],
+  artifactPath,
+  useProcInventory = process.platform === "linux",
+}) {
+  const inventory = () => (useProcInventory ? ownedProcessInventory(owner, marker, homes) : []);
+  const before = inventory();
+  const stages = [];
+  const closed = new Set();
+  for (const managed of children)
+    void managed.closed.then(
+      () => closed.add(managed),
+      () => closed.add(managed),
+    );
+  // Allow already settled close promises to remove handles whose groups can be gone.
+  await Promise.resolve();
+  signalUnclosedManagedProcesses(children, closed, "SIGTERM");
+  // Detached CLI launches and terminal workers need ownership-based cleanup even after reparenting.
+  for (const record of before) signalOwnedProcess(record, "SIGTERM");
+  let remaining = before;
+  for (const [signal, budgetMs] of [
+    ["SIGTERM", 5_000],
+    ["SIGKILL", 5_000],
+  ]) {
+    const started = Date.now();
+    const deadline = started + budgetMs;
+    while (Date.now() < deadline) {
+      remaining = inventory();
+      if (remaining.length === 0 && (useProcInventory || closed.size === children.length)) break;
+      if (signal === "SIGKILL") {
+        for (const record of remaining) signalOwnedProcess(record, signal);
+        if (!useProcInventory) signalUnclosedManagedProcesses(children, closed, signal);
+      }
+      await delay(50);
+    }
+    stages.push({ signal, elapsedMs: Date.now() - started, remaining });
+    if (remaining.length === 0 && (useProcInventory || closed.size === children.length)) break;
+  }
+  const after = inventory();
+  writeJson(artifactPath, { owner, marker, before, stages, after });
+  assert(after.length === 0, `Owned processes survived teardown: ${JSON.stringify(after)}`);
+  let timeout;
+  try {
+    await Promise.race([
+      Promise.all(children.map((managed) => managed.closed)),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Owned process log streams did not close")),
+          10_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+  writeJson(artifactPath, { owner, marker, before, stages, after, logsClosed: true });
+}
+
+async function verifyAwaitedTeardown(runtimeDir, artifactDir) {
+  if (process.platform !== "linux") return;
+  const recordPath = path.join(runtimeDir, "teardown-control.json");
+  const grandchild = `process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000);`;
+  const source = `const { spawn } = require('node:child_process'); const fs = require('node:fs'); const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: ['ignore', 'pipe', 'inherit'] }); child.stdout.once('data', () => fs.writeFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ parent: process.pid, child: child.pid }))); process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);`;
+  const fixture = spawnLogged(
+    "teardown-control",
+    process.execPath,
+    ["-e", source],
+    { cwd: runtimeDir, env: {} },
+    artifactDir,
+  );
+  try {
+    await expect.poll(() => fs.existsSync(recordPath)).toBe(true);
+    const ids = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    process.kill(-fixture.child.pid, "SIGTERM");
+    await expect.poll(() => fixture.child.exitCode).toBe(0);
+    const survivors = ownedProcessInventory(processOwner, "PASEO_DESKTOP_E2E_PROCESS_OWNER");
+    assert(
+      survivors.some((record) => record.pid === ids.child),
+      "Negative control must detect the live descendant after its leader exits",
+    );
+    writeJson(path.join(artifactDir, "teardown-negative-control.json"), { ids, survivors });
+  } finally {
+    await stopOwnedProcesses({
+      owner: processOwner,
+      children: [fixture],
+      artifactPath: path.join(artifactDir, "teardown-control-result.json"),
+    });
+  }
+}
+
+async function verifyProcessGroupTeardown(runtimeDir, artifactDir) {
+  if (process.platform === "win32") return;
+  const recordPath = path.join(runtimeDir, "non-proc-teardown-control.json");
+  const grandchild = `process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000);`;
+  const source = `const { spawn } = require('node:child_process'); const fs = require('node:fs'); const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: ['ignore', 'pipe', 'inherit'] }); child.stdout.once('data', () => fs.writeFileSync(${JSON.stringify(recordPath)}, JSON.stringify({ parent: process.pid, child: child.pid }))); process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);`;
+  const fixture = spawnLogged(
+    "non-proc-teardown-control",
+    process.execPath,
+    ["-e", source],
+    { cwd: runtimeDir, env: {} },
+    artifactDir,
+  );
+  try {
+    await expect.poll(() => fs.existsSync(recordPath)).toBe(true);
+    await stopOwnedProcesses({
+      owner: processOwner,
+      children: [fixture],
+      useProcInventory: false,
+      artifactPath: path.join(artifactDir, "non-proc-teardown-control-result.json"),
+    });
+    assert(
+      fixture.child.exitCode === 0,
+      "Detached parent must exit gracefully before escalation closes the inherited log pipe",
+    );
+    const ids = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+    const survivors = ownedProcessInventory(processOwner, "PASEO_DESKTOP_E2E_PROCESS_OWNER");
+    assert(
+      !survivors.some((record) => record.pid === ids.child),
+      "Process-group escalation must terminate the grandchild without /proc assistance",
+    );
+    writeJson(path.join(artifactDir, "non-proc-teardown-oracle.json"), {
+      ids,
+      survivors,
+      logsClosed: true,
+    });
+  } finally {
+    await stopOwnedProcesses({
+      owner: processOwner,
+      children: [fixture],
+      artifactPath: path.join(artifactDir, "non-proc-teardown-control-safety-cleanup.json"),
+    });
   }
 }
 
@@ -1232,8 +1458,54 @@ async function runRegression({
   };
 }
 
+async function startWindowManager({ runtimeDir, artifactDir, children }) {
+  const windowManager = process.env.PASEO_DESKTOP_E2E_WINDOW_MANAGER;
+  if (windowManager) {
+    assert(
+      tabFocusOnly && process.env.PASEO_TAB_FOCUS_XVFB === "1",
+      "Window manager must run only on this harness's isolated Xvfb display",
+    );
+    fs.accessSync(windowManager, fs.constants.X_OK);
+    const wmHome = path.join(runtimeDir, "window-manager-home");
+    fs.mkdirSync(wmHome, { recursive: true });
+    const manager = spawnLogged(
+      "window-manager",
+      windowManager,
+      ["--sm-disable"],
+      {
+        cwd: runtimeDir,
+        env: { ...process.env, HOME: wmHome, XDG_CONFIG_HOME: path.join(wmHome, ".config") },
+      },
+      artifactDir,
+    );
+    children.push(manager);
+    const deadline = Date.now() + timeoutMs;
+    let readiness = "";
+    while (Date.now() < deadline) {
+      assert(manager.child.exitCode === null, `Window manager exited; see ${manager.logPath}`);
+      readiness = execFileSync("xprop", ["-root", "_NET_SUPPORTING_WM_CHECK"], {
+        encoding: "utf8",
+      });
+      if (/window id # 0x[1-9a-f][0-9a-f]*/i.test(readiness)) break;
+      await delay(100);
+    }
+    assert(
+      /window id # 0x[1-9a-f][0-9a-f]*/i.test(readiness),
+      "Window manager did not publish readiness",
+    );
+    writeJson(path.join(artifactDir, "window-manager-identity.json"), {
+      executable: fs.realpathSync(windowManager),
+      sha256: createHash("sha256").update(fs.readFileSync(windowManager)).digest("hex"),
+      pid: manager.child.pid,
+      display: process.env.DISPLAY,
+      readiness,
+    });
+  }
+}
+
 async function main() {
   const artifactDir =
+    process.env.PASEO_DESKTOP_E2E_ARTIFACT_DIR ??
     process.env.PASEO_DESKTOP_BROWSER_E2E_ARTIFACT_DIR ??
     fs.mkdtempSync(path.join(os.tmpdir(), "paseo-desktop-browser-e2e-artifacts-"));
   const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "paseo-desktop-browser-e2e-"));
@@ -1265,6 +1537,11 @@ async function main() {
   let client = null;
 
   try {
+    if (tabFocusOnly) {
+      await verifyAwaitedTeardown(runtimeDir, artifactDir);
+      await verifyProcessGroupTeardown(runtimeDir, artifactDir);
+    }
+    await startWindowManager({ runtimeDir, artifactDir, children });
     // Observe the real Electron shell handoff without launching a user's browser.
     const openerDirectory = path.join(runtimeDir, "url-handler");
     const externalOpenLog = path.join(artifactDir, "external-opens.txt");
@@ -1277,6 +1554,7 @@ async function main() {
     );
     const commonEnv = {
       ...process.env,
+      PASEO_DESKTOP_E2E_PROCESS_OWNER: processOwner,
       PATH: `${openerDirectory}${path.delimiter}${process.env.PATH}`,
       PASEO_TEST_EXTERNAL_OPEN_LOG: externalOpenLog,
       PASEO_HOME: paseoHome,
@@ -1296,7 +1574,7 @@ async function main() {
       { cwd: rootDir, env: { ...commonEnv, PASEO_NODE_ENV: "development" } },
       artifactDir,
     );
-    children.push(daemon.child);
+    children.push(daemon);
     await waitForPort(daemonPort, "daemon", daemon);
 
     const remoteDaemon = spawnLogged(
@@ -1315,7 +1593,7 @@ async function main() {
       },
       artifactDir,
     );
-    children.push(remoteDaemon.child);
+    children.push(remoteDaemon);
     await waitForPort(remotePort, "remote daemon", remoteDaemon);
 
     const desktopArgs = [
@@ -1329,14 +1607,46 @@ async function main() {
       process.platform === "linux"
         ? ["-a", "--server-args=-screen 0 1280x800x24", ...desktopArgs]
         : desktopArgs;
+    if (tabFocusOnly) {
+      const metro = spawnLogged(
+        "metro",
+        process.execPath,
+        [path.join(rootDir, "node_modules/expo/bin/cli"), "start", "--port", String(expoPort)],
+        {
+          cwd: path.join(rootDir, "packages/app"),
+          env: {
+            ...commonEnv,
+            EXPO_UNSTABLE_HEADLESS: "1",
+            EXPO_NO_WEB_SETUP: "1",
+            BROWSER: "none",
+            PASEO_WEB_PLATFORM: "electron",
+          },
+        },
+        artifactDir,
+      );
+      children.push(metro);
+      const { waitForMetro } = await import("../scripts/dev-runner-readiness.mjs");
+      await waitForMetro(`http://localhost:${expoPort}`);
+    }
+    const { createRequire } = await import("node:module");
+    const electronBinary = tabFocusOnly ? createRequire(import.meta.url)("electron") : null;
     const desktop = spawnLogged(
       "desktop",
-      desktopCommand,
-      desktopCommandArgs,
+      tabFocusOnly ? electronBinary : desktopCommand,
+      tabFocusOnly
+        ? [
+            `--inspect=127.0.0.1:${inspectorPort}`,
+            `--remote-debugging-port=${cdpPort}`,
+            "--no-sandbox",
+            "--ozone-platform=x11",
+            desktopDir,
+          ]
+        : desktopCommandArgs,
       {
         cwd: rootDir,
         env: {
           ...commonEnv,
+          WAYLAND_DISPLAY: tabFocusOnly ? "" : process.env.WAYLAND_DISPLAY,
           EXPO_UNSTABLE_HEADLESS: "1",
           EXPO_PORT: String(expoPort),
           EXPO_DEV_URL: `http://localhost:${expoPort}`,
@@ -1347,7 +1657,7 @@ async function main() {
       },
       artifactDir,
     );
-    children.push(desktop.child);
+    children.push(desktop);
     await waitForPort(cdpPort, "Electron CDP", desktop);
 
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
@@ -1355,6 +1665,30 @@ async function main() {
     await hideDeveloperToasts(page);
     const status = await waitForDesktopStatus(page);
     await settleDesktopStartup(page);
+
+    if (process.env.PASEO_DESKTOP_TAB_FOCUS_ONLY === "1") {
+      const report = await runTabFocusMultiwindowRegression({
+        page,
+        browser,
+        daemonPort,
+        expoPort,
+        inspectorPort,
+        cdpPort,
+        serverId: status.serverId,
+        workspaceIds,
+        workspaceRoot,
+        userData,
+        runtimeDir,
+        targetUrl: target.url,
+        artifactDir,
+        rootDir,
+        commonEnv,
+        evaluateMain: (expression) => evaluateDesktopWindow(inspectorPort, expression),
+        stopElectron: () => desktop.child.kill("SIGTERM"),
+      });
+      writeJson(path.join(artifactDir, "result.json"), report);
+      return;
+    }
 
     const checkPluginLinks = () =>
       runPluginLinksRegression({
@@ -1447,9 +1781,13 @@ async function main() {
   } finally {
     await client?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
-    for (const child of children.toReversed()) stopProcess(child);
     await closeServer(target.server);
-    await delay(1_000);
+    await stopOwnedProcesses({
+      owner: processOwner,
+      children,
+      homes: [paseoHome, remoteHome],
+      artifactPath: path.join(artifactDir, "process-teardown.json"),
+    });
     try {
       fs.rmSync(runtimeDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     } catch (error) {

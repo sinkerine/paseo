@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { resolveCallerAgentId } from "../../utils/caller-agent.js";
 import { connectToDaemon } from "../../utils/client.js";
 import type { AgentDeepLinkTarget } from "@getpaseo/protocol/agent-deep-link";
 import { openDesktopWithAgent } from "../open.js";
@@ -24,11 +25,28 @@ const openAgentSchema: OutputSchema<OpenAgentResult> = {
   ],
 };
 
+export interface OpenAgentCommandOptions extends CommandOptions {
+  server?: string;
+  focus?: boolean;
+}
+
+export function resolveOpenFocusMode(input: {
+  explicitFocus: boolean | undefined;
+  hasCallerAgent: boolean;
+}): boolean {
+  return input.explicitFocus !== undefined ? input.explicitFocus : !input.hasCallerAgent;
+}
+
 export function addOpenOptions(command: Command): Command {
   return command
     .description("Open an existing agent in Paseo Desktop")
     .argument("<agent-id>", "Existing agent ID")
-    .option("--server <server-id>", "Server ID (defaults to the local daemon)");
+    .option("--server <server-id>", "Server ID (defaults to the local daemon)")
+    .option("--focus", "Focus Paseo Desktop and switch to the agent tab")
+    .option(
+      "--no-focus",
+      "Open the agent tab without focusing a window or switching the active tab",
+    );
 }
 
 function toOpenError(err: unknown): CommandError {
@@ -41,11 +59,16 @@ function toOpenError(err: unknown): CommandError {
 
 async function resolveAgentTarget(
   agentId: string,
-  options: CommandOptions,
+  options: OpenAgentCommandOptions,
 ): Promise<AgentDeepLinkTarget> {
+  const env = process.env;
+  const withFocus = (target: AgentDeepLinkTarget, hasCallerAgent: boolean): AgentDeepLinkTarget =>
+    resolveOpenFocusMode({ explicitFocus: options.focus, hasCallerAgent })
+      ? target
+      : { ...target, focus: false };
   const explicitServerId = typeof options.server === "string" ? options.server.trim() : "";
   if (explicitServerId) {
-    return { serverId: explicitServerId, agentId };
+    return withFocus({ serverId: explicitServerId, agentId }, Boolean(env.PASEO_AGENT_ID?.trim()));
   }
 
   const client = await connectToDaemon({ target: options.daemonTarget });
@@ -59,7 +82,10 @@ async function resolveAgentTarget(
       throw error;
     }
 
-    const fetchResult = await client.fetchAgent({ agentId });
+    const [fetchResult, callerAgentId] = await Promise.all([
+      client.fetchAgent({ agentId }),
+      resolveCallerAgentId(client, env),
+    ]);
     if (!fetchResult) {
       const error: CommandError = {
         code: "AGENT_NOT_FOUND",
@@ -68,7 +94,7 @@ async function resolveAgentTarget(
       };
       throw error;
     }
-    return { serverId, agentId: fetchResult.agent.id };
+    return withFocus({ serverId, agentId: fetchResult.agent.id }, Boolean(callerAgentId));
   } catch (err) {
     throw toOpenError(err);
   } finally {
@@ -78,7 +104,7 @@ async function resolveAgentTarget(
 
 export async function runOpenCommand(
   agentIdArg: string,
-  options: CommandOptions,
+  options: OpenAgentCommandOptions,
   _command: Command,
 ): Promise<SingleResult<OpenAgentResult>> {
   const agentId = agentIdArg.trim();
@@ -95,7 +121,7 @@ export async function runOpenCommand(
 
   return {
     type: "single",
-    data: { ...target, status: "opened" },
+    data: { agentId: target.agentId, serverId: target.serverId, status: "opened" },
     schema: openAgentSchema,
   };
 }

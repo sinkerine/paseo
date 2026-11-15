@@ -40,6 +40,10 @@ export async function startBtwHttpStub() {
       const id = `btw-http-${++requestNumber}`;
       const btwAnswer = question.includes("AFTER_B") ? "AFTER_B" : "CONTEXT_A";
       let text = question.includes("HOLD_PARENT") ? "PARENT_B_FINISHED" : "PARENT_A_FINISHED";
+      if (!isBtw && question.includes("RICH_PARENT")) {
+        text =
+          "PARENT_RICH_PROSE\n\n```ts\nconst answer = 42;\n```\n\n```txt\nGUTTER_LINE_ONE\nGUTTER_LINE_TWO\n```\n\n| Metric | Value |\n| --- | --- |\n| Latency | 42ms |";
+      }
       if (isBtw) text = `BTW_REPLY ${btwAnswer}`;
       let marker: "btw" | "parent" | null = null;
       if (isBtw && question.includes("HOLD_BTW")) marker = "btw";

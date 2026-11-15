@@ -5,6 +5,7 @@ import { observeOpenWorkspaceAgentIds } from "@/stores/workspace-layout-store";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useClientActivity } from "@/hooks/use-client-activity";
+import { useHostNotificationScope } from "@/hooks/use-host-notification-scope";
 import { useAppVisible } from "@/hooks/use-app-visible";
 import { startPushNotifications } from "@/push-notifications";
 import {
@@ -246,10 +247,12 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
   }, [isAppVisible]);
 
   // Client activity tracking (heartbeat, push token registration)
+  const notificationScope = useHostNotificationScope(serverId);
   useClientActivity({
     client,
     focusedAgentId,
     focusedTerminalId,
+    notificationScope,
   });
   useEffect(() => startPushNotifications({ client, serverId }), [client, serverId]);
 

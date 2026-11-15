@@ -340,7 +340,7 @@ function resolveConversationAgentId(target: ConversationTarget): string | undefi
  */
 export function AgentConversationPanel() {
   const { serverId, workspaceId, target, openFileInWorkspace } = usePaneContext();
-  const { isInteractive } = usePaneFocus();
+  const { isInteractive, focusPane } = usePaneFocus();
   invariant(
     target.kind === "agent" || target.kind === "draft",
     "AgentConversationPanel requires an agent or draft target",
@@ -353,6 +353,7 @@ export function AgentConversationPanel() {
         workspaceId={workspaceId}
         target={target}
         isPaneFocused={isInteractive}
+        onFocusPane={focusPane}
         onOpenWorkspaceFile={openFileInWorkspace}
       />
     </RetainedChatContent>
@@ -435,12 +436,14 @@ function AgentPanelContent({
   workspaceId,
   target,
   isPaneFocused,
+  onFocusPane,
   onOpenWorkspaceFile,
 }: {
   serverId: string;
   workspaceId: string;
   target: ConversationTarget;
   isPaneFocused: boolean;
+  onFocusPane: () => void;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
@@ -491,6 +494,7 @@ function AgentPanelContent({
       workspaceId={workspaceId}
       target={target}
       isPaneFocused={isPaneFocused}
+      onFocusPane={onFocusPane}
       client={runtimeClient}
       isConnected={runtimeIsConnected}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -503,6 +507,7 @@ function AgentPanelBody({
   workspaceId,
   target,
   isPaneFocused,
+  onFocusPane,
   client,
   isConnected,
   onOpenWorkspaceFile,
@@ -511,6 +516,7 @@ function AgentPanelBody({
   workspaceId: string;
   target: ConversationTarget;
   isPaneFocused: boolean;
+  onFocusPane: () => void;
   client: ReturnType<typeof useHostRuntimeClient>;
   isConnected: boolean;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
@@ -647,6 +653,7 @@ function AgentPanelBody({
       workspaceId={workspaceId}
       target={target}
       isPaneFocused={isPaneFocused}
+      onFocusPane={onFocusPane}
       client={client}
       isConnected={isConnected}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -659,6 +666,7 @@ function ChatAgentContent({
   workspaceId,
   target,
   isPaneFocused,
+  onFocusPane,
   client,
   isConnected,
   onOpenWorkspaceFile,
@@ -667,6 +675,7 @@ function ChatAgentContent({
   workspaceId: string;
   target: ConversationTarget;
   isPaneFocused: boolean;
+  onFocusPane: () => void;
   client: ReturnType<typeof useHostRuntimeClient>;
   isConnected: boolean;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
@@ -1008,6 +1017,7 @@ function ChatAgentContent({
       agentId={agentId ?? tabId}
       draft={draft}
       isPaneFocused={isPaneFocused}
+      onFocusPane={onFocusPane}
       isArchivingCurrentAgent={isArchivingCurrentAgent}
       agentState={agentState}
       effectiveAgent={effectiveAgent}
@@ -1040,6 +1050,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   agentId,
   draft,
   isPaneFocused,
+  onFocusPane,
   isArchivingCurrentAgent,
   agentState,
   effectiveAgent,
@@ -1069,6 +1080,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   agentId: string;
   draft: DraftConversation | null;
   isPaneFocused: boolean;
+  onFocusPane: () => void;
   isArchivingCurrentAgent: boolean;
   agentState: ChatAgentSelectedState;
   effectiveAgent: AgentScreenAgent | null;
@@ -1187,8 +1199,10 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     onAttentionInputFocus();
     return false;
   }, [onAttentionInputFocus]);
+  const streamContentRef = useRef<View>(null);
   const streamContent = (
     <View
+      ref={streamContentRef}
       style={animatedStaticStyles.content}
       onStartShouldSetResponderCapture={handleAttentionInteraction}
     >
@@ -1216,6 +1230,8 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       {hasActiveComposer && !draft ? (
         <>
           <BtwWindow
+            selectionTarget={streamContentRef}
+            onFocusPane={onFocusPane}
             serverId={serverId}
             agentId={agentId}
             isPaneFocused={isPaneFocused}

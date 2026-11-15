@@ -63,6 +63,8 @@ export interface WorkflowTerminalNotice {
   asyncDir: string;
   status: "completed" | "failed" | "canceled";
   children: WorkflowChildRunEntry[];
+  /** Only explicit auto or manual resume lines establish a possible continuation. */
+  resumedRunId?: string;
 }
 
 function correlationLine(lines: string[], pattern: RegExp): string | undefined {
@@ -87,5 +89,6 @@ export function parseWorkflowTerminalNotice(text: string): WorkflowTerminalNotic
     if (!match) return undefined;
     children.push({ childKey: match[1], childRunId: match[2], status: match[3] });
   }
-  return { workflowRunId, asyncDir, status, children };
+  const resumedRunId = correlationLine(lines, /^(?:Auto-resumed as|Resumed as) (\S+)\.$/);
+  return { workflowRunId, asyncDir, status, children, ...(resumedRunId ? { resumedRunId } : {}) };
 }

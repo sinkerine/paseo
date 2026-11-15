@@ -720,6 +720,7 @@ interface ClientActivity {
   lastActivityAt: Date;
   appVisible: boolean;
   appVisibilityChangedAt: Date;
+  notificationProjectIds: ReadonlySet<string> | null;
 }
 
 export class Session {
@@ -5337,6 +5338,7 @@ export class Session {
     lastActivityAt: string;
     appVisible: boolean;
     appVisibilityChangedAt?: string;
+    notificationScope?: { projectIds: string[] };
   }): void {
     const focusedTerminalId = msg.focusedTerminalId?.trim() || null;
     const appVisibilityChangedAt = msg.appVisibilityChangedAt
@@ -5350,6 +5352,9 @@ export class Session {
       lastActivityAt: new Date(msg.lastActivityAt),
       appVisible: msg.appVisible,
       appVisibilityChangedAt,
+      notificationProjectIds: msg.notificationScope
+        ? new Set(msg.notificationScope.projectIds)
+        : null,
     };
     if (msg.appVisible && focusedTerminalId) {
       void this.clearFocusedTerminalAttention(focusedTerminalId);

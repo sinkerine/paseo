@@ -16,6 +16,8 @@ import {
   selectWorkspaceKeys,
   selectWorkspaceStatusesForBadges,
   selectWorkspaceStructureProjects,
+  selectProjectViewPlacements,
+  type SessionsSnapshot,
   workspaceEqualityFns,
   type SidebarOrderSnapshot,
 } from "./selectors";
@@ -666,4 +668,62 @@ it("applies manual order only when requested without mutating the automatic base
     "h:b",
     "h:a",
   ]);
+});
+
+describe("selectProjectViewPlacements", () => {
+  it("groups ordered host-local ids and retains the result across workspace churn", () => {
+    const a = projectDescriptorFromTestWorkspace(
+      createWorkspace({ id: "wa", projectId: "a1", projectDisplayName: "Alpha" }),
+    );
+    const b = { ...a, projectId: "b1", projectKey: "shared" };
+    a.projectKey = "shared";
+    const z = projectDescriptorFromTestWorkspace(
+      createWorkspace({ id: "wz", projectId: "z", projectDisplayName: "Zulu" }),
+    );
+    const snapshot: SessionsSnapshot = {
+      sessions: {
+        a: {
+          workspaces: new Map(),
+          projects: new Map([
+            ["a1", a],
+            ["z", z],
+          ]),
+        },
+        b: { workspaces: new Map(), projects: new Map([["b1", b]]) },
+      },
+    };
+    const serverIds = ["b", "a"];
+    const placements = selectProjectViewPlacements(snapshot, serverIds);
+    expect(placements).toEqual([
+      {
+        viewKey: "shared",
+        hosts: [
+          { serverId: "b", projectId: "b1" },
+          { serverId: "a", projectId: "a1" },
+        ],
+      },
+      { viewKey: "z", hosts: [{ serverId: "a", projectId: "z" }] },
+    ]);
+    expect(selectProjectViewPlacements(snapshot, serverIds)).toBe(placements);
+    const changedWorkspaces: SessionsSnapshot = {
+      sessions: {
+        ...snapshot.sessions,
+        a: {
+          ...snapshot.sessions.a,
+          workspaces: new Map([["unrelated", createWorkspace({ id: "unrelated" })]]),
+        },
+      },
+    };
+    expect(selectProjectViewPlacements(changedWorkspaces, serverIds)).toBe(placements);
+    const renamed: SessionsSnapshot = {
+      sessions: {
+        ...snapshot.sessions,
+        a: { ...snapshot.sessions.a, projects: new Map([["a1", { ...a, projectKey: "new" }]]) },
+      },
+    };
+    expect(selectProjectViewPlacements(renamed, serverIds)).not.toBe(placements);
+    expect(
+      selectProjectViewPlacements(renamed, serverIds).map((project) => project.viewKey),
+    ).toEqual(["new", "shared"]);
+  });
 });

@@ -163,6 +163,18 @@ fixture providers, and cleanup. It may include serial companion unit checks.
 }
 ```
 
+The desktop browser-tabs harness also accepts the `electron` declaration for
+its build, two real windows, isolated display, and optional window manager.
+Keep its ports and state separate from Playwright and serialize both stacks
+with builds when the recipe shares generated outputs.
+
+```qex-e2e electron
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "1h"
+}
+```
+
 `android-isolated` covers the reduced-memory Android recipe below when one job
 runs its phases serially: provisioning, x86_64 debug compilation, then the owned
 emulator journey. Its claim is the largest phase estimate, not a measured peak.

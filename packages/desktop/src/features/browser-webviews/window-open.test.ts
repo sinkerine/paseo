@@ -162,7 +162,10 @@ describe("pending browser window-open requests", () => {
     pending.add(101, "file:///etc/passwd");
     pending.add(101, "https://example.com/second");
 
-    expect(pending.take(101)).toEqual(["https://example.com/first", "https://example.com/second"]);
+    expect(pending.take(101)).toEqual([
+      { url: "https://example.com/first" },
+      { url: "https://example.com/second" },
+    ]);
     expect(pending.take(101)).toEqual([]);
   });
 
@@ -173,4 +176,22 @@ describe("pending browser window-open requests", () => {
 
     expect(pending.take(202)).toEqual([]);
   });
+});
+
+it("preserves background disposition through early guest registration", () => {
+  const decision = decideBrowserWindowOpenRequest({
+    url: "https://example.com/bg",
+    disposition: "background-tab",
+    frameName: "_blank",
+    features: "",
+    hasPostBody: false,
+  });
+  expect(decision).toEqual({
+    kind: "workspace-tab",
+    url: "https://example.com/bg",
+    background: true,
+  });
+  const pending = new PendingBrowserWindowOpenRequests();
+  pending.add(7, "https://example.com/bg", { background: true });
+  expect(pending.take(7)).toEqual([{ url: "https://example.com/bg", background: true }]);
 });
