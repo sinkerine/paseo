@@ -6,11 +6,13 @@ import { z } from "zod";
 import type { ProviderSubagentStatus } from "../../../../provider-subagents/store.js";
 import type { PiChildSessionFile, PiExtensionCustomMapping } from "../contract.js";
 import { isOwnerAlive } from "./async-runs.js";
+import type { PiWorkflowStart } from "./runtime-bridge.js";
 import {
   customMessageText,
   parseWorkflowChildNotice,
   parseWorkflowTerminalNotice,
   type PiCustomMessage,
+  type WorkflowTerminalNotice,
 } from "./notice.js";
 
 export const WorkflowLaunchDetails = z
@@ -52,6 +54,17 @@ const WorkflowStatus = z
     pid: z.number().int().positive().optional(),
     steps: z.array(WorkflowStep),
     workflowGraph: WorkflowGraph.optional(),
+  })
+  .passthrough();
+
+const ResumedWorkflowStatus = z
+  .object({
+    sessionId: z.string(),
+    workflow: z
+      .object({
+        resumeOrigin: z.object({ sourceRunId: z.string() }).passthrough(),
+      })
+      .passthrough(),
   })
   .passthrough();
 
@@ -116,6 +129,8 @@ export interface PiWorkflowTrackerOptions {
 }
 export interface PiWorkflowTracker {
   launch(details: z.infer<typeof WorkflowLaunchDetails>, callId?: string): PiExtensionCustomMapping;
+  /** Admits a named run without replacing an existing launch's polling owner. */
+  adopt(start: PiWorkflowStart): PiExtensionCustomMapping | undefined;
   recoverMission(mission: unknown): PiExtensionCustomMapping | undefined;
   mapNotice(message: PiCustomMessage): PiExtensionCustomMapping | undefined;
   poll(): PiExtensionCustomMapping | undefined;
@@ -395,7 +410,55 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
     return { subagents, childSessions: observation.childSessions };
   }
 
+  function adopt({ runId, asyncDir }: PiWorkflowStart): PiExtensionCustomMapping | undefined {
+    if (basename(asyncDir) !== runId || workflows.get(runId)?.asyncDir) return undefined;
+    const run = remember(runId);
+    run.asyncDir = asyncDir;
+    run.polling = true;
+    const status = readStatus(runId, asyncDir);
+    if (!status) {
+      run.status = "running";
+      return {
+        subagents: [
+          {
+            type: "upsert",
+            id: workflowSubagentId(runId),
+            hasTimeline: false,
+            title: "Workflow",
+            status: "running",
+          },
+        ],
+      };
+    }
+    const observation = applyStatus(runId, run, status);
+    applyOwnerLiveness(run, status, observation.childStatuses);
+    return render(
+      runId,
+      run,
+      observation,
+      run.ownerDead ? "canceled" : statusPolicy.workflow.get(status.state),
+    );
+  }
+
+  function adoptResumed(
+    notice: WorkflowTerminalNotice,
+    oldStatus: z.infer<typeof WorkflowStatus> | undefined,
+  ): PiExtensionCustomMapping | undefined {
+    if (!notice.resumedRunId || !oldStatus) return undefined;
+    const asyncDir = join(dirname(notice.asyncDir), notice.resumedRunId);
+    const status = readStatus(notice.resumedRunId, asyncDir);
+    const lineage = ResumedWorkflowStatus.safeParse(status);
+    if (
+      !lineage.success ||
+      lineage.data.workflow.resumeOrigin.sourceRunId !== notice.workflowRunId ||
+      lineage.data.sessionId !== oldStatus.sessionId
+    )
+      return undefined;
+    return adopt({ runId: notice.resumedRunId, asyncDir });
+  }
+
   return {
+    adopt,
     launch(details, callId) {
       const status = readStatus(details.runId, details.asyncDir);
       if (status?.toolCallId && callId && status.toolCallId !== callId)
@@ -495,12 +558,17 @@ export function createPiWorkflowTracker(options: PiWorkflowTrackerOptions): PiWo
       );
       if (status) applyOwnerLiveness(run, status, observation.childStatuses);
       run.polling = !run.ownerDead && unsettled;
-      return render(
+      const mapping = render(
         notice.workflowRunId,
         run,
         observation,
         run.ownerDead ? "canceled" : notice.status,
       );
+      const resumed = adoptResumed(notice, status);
+      return {
+        subagents: [...mapping.subagents, ...(resumed?.subagents ?? [])],
+        childSessions: [...(mapping.childSessions ?? []), ...(resumed?.childSessions ?? [])],
+      };
     },
     poll() {
       const subagents: PiExtensionCustomMapping["subagents"] = [];

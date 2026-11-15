@@ -3,6 +3,7 @@ import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from ".
 import { matchesAsyncRun, projectRun, readAsyncStatus, type AsyncRun } from "./async-runs.js";
 import { customMessageText, noticeStatus } from "./notice.js";
 import { createPiWorkflowTracker, WorkflowLaunchDetails } from "./workflow.js";
+import { parseWorkflowStartNotification, piSubagentsRuntimeBridge } from "./runtime-bridge.js";
 
 const Args = z
   .object({
@@ -40,6 +41,7 @@ const MissionResult = z.object({
 
 export const piSubagents: PiExtension = {
   id: "pi-subagents",
+  runtimeBridge: piSubagentsRuntimeBridge,
   createSession: () => {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
@@ -204,6 +206,10 @@ export const piSubagents: PiExtension = {
       return mapResume(call) ?? mapSpawn(call);
     };
     return {
+      mapRuntimeNotification(message) {
+        const start = parseWorkflowStartNotification(message);
+        return start ? (workflows.adopt(start) ?? { subagents: [] }) : undefined;
+      },
       mapToolCall(call) {
         const mapped = mapCall(call);
         if (call.toolName !== "subagent" || call.status !== "completed") return mapped;
