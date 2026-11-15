@@ -979,7 +979,8 @@ function setupSingleInstanceLock(): boolean {
     log.info("[open-project] second-instance commandLine:", commandLine);
     const openProjectPath = parseOpenProjectPathFromArgv({
       argv: commandLine,
-      isDefaultApp: false,
+      // Unpackaged Electron includes its app directory in second-instance argv too.
+      isDefaultApp: process.defaultApp,
     });
     log.info("[open-project] second-instance openProjectPath:", openProjectPath);
     // Relaunching the app (CLI `paseo [path]`, double-click, etc.) opens a new

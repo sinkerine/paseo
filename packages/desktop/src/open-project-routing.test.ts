@@ -1,10 +1,46 @@
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseOpenProjectPathFromArgv } from "./open-project-routing";
 
 describe("open-project-routing", () => {
+  const launchDirectories: string[] = [];
+
+  afterEach(() => {
+    for (const directory of launchDirectories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([null, "positional", "flagged"])(
+    "skips the unpackaged Electron app directory with a %s project argument",
+    (projectArgument) => {
+      const root = mkdtempSync(path.join(tmpdir(), "paseo-electron-launch-"));
+      launchDirectories.push(root);
+      const appDirectory = path.join(root, "electron-app");
+      const projectDirectory = path.join(root, "my-project");
+      mkdirSync(appDirectory);
+      mkdirSync(projectDirectory);
+      const argv = [
+        "/nix/store/electron/bin/electron",
+        appDirectory,
+        "--no-sandbox",
+        "--class=paseo-desktop",
+      ];
+      if (projectArgument === "flagged") {
+        argv.push("--open-project");
+      }
+      if (projectArgument !== null) {
+        argv.push(projectDirectory);
+      }
+
+      expect(parseOpenProjectPathFromArgv({ argv, isDefaultApp: true })).toBe(
+        projectArgument === null ? null : projectDirectory,
+      );
+    },
+  );
+
   it("returns a bare absolute path argument", () => {
     const projectPath = mkdtempSync(path.join(tmpdir(), "paseo-open-project-"));
 
