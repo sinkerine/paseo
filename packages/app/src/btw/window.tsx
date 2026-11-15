@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState, useReducer } from "react";
+import type { View } from "react-native";
+import { useBtwSelectionTarget } from "./selection-target";
+import { useCallback, useEffect, useRef, useState, useReducer, type RefObject } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
@@ -26,6 +28,8 @@ export function BtwWindow({
   serverId: string;
   agentId: string;
   isPaneFocused: boolean;
+  selectionTarget?: RefObject<View | null>;
+  onFocusPane?: () => void;
   isComposerFullscreen?: boolean;
 }) {
   const thread = useBtwThread(props.serverId, props.agentId);
@@ -44,10 +48,14 @@ function BtwThreadWindow({
   isPaneFocused,
   isComposerFullscreen,
   thread,
+  selectionTarget,
+  onFocusPane,
 }: {
   serverId: string;
   agentId: string;
   isPaneFocused: boolean;
+  selectionTarget?: RefObject<View | null>;
+  onFocusPane?: () => void;
   isComposerFullscreen: boolean;
   thread: ProviderSubagentDescriptorPayload;
 }) {
@@ -78,6 +86,20 @@ function BtwThreadWindow({
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const send = useSendBtwCommand(serverId, agentId);
   const admitting = useRef(false);
+  const [pendingComposerFocus, setPendingComposerFocus] = useState(false);
+  const clearComposerFocus = useCallback(() => setPendingComposerFocus(false), []);
+  const onSelectionInsert = useCallback(
+    (text: string) => {
+      if (admitting.current) return false;
+      updateDraft({ type: "insert", text });
+      onFocusPane?.();
+      setMode(key, "open");
+      setPendingComposerFocus(true);
+      return true;
+    },
+    [onFocusPane, setMode, key],
+  );
+  useBtwSelectionTarget({ target: selectionTarget, onInsert: onSelectionInsert });
   const pendingSendLanding = useRef(false);
   const cancelSendLanding = useCallback(() => {
     pendingSendLanding.current = false;
@@ -147,6 +169,8 @@ function BtwThreadWindow({
       streamViewRef={streamViewRef}
       onUserScrollIntent={cancelSendLanding}
       compact={compact}
+      pendingComposerFocus={pendingComposerFocus}
+      onComposerFocusHandled={clearComposerFocus}
       draft={draft.text}
       onDraft={editDraft}
       onHide={hide}

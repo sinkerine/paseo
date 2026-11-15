@@ -183,6 +183,42 @@ export function selectWorkspaceStructureProjects(
   return buildWorkspaceStructureProjects({ sessions, workspaceSort });
 }
 
+export interface ProjectViewPlacement {
+  viewKey: string;
+  hosts: Array<{ serverId: string; projectId: string }>;
+}
+
+interface ProjectViewPlacementsCache {
+  projectMaps: Array<Map<string, ProjectDescriptor> | undefined>;
+  placements: ProjectViewPlacement[];
+}
+
+const projectViewPlacementsCache = new WeakMap<readonly string[], ProjectViewPlacementsCache>();
+
+export function selectProjectViewPlacements(
+  state: SessionsSnapshot,
+  serverIds: readonly string[],
+): ProjectViewPlacement[] {
+  const projectMaps = serverIds.map((serverId) => state.sessions[serverId]?.projects);
+  const previous = projectViewPlacementsCache.get(serverIds);
+  const unchanged =
+    previous && projectMaps.every((projects, index) => projects === previous.projectMaps[index]);
+  if (unchanged) return previous.placements;
+
+  const sessions = serverIds.map((serverId, index) => ({
+    serverId,
+    projects: projectMaps[index]?.values() ?? [],
+    workspaces: [],
+  }));
+  const projects = buildWorkspaceStructureProjects({ sessions });
+  const placements = projects.map((project) => ({
+    viewKey: project.viewKey,
+    hosts: project.hosts.map(({ serverId, projectId }) => ({ serverId, projectId })),
+  }));
+  projectViewPlacementsCache.set(serverIds, { projectMaps, placements });
+  return placements;
+}
+
 export function createWorkspaceStructureProjectsSelector(
   serverIds: readonly string[],
   workspaceSort?: WorkspaceSort,

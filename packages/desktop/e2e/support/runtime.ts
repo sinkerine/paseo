@@ -209,6 +209,19 @@ export async function installDesktopRuntime(
       return buildAppUpdateCheckResult(manualUpdateAdmitted, manualUpdateAdmitted);
     }
 
+    const eventHandlers = new Map<string, Set<(payload: unknown) => void>>();
+    let workspaceRequestHandler:
+      | ((requestId: string, target: { serverId: string; agentId: string }) => void)
+      | null = null;
+    Reflect.set(window, "__emitDesktopEvent", (event: string, payload: unknown) => {
+      for (const handler of eventHandlers.get(event) ?? []) handler(payload);
+    });
+    Reflect.set(
+      window,
+      "__requestDesktopAgentWorkspace",
+      (requestId: string, target: { serverId: string; agentId: string }) =>
+        workspaceRequestHandler?.(requestId, target),
+    );
     const desktopBridge: {
       platform: string;
       invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
@@ -217,7 +230,20 @@ export async function installDesktopRuntime(
         open: (options?: Record<string, unknown>) => Promise<string | string[] | null>;
       };
       getPendingOpenProject: () => Promise<string | null>;
-      events: { on: () => Promise<() => void> };
+      events: { on: (event: string, handler: (payload: unknown) => void) => Promise<() => void> };
+      agentNavigation: {
+        ready: () => Promise<null>;
+        setActiveWorkspace: (
+          selection: { serverId: string; workspaceId: string } | null,
+        ) => Promise<void>;
+        onResolveWorkspaceRequest: (
+          handler: (requestId: string, target: { serverId: string; agentId: string }) => void,
+        ) => () => void;
+        replyResolveWorkspace: (
+          requestId: string,
+          response: { workspaceId: string | null },
+        ) => Promise<void>;
+      };
       editor?: {
         listTargets: () => Promise<DesktopEditorTargetConfig[]>;
         openTarget: (input: DesktopEditorOpenRecord) => Promise<void>;
@@ -299,7 +325,31 @@ export async function installDesktopRuntime(
         },
       },
       getPendingOpenProject: async () => null,
-      events: { on: async () => () => undefined },
+      events: {
+        on: async (event, handler) => {
+          const handlers = eventHandlers.get(event) ?? new Set();
+          handlers.add(handler);
+          eventHandlers.set(event, handlers);
+          return () => {
+            handlers.delete(handler);
+          };
+        },
+      },
+      agentNavigation: {
+        ready: async () => null,
+        setActiveWorkspace: async (selection) => {
+          Reflect.set(window, "__desktopActiveWorkspace", selection);
+        },
+        onResolveWorkspaceRequest: (handler) => {
+          workspaceRequestHandler = handler;
+          return () => {
+            workspaceRequestHandler = null;
+          };
+        },
+        replyResolveWorkspace: async (requestId, response) => {
+          Reflect.set(window, "__desktopWorkspaceReply", { requestId, ...response });
+        },
+      },
     };
 
     if (cfg.editorTargets) {

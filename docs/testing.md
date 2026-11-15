@@ -179,6 +179,58 @@ Codex MultiAgentV2 real tests use local Codex authentication rather than the Ope
 - Server: `packages/server/src/test-utils/vitest-setup.ts` loads `.env.test`, sets `PASEO_SUPERVISED=0`, and disables Git/SSH prompts. Add new global env shims here, not in individual tests.
 - App: `packages/app/vitest.setup.ts` provides `expo`/`__DEV__` shims and stubs a few native-only modules (`react-native-unistyles`, `react-native-svg`, `expo-linking`, `@xterm/addon-ligatures`). Stubbing here is for modules that have no meaningful Node behavior — not a license to mock app code.
 
+## Background E2E workflow
+
+Use the existing headless Playwright harness for Paseo user journeys. Run one
+relevant spec with one worker. The harness starts its own Metro and test daemons,
+uses disposable state and ports, and owns their teardown. Do not launch desktop
+dev, attach to an existing browser, or reuse the installed daemon for this flow.
+See [development prerequisites](development.md#nix-and-direnv) before running.
+
+```bash
+npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/commit-diff-panel.spec.ts --workers=1
+```
+
+For an agent, use its background command facility and retain the process handle,
+exit status, and logs. For a terminal session that must return immediately, run
+from the repository root and give each attempt its own evidence directory:
+
+```bash
+mkdir -p artifacts
+run_dir=$(mktemp -d "$PWD/artifacts/playwright-XXXXXX")
+nohup sh -c '
+  npm run test:e2e --workspace=@getpaseo/app -- "$1" --workers=1 --output="$2/results"
+  result=$?
+  printf "%s\n" "$result" > "$2/exit-code"
+  exit "$result"
+' sh e2e/browser/commit-diff-panel.spec.ts "$run_dir" > "$run_dir/run.log" 2>&1 < /dev/null &
+printf '%s\n' "$!" > "$run_dir/runner.pid"
+```
+
+Replace the example spec with the journey under test. Wait for `exit-code` and inspect `run.log`; a successful
+background launch alone is not a passing test. Preserve failure traces,
+screenshots, and videos from `results/`. Allow normal harness teardown to finish;
+never stop unrelated daemons or use a broad process-name kill.
+
+Keep automation headless: do not pass `--headed`, `--ui`, or `--debug` unless the
+user requests an interactive run. Background tests still consume CPU, RAM, and
+I/O; serialize heavy builds, browser tests, and emulator runs.
+
+Choose additional coverage by the behavior being changed:
+
+- Browser user journeys use `@getpaseo/app`'s `test:e2e` script.
+- Desktop renderer journeys use `npm run test:e2e:renderer --workspace=@getpaseo/desktop -- e2e/<spec>.spec.ts --workers=1`. The bridge
+  fixture exercises desktop renderer behavior in Chromium.
+- Real Electron window, focus, IPC, and native-dialog behavior needs the existing
+  real-Electron tests on a separate Xvfb display with a window manager, or inside
+  a VM. Do not launch them on the user's active display.
+- Native behavior needs the existing mobile tests on a disposable emulator or
+  dedicated device with separate tooling state. Browser coverage does not prove
+  native behavior.
+
+A VM or LXC is not a prerequisite for headless browser E2E. Use a separate test
+host when local resource contention would disrupt active work.
+
 ## Running tests locally
 
 Test suites in this repo are heavy. Running them in bulk freezes the machine, especially with multiple agents in parallel.

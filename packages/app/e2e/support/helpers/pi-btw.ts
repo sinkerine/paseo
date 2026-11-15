@@ -167,3 +167,14 @@ export async function askBtw(page: Page, question: string) {
   await page.getByTestId("btw-composer").filter({ visible: true }).fill(question);
   await page.getByTestId("btw-send").filter({ visible: true }).click();
 }
+
+export function btwRequests(runtime: BtwRuntime) {
+  if (!runtime.stub) throw new Error("Missing deterministic HTTP fixture");
+  return runtime.stub.requests.filter((request) =>
+    JSON.stringify(request.messages).includes("<btw>"),
+  );
+}
+
+export async function pressBtwComposerKey(page: Page, shortcut: string) {
+  await page.getByTestId("btw-composer").filter({ visible: true }).press(shortcut);
+}

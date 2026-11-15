@@ -29,6 +29,9 @@ The formula reserves three digits each for minor and patch. If either reaches `1
 
 ## Prerequisites (local dev)
 
+On x86_64 Linux, use the [Nix SDK and isolated emulator](#nix-sdk-and-isolated-emulator-linux).
+On macOS, use mise as described below.
+
 Local Android builds run on macOS (or Linux) and need the Android toolchain, pinned in `.tool-versions` (`java 21`, `android-sdk 21.0`) and wired up by `.mise.toml` (which derives `ANDROID_HOME` and the command-line tool paths from the `android-sdk` entry). With [mise](https://mise.jdx.dev):
 
 ```bash
@@ -58,6 +61,72 @@ emulator @paseo     # start it; leave running
 ```
 
 Gradle auto-fetches the platform/build-tools it needs once licenses are accepted, so adjust `android-35` only if it asks for a different level.
+
+## Nix SDK and isolated emulator (Linux)
+
+The `android` flake shell extends the default development shell with Java 21 and
+Android components pinned by `nix/android-shell.nix` and `flake.lock`. It includes
+platforms 35/36, build tools 36.0.0, NDK 27.1.12297006, CMake 3.30.5, and a Google
+APIs x86_64 emulator image. Selecting this shell accepts the Android SDK licenses;
+it downloads tools into the Nix store without changing your system SDK or mise.
+The regular `nix develop` shell stays small; `.envrc` keeps using that shell.
+
+From any checkout, provision its AVD and inspect its paths:
+
+```bash
+npm run android:isolated -- setup
+npm run android:isolated -- doctor
+```
+
+The script enters `nix develop .#android` automatically. You can also enter that
+shell explicitly. Linux needs user namespaces for Bubblewrap and read/write access
+to `/dev/kvm` for the emulator. SDK provisioning does not require an emulator.
+Queue provisioning with the host's normal build policy when working as an agent.
+
+Run a smoke check under the repository's emulator-only qex reservation:
+
+```bash
+agent-job run --e2e android-emulator -- npm run android:isolated -- smoke
+```
+
+It boots the AVD headlessly, prints Android's API level, and stops its emulator and
+ADB server. To run a lightweight command against the booted device:
+
+```bash
+agent-job run --e2e android-emulator -- npm run android:isolated -- emulator -- \
+  adb shell getprop ro.product.model
+```
+
+`emulator` without a command stays in the foreground until interrupted. `run --
+<command>` provides the isolated environment and private ADB without booting an
+emulator; use it for existing Android build scripts under appropriate native build
+admission. Build and emulator phases should run separately. The emulator-only
+reservation does not cover Gradle, Metro, or a complete mobile app journey. Follow
+[mobile-testing.md](mobile-testing.md) for the journey and its own resource claim.
+
+All mutable Android state lives under ignored `.dev/android/` in the current
+checkout: HOME, AVDs, keys, Gradle caches, XDG directories, Agent Device state, and
+emulator logs. Bubblewrap mounts its temporary directory at `/tmp` because the
+emulator crash reporter ignores `TMPDIR`. The SDK remains read-only in the Nix
+store; update the Nix composition instead of installing packages with sdkmanager.
+Java and AAPT2 come from Nix, including Gradle's AAPT2 override. The Android shell
+caps Gradle's JVM heap at 4 GiB (`-Xmx4096m`), with 1 GiB maximum metaspace and one
+Gradle worker. The emulator uses 2 GiB guest RAM in both its AVD configuration and
+launch arguments. JVM/native compiler overhead and emulator host overhead are
+additional memory; these settings are not whole-process or whole-build RAM caps.
+
+The runner assigns checkout-specific ADB, emulator, and gRPC ports, disables ADB
+emulator scanning and mDNS discovery, and exports `ANDROID_SERIAL`. A busy port
+fails the session instead of attaching to another runtime; a lock prevents two
+sessions in the same checkout. Run device tools inside the same `emulator --`
+command so they inherit its ADB socket and serial. The runner owns the lifetime of
+its ADB and emulator processes and stops them when the command exits.
+
+This provides development-state and temporary-file isolation, not a filesystem or
+network security sandbox: commands retain access to the host checkout and network.
+It does not start Paseo or Metro. Use disposable daemon state and explicit test
+ports for app journeys; never connect a test to the main daemon on 6767. For host
+connections from Android, use the [worktree daemon instructions](#running-on-an-emulator-against-a-worktree-daemon).
 
 ## Local build + install
 

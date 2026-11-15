@@ -12,6 +12,7 @@ function state(overrides: Partial<ClientPresenceState>): ClientPresenceState {
     focusedAgentId: null,
     focusedTerminalId: null,
     lastActivityAtMs: null,
+    notificationProjectIds: null,
     ...overrides,
   };
 }
@@ -21,6 +22,92 @@ describe("computeNotificationPlan", () => {
   const staleAtMs = nowMs - PRESENCE_THRESHOLD_MS - 1;
   const presentAtMs = nowMs - PRESENCE_THRESHOLD_MS + 1;
 
+  it("elects the in-scope client over a more recent out-of-scope client", () => {
+    expect(
+      computeNotificationPlan({
+        allStates: [
+          state({ lastActivityAtMs: nowMs - 1000, notificationProjectIds: new Set(["alpha"]) }),
+          state({ lastActivityAtMs: nowMs, notificationProjectIds: new Set(["beta"]) }),
+        ],
+        targetProjectId: "alpha",
+        focusTarget: { kind: "agent", id: "agent-1" },
+        pushEligible: true,
+        nowMs,
+      }),
+    ).toEqual({ inAppRecipientIndex: 0, shouldPush: false });
+  });
+
+  it.each([
+    {
+      name: "keeps overlap on the most recent matching client",
+      states: [
+        state({ lastActivityAtMs: nowMs - 1, notificationProjectIds: new Set(["alpha"]) }),
+        state({ lastActivityAtMs: nowMs }),
+      ],
+      targetProjectId: "alpha",
+      expected: { inAppRecipientIndex: 1, shouldPush: false },
+    },
+    {
+      name: "keeps lower-index ties among overlapping scopes",
+      states: [
+        state({ lastActivityAtMs: nowMs, notificationProjectIds: new Set(["alpha"]) }),
+        state({ lastActivityAtMs: nowMs, notificationProjectIds: new Set(["alpha", "beta"]) }),
+      ],
+      targetProjectId: "alpha",
+      expected: { inAppRecipientIndex: 0, shouldPush: false },
+    },
+    {
+      name: "does not push when present clients are all out of scope",
+      states: [state({ lastActivityAtMs: nowMs, notificationProjectIds: new Set() })],
+      targetProjectId: "alpha",
+      expected: { inAppRecipientIndex: null, shouldPush: false },
+    },
+    {
+      name: "a focused out-of-scope client suppresses everything",
+      states: [
+        state({ lastActivityAtMs: nowMs - 1 }),
+        state({
+          lastActivityAtMs: nowMs,
+          focusedAgentId: "agent-1",
+          notificationProjectIds: new Set(["beta"]),
+        }),
+      ],
+      targetProjectId: "alpha",
+      expected: { inAppRecipientIndex: null, shouldPush: false },
+    },
+    {
+      name: "no present client pushes despite restrictive scopes",
+      states: [state({ lastActivityAtMs: staleAtMs, notificationProjectIds: new Set() })],
+      targetProjectId: "alpha",
+      expected: { inAppRecipientIndex: null, shouldPush: true },
+    },
+    {
+      name: "an unknown target admits only unrestricted clients",
+      states: [
+        state({ lastActivityAtMs: nowMs - 1 }),
+        state({ lastActivityAtMs: nowMs, notificationProjectIds: new Set(["alpha"]) }),
+      ],
+      targetProjectId: null,
+      expected: { inAppRecipientIndex: 0, shouldPush: false },
+    },
+    {
+      name: "an unknown target with only restrictive clients drops without push",
+      states: [state({ lastActivityAtMs: nowMs, notificationProjectIds: new Set(["alpha"]) })],
+      targetProjectId: null,
+      expected: { inAppRecipientIndex: null, shouldPush: false },
+    },
+  ])("$name", ({ states, targetProjectId, expected }) => {
+    expect(
+      computeNotificationPlan({
+        allStates: states,
+        targetProjectId,
+        focusTarget: { kind: "agent", id: "agent-1" },
+        pushEligible: true,
+        nowMs,
+      }),
+    ).toEqual(expected);
+  });
+
   it("does not suppress notifications when a focused client is stale", () => {
     const staleFocused = state({
       focusedAgentId: "agent-1",
@@ -29,6 +116,7 @@ describe("computeNotificationPlan", () => {
 
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [staleFocused],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
@@ -49,6 +137,7 @@ describe("computeNotificationPlan", () => {
 
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [staleFocused, presentFocused],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
@@ -66,6 +155,7 @@ describe("computeNotificationPlan", () => {
 
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [backgroundFocused],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
@@ -77,6 +167,7 @@ describe("computeNotificationPlan", () => {
   it("treats present clients focused on different agents as eligible", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [
           state({
             focusedAgentId: "agent-2",
@@ -93,6 +184,7 @@ describe("computeNotificationPlan", () => {
   it("chooses the present client with the greatest clamped activity timestamp", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [
           state({ lastActivityAtMs: nowMs - 10_000 }),
           state({ lastActivityAtMs: nowMs - 1_000 }),
@@ -108,6 +200,7 @@ describe("computeNotificationPlan", () => {
   it("uses the lower index when present clients have identical timestamps", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [
           state({ lastActivityAtMs: nowMs - 1_000 }),
           state({ lastActivityAtMs: nowMs - 1_000 }),
@@ -122,6 +215,7 @@ describe("computeNotificationPlan", () => {
   it("clamps future timestamps to now and treats them as present", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [
           state({ lastActivityAtMs: nowMs - 1 }),
           state({ lastActivityAtMs: nowMs + 600_000 }),
@@ -136,6 +230,7 @@ describe("computeNotificationPlan", () => {
   it("never treats no-heartbeat clients as present", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ lastActivityAtMs: null })],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
@@ -147,6 +242,7 @@ describe("computeNotificationPlan", () => {
   it("falls back to push for non-error attention when no clients are present", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ lastActivityAtMs: staleAtMs })],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
@@ -158,6 +254,7 @@ describe("computeNotificationPlan", () => {
   it("does not push error attention when no clients are present", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ lastActivityAtMs: staleAtMs })],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: false,
@@ -169,6 +266,7 @@ describe("computeNotificationPlan", () => {
   it("lets a foreground mobile-style client with recent activity win as most recent", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [
           state({ focusedAgentId: "agent-2", lastActivityAtMs: nowMs - 20_000 }),
           state({ focusedAgentId: null, lastActivityAtMs: nowMs - 500 }),
@@ -183,6 +281,7 @@ describe("computeNotificationPlan", () => {
   it("selects no in-app recipient and pushes when two web-style clients are stale", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ lastActivityAtMs: staleAtMs }), state({ lastActivityAtMs: staleAtMs })],
         focusTarget: { kind: "agent", id: "agent-1" },
         pushEligible: true,
@@ -194,6 +293,7 @@ describe("computeNotificationPlan", () => {
   it("never suppresses when focusTarget is null even if a client focuses a matching id", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ focusedAgentId: "terminal-1", lastActivityAtMs: nowMs - 500 })],
         focusTarget: null,
         pushEligible: true,
@@ -205,6 +305,7 @@ describe("computeNotificationPlan", () => {
   it("suppresses terminal notifications when a present visible client focuses the terminal", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ focusedTerminalId: "terminal-1", lastActivityAtMs: nowMs - 500 })],
         focusTarget: { kind: "terminal", id: "terminal-1" },
         pushEligible: true,
@@ -216,6 +317,7 @@ describe("computeNotificationPlan", () => {
   it("pushes for a null-focus target when no client is present and push is eligible", () => {
     expect(
       computeNotificationPlan({
+        targetProjectId: "alpha",
         allStates: [state({ lastActivityAtMs: staleAtMs })],
         focusTarget: null,
         pushEligible: true,

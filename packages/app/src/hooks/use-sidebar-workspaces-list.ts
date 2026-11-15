@@ -11,6 +11,7 @@ import { useSidebarOrderStore } from "@/stores/sidebar-order-store";
 import { useSidebarViewStore } from "@/stores/sidebar-view-store";
 import {
   createSidebarWorkspacePlacementSelector,
+  resolveSidebarServerIds,
   computeSidebarOrderUpdates,
   createSidebarWorkspaceEntry,
   deriveProjectStatusBucket,
@@ -110,19 +111,10 @@ export function useSidebarWorkspacesList(options?: {
   const reconcileHostFilters = useSidebarViewStore((state) => state.reconcileHostFilters);
   const isActive = options?.enabled !== false;
 
-  const serverIds = useMemo(() => {
-    if (hostFilters.length === 0) {
-      return allServerIds;
-    }
-    const selected = new Set(hostFilters);
-    const matched = allServerIds.filter((id) => selected.has(id));
-    // Registry has settled but none of the pinned hosts still exist — fall back to every
-    // host rather than leaving the sidebar empty.
-    if (hostRegistryLoaded && matched.length === 0) {
-      return allServerIds;
-    }
-    return matched;
-  }, [allServerIds, hostFilters, hostRegistryLoaded]);
+  const serverIds = useMemo(
+    () => resolveSidebarServerIds({ allServerIds, hostFilters, hostRegistryLoaded }),
+    [allServerIds, hostFilters, hostRegistryLoaded],
+  );
   useEffect(() => {
     if (!isActive) return;
     const releases = serverIds.map((serverId) => runtime.acquireDirectoryDemand(serverId));

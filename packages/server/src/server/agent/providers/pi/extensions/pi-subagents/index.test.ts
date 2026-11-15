@@ -4,7 +4,7 @@ import { appendFile, mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/pro
 import { z } from "zod";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPiExtensionHost } from "../index.js";
+import { createPiExtensionHost, piExtensionRuntimeBridge } from "../index.js";
 import { piSubagents } from "./index.js";
 import {
   parseToolArgs,
@@ -205,6 +205,148 @@ async function applyHostOutput(
   if (!output) throw new Error("Expected a workflow host mapping");
   for (const event of output.events) applySubagentEvent(store, event);
   for (const event of await output.hydration) applySubagentEvent(store, event);
+}
+
+function workflowStartNotification(asyncDir: string): string {
+  interface Context {
+    sessionManager: { getSessionFile(): string; getSessionId(): string };
+    ui: { notify(message: string): void };
+  }
+  const sessionHandlers: Array<(event: unknown, ctx: Context) => void> = [];
+  const handlers = new Map<string, Array<(event: unknown) => void>>();
+  const notifications: string[] = [];
+  const pi = {
+    on(name: string, handler: (event: unknown, ctx: Context) => void) {
+      if (name === "session_start") sessionHandlers.push(handler);
+    },
+    events: {
+      on(name: string, handler: (event: unknown) => void) {
+        const listeners = handlers.get(name) ?? [];
+        listeners.push(handler);
+        handlers.set(name, listeners);
+      },
+      emit(name: string, event: unknown) {
+        for (const handler of handlers.get(name) ?? []) handler(event);
+      },
+    },
+    registerCommand() {},
+  };
+  new Function("pi", piExtensionRuntimeBridge)(pi);
+  const ctx: Context = {
+    sessionManager: { getSessionFile: () => "/tmp/parent.jsonl", getSessionId: () => "parent" },
+    ui: { notify: (message) => notifications.push(message) },
+  };
+  for (const handler of sessionHandlers) handler({ reason: "startup" }, ctx);
+  pi.events.emit("subagent:async-started", {
+    mode: "workflow",
+    id: workflowRunId,
+    asyncDir,
+    sessionId: "/tmp/parent.jsonl",
+  });
+  expect(notifications).toHaveLength(1);
+  return notifications[0]!;
+}
+
+async function resumedNoticeFixture(root: string) {
+  const Capture = z.object({
+    sourceRunId: z.string(),
+    resumedRunId: z.string(),
+    nextRunId: z.string(),
+    excerpts: z.array(
+      z.object({ customType: z.string(), content: z.string(), display: z.boolean() }),
+    ),
+  });
+  const text = await readFile(
+    new URL("./fixtures/workflow/resumed-notices.json", import.meta.url),
+    "utf8",
+  );
+  const capture = Capture.parse(
+    JSON.parse(text.replaceAll("__RUNS_ROOT__", JSON.stringify(root).slice(1, -1))),
+  );
+  return {
+    ...capture,
+    messages: capture.excerpts.map(
+      ({ customType, content, display }): PiAgentMessage => ({
+        role: "custom",
+        customType,
+        content,
+        display,
+      }),
+    ),
+  };
+}
+
+async function seedResumedStatus(
+  artifacts: WorkflowArtifacts,
+  runId: string,
+  sourceRunId: string,
+  state: "running" | "complete" = "running",
+  pid = process.pid,
+) {
+  const dir = join(artifacts.root, runId);
+  await mkdir(dir, { recursive: true });
+  const original = await workflowFixtureText(`status-${state}.json`, artifacts);
+  const status = {
+    ...JSON.parse(original.replaceAll(workflowRunId, runId)),
+    pid,
+    workflow: { resumeOrigin: { sourceRunId } },
+  };
+  await writeFile(join(dir, "status.json"), JSON.stringify(status));
+  return { dir, status };
+}
+
+function expectResumedWorkflow(
+  store: ProviderSubagentStore,
+  runId: string,
+  state: "running" | "completed" | "canceled",
+) {
+  const rootId = `pi-subagents-workflow:${runId}`;
+  const complete = state === "completed";
+  const activeChildren = complete ? workflowChildren : workflowChildren.slice(0, 4);
+  const expected = [
+    {
+      id: rootId,
+      title: "Workflow",
+      subtitle: `${complete ? 2 : 1} of 2 groups done`,
+      status: state,
+      parentSubagentId: null,
+    },
+    {
+      id: `${rootId}/group:T1`,
+      title: "T1",
+      subtitle: "Review T1 round 1",
+      status: "completed",
+      parentSubagentId: rootId,
+    },
+    {
+      id: `${rootId}/group:T2`,
+      title: "T2",
+      subtitle: "Review T2",
+      status: state,
+      parentSubagentId: rootId,
+    },
+    ...activeChildren.map(({ key, title, agent, group }) => ({
+      id: `${rootId}/${key}`,
+      title,
+      subtitle: agent,
+      status: key === "T2.review" ? state : "completed",
+      parentSubagentId: group ? `${rootId}/group:${group}` : rootId,
+    })),
+  ];
+  // A canceled group counts as done too.
+  if (state === "canceled") expected[0]!.subtitle = "2 of 2 groups done";
+  const rows = store
+    .list("parent")
+    .filter((row) => row.id === rootId || row.id.startsWith(`${rootId}/`));
+  expect(
+    rows.map(({ id, title, subtitle, status, parentSubagentId }) => ({
+      id,
+      title,
+      subtitle,
+      status,
+      parentSubagentId,
+    })),
+  ).toEqual(expected);
 }
 
 function mapping(toolCall: PiTrackedToolCall, result: PiToolResult) {
@@ -661,6 +803,340 @@ describe("pi-subagents adapter", () => {
 });
 
 describe("pi-subagents workflows", () => {
+  test("recognizes an auto-resumed workflow from the runtime bridge and follows it to completion", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-pi-workflow-adopt-"));
+    const pi = new FakePi();
+    const client = new PiRpcAgentClient({ logger: pino({ level: "silent" }), runtime: pi });
+    const session = await client.createSession({ provider: "pi", cwd: root });
+    const store = new ProviderSubagentStore();
+    const received: AgentStreamEvent[] = [];
+    session.subscribe((event) => {
+      received.push(event);
+      applySubagentEvent(store, event);
+    });
+    try {
+      const artifacts = await seedWorkflowArtifacts(root);
+      const reviewFile = artifacts.childFiles.get("T2.review")!;
+      const rows = (await readFile(reviewFile, "utf8")).trimEnd().split("\n");
+      await writeFile(reviewFile, `${rows.slice(0, -2).join("\n")}\n`);
+      await writeWorkflowStatus(artifacts, "running");
+      await session.startTurn("OPEN_PARENT");
+      pi.latestSession().emit({
+        type: "extension_ui_request",
+        method: "notify",
+        id: "workflow-start",
+        message: workflowStartNotification(artifacts.dir),
+        notifyType: "info",
+      });
+      expect(store.get("parent", workflowId)).toMatchObject({
+        title: "Workflow",
+        status: "running",
+        subtitle: "1 of 2 groups done",
+        toolCallId: null,
+      });
+      expect(store.get("parent", `${workflowId}/group:T2`)).toMatchObject({
+        title: "T2",
+        subtitle: "Review T2",
+        status: "running",
+        parentSubagentId: workflowId,
+      });
+      const reviewId = `${workflowId}/T2.review`;
+      expect(store.get("parent", reviewId)).toMatchObject({
+        title: "Review T2",
+        subtitle: "reviewer",
+        status: "running",
+        parentSubagentId: `${workflowId}/group:T2`,
+      });
+      expect(store.list("parent")).toHaveLength(7);
+      await expect.poll(() => workflowTimeline(store, reviewId).length).toBe(2);
+      await appendFile(reviewFile, `${rows.slice(-2).join("\n")}\n`);
+      await expect.poll(() => workflowTimeline(store, reviewId).length).toBe(3);
+      expect(workflowTimeline(store, reviewId)).toContainEqual(
+        expect.objectContaining({
+          type: "assistant_message",
+          text: "PASEO_SCRIPTED_DONE:T2.review",
+        }),
+      );
+      await writeWorkflowStatus(artifacts, "complete");
+      await expect.poll(() => store.get("parent", workflowId)?.status).toBe("completed");
+      expectCompletedWorkflow(store);
+      const rootUpserts = () =>
+        received.filter(
+          (event) =>
+            event.type === "provider_subagent" &&
+            event.event.type === "upsert" &&
+            event.event.id === workflowId,
+        ).length;
+      const completedCount = rootUpserts();
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(rootUpserts()).toBe(completedCount);
+      expect(
+        received.filter((event) => event.type === "timeline" && event.item.type === "notification"),
+      ).toEqual([]);
+    } finally {
+      await session.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    { state: "running", pid: process.pid, expected: "running" },
+    { state: "complete", pid: process.pid, expected: "completed" },
+    { state: "running", pid: 2147483647, expected: "canceled" },
+  ] as const)(
+    "rebuilds an auto-resumed workflow from the interrupted run's notice on replay: $expected",
+    async ({ state, pid, expected }) => {
+      const root = await mkdtemp(join(tmpdir(), "paseo-resumed-replay-"));
+      try {
+        const artifacts = await seedWorkflowArtifacts(root);
+        const capture = await resumedNoticeFixture(root);
+        await seedResumedStatus(artifacts, capture.resumedRunId, workflowRunId, state, pid);
+        for (const message of capture.messages.slice(0, 2)) {
+          const store = new ProviderSubagentStore();
+          for await (const event of streamPiHistory("pi", [message]))
+            applySubagentEvent(store, event);
+          expect(store.get("parent", workflowId)?.status).toBe("canceled");
+          expectResumedWorkflow(store, capture.resumedRunId, expected);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test("rebuilds an auto-resumed workflow from the interrupted run's notice on replay through a second generation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-resumed-chain-"));
+    try {
+      const artifacts = await seedWorkflowArtifacts(root);
+      const capture = await resumedNoticeFixture(root);
+      await seedResumedStatus(artifacts, capture.resumedRunId, workflowRunId);
+      await seedResumedStatus(artifacts, capture.nextRunId, capture.resumedRunId);
+      const store = new ProviderSubagentStore();
+      for await (const event of streamPiHistory("pi", [capture.messages[0]!, capture.messages[2]!]))
+        applySubagentEvent(store, event);
+      expect(store.get("parent", workflowId)?.status).toBe("canceled");
+      expect(store.get("parent", `pi-subagents-workflow:${capture.resumedRunId}`)?.status).toBe(
+        "canceled",
+      );
+      expectResumedWorkflow(store, capture.nextRunId, "running");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("registers a manual workflow resume receipt as its new workflow", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-manual-workflow-resume-"));
+    const host = createPiExtensionHost();
+    try {
+      const artifacts = await seedWorkflowArtifacts(root);
+      const capture = await resumedNoticeFixture(root);
+      const { dir, status } = await seedResumedStatus(
+        artifacts,
+        capture.resumedRunId,
+        workflowRunId,
+        "complete",
+      );
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({ ...status, toolCallId: "resume-call" }),
+      );
+      const result = { details: { mode: "workflow", runId: capture.resumedRunId, asyncDir: dir } };
+      const args = { action: "resume", id: workflowRunId };
+      const live = new ProviderSubagentStore();
+      await applyHostOutput(
+        live,
+        host.mapToolCall({
+          callId: "resume-call",
+          toolName: "subagent",
+          args,
+          status: "completed",
+          result,
+        }),
+      );
+      const replay = new ProviderSubagentStore();
+      const messages: PiAgentMessage[] = [
+        {
+          role: "assistant",
+          content: [{ type: "toolCall", id: "resume-call", name: "subagent", arguments: args }],
+        },
+        {
+          role: "toolResult",
+          toolCallId: "resume-call",
+          toolName: "subagent",
+          content: [{ type: "text", text: "Workflow resumed" }],
+          details: result.details,
+          isError: false,
+        },
+      ];
+      for await (const event of streamPiHistory("pi", messages)) applySubagentEvent(replay, event);
+      expectResumedWorkflow(live, capture.resumedRunId, "completed");
+      expect(workflowStoreState(replay)).toEqual(workflowStoreState(live));
+      expect(live.get("parent", "resume-call")).toBeNull();
+      expect(replay.get("parent", "resume-call")).toBeNull();
+      expect(
+        live
+          .list("parent")
+          .every(({ id }) => id.startsWith(`pi-subagents-workflow:${capture.resumedRunId}`)),
+      ).toBe(true);
+    } finally {
+      host.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps one tree when the start report precedes or follows the launch result", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-workflow-concurrency-"));
+    const hosts: ReturnType<typeof createPiExtensionHost>[] = [];
+    try {
+      const artifacts = await seedWorkflowArtifacts(root);
+      await writeWorkflowStatus(artifacts, "running");
+      const start = `PASEO_PI_SUBAGENTS_WORKFLOW_STARTED ${JSON.stringify({ runId: workflowRunId, asyncDir: artifacts.dir })}`;
+      const stores: ProviderSubagentStore[] = [];
+      for (const order of ["launch-only", "start-first", "launch-first"]) {
+        const host = createPiExtensionHost();
+        hosts.push(host);
+        const store = new ProviderSubagentStore();
+        host.follow((event) => applySubagentEvent(store, event));
+        if (order === "start-first")
+          await applyHostOutput(store, host.mapRuntimeNotification(start));
+        await applyHostOutput(store, host.mapToolCall(workflowLaunch(artifacts.dir)));
+        if (order === "launch-first")
+          await applyHostOutput(store, host.mapRuntimeNotification(start));
+        await expect
+          .poll(() => store.get("parent", `${workflowId}/T2.review`)?.status)
+          .toBe("running");
+        for (let repeat = 0; repeat < 2; repeat++) {
+          const duplicate = host.mapRuntimeNotification(start);
+          expect(duplicate?.events).toEqual([]);
+          expect(await duplicate?.hydration).toEqual([]);
+        }
+        expect(store.list("parent")).toHaveLength(7);
+        stores.push(store);
+      }
+      expect(workflowStoreState(stores[1]!)).toEqual(workflowStoreState(stores[0]!));
+      expect(workflowStoreState(stores[2]!)).toEqual(workflowStoreState(stores[0]!));
+      const complete = JSON.parse(await workflowFixtureText("status-complete.json", artifacts));
+      await writeFile(
+        join(artifacts.dir, "status.json"),
+        JSON.stringify({ ...complete, pid: process.pid, toolCallId: "foreign-call" }),
+      );
+      // A report must not erase the real launch call's poll ownership check.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      for (const store of stores) expect(store.get("parent", workflowId)?.status).toBe("running");
+      await writeWorkflowStatus(artifacts, "complete");
+      for (const store of stores) {
+        await expect.poll(() => store.get("parent", workflowId)?.status).toBe("completed");
+        expectCompletedWorkflow(store);
+      }
+    } finally {
+      for (const host of hosts) host.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    "missing status",
+    "unreadable status",
+    "different source",
+    "absent source",
+    "different session",
+    "unreadable old status",
+    "Not auto-resumed:",
+    "Resume by hand:",
+    "Relaunch it by hand with",
+  ])("ignores resume lines whose run does not prove lineage: %s", async (rejection) => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-resumed-reject-"));
+    try {
+      const artifacts = await seedWorkflowArtifacts(root);
+      const capture = await resumedNoticeFixture(root);
+      const { dir, status } = await seedResumedStatus(
+        artifacts,
+        capture.resumedRunId,
+        workflowRunId,
+      );
+      if (rejection === "missing status") await rm(join(dir, "status.json"));
+      if (rejection === "unreadable status") await writeFile(join(dir, "status.json"), "{");
+      if (rejection === "different source") {
+        status.workflow.resumeOrigin.sourceRunId = "unrelated-workflow";
+        await writeFile(join(dir, "status.json"), JSON.stringify(status));
+      }
+      if (rejection === "absent source") {
+        await writeFile(join(dir, "status.json"), JSON.stringify({ ...status, workflow: {} }));
+      }
+      if (rejection === "different session") {
+        await writeFile(
+          join(dir, "status.json"),
+          JSON.stringify({ ...status, sessionId: "foreign" }),
+        );
+      }
+      if (rejection === "unreadable old status")
+        await writeFile(join(artifacts.dir, "status.json"), "{");
+      for (const message of capture.messages.slice(0, 2)) {
+        const store = new ProviderSubagentStore();
+        const content = message.content as string;
+        const replay = {
+          ...message,
+          content:
+            rejection.endsWith(":") || rejection === "Relaunch it by hand with"
+              ? content.replace(/(?:Auto-resumed as|Resumed as)/, rejection)
+              : content,
+        };
+        for await (const event of streamPiHistory("pi", [replay])) applySubagentEvent(store, event);
+        expect(store.get("parent", workflowId)?.status).toBe("canceled");
+        const ids =
+          rejection === "unreadable old status"
+            ? [workflowId]
+            : [
+                workflowId,
+                `${workflowId}/group:T1`,
+                `${workflowId}/group:T2`,
+                ...workflowChildren.map(({ key }) => `${workflowId}/${key}`),
+              ];
+        expect(store.list("parent").map(({ id }) => id)).toEqual(ids);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("claims an invalid workflow start report without a chat notification", async () => {
+    const pi = new FakePi();
+    const client = new PiRpcAgentClient({ logger: pino({ level: "silent" }), runtime: pi });
+    const session = await client.createSession({ provider: "pi", cwd: "/tmp/paseo-invalid-start" });
+    const store = new ProviderSubagentStore();
+    const received: AgentStreamEvent[] = [];
+    session.subscribe((event) => {
+      received.push(event);
+      applySubagentEvent(store, event);
+    });
+    try {
+      await session.startTurn("START");
+      const payloads = [
+        "{",
+        "{}",
+        '{"runId":"id"}',
+        '{"asyncDir":"/tmp/id"}',
+        '{"runId":"","asyncDir":"/tmp/id"}',
+        '{"runId":"id","asyncDir":" "}',
+      ];
+      for (const [index, payload] of payloads.entries()) {
+        pi.latestSession().emit({
+          type: "extension_ui_request",
+          method: "notify",
+          id: `invalid-${index}`,
+          message: `PASEO_PI_SUBAGENTS_WORKFLOW_STARTED ${payload}`,
+          notifyType: "info",
+        });
+      }
+      expect(store.list("parent")).toEqual([]);
+      expect(
+        received.filter((event) => event.type === "timeline" && event.item.type === "notification"),
+      ).toEqual([]);
+    } finally {
+      await session.close();
+    }
+  });
+
   test("recovers a stopped workflow from a later mission snapshot live and on replay", async () => {
     const root = await mkdtemp(join(tmpdir(), "paseo-pi-mission-"));
     try {

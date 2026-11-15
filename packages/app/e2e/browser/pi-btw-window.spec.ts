@@ -1,3 +1,4 @@
+import { toggleSettingsWithShortcut, selectSendingOption } from "../support/helpers/settings";
 import { expect, type Locator, type TestInfo } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import type { BtwRuntime } from "../../../server/src/server/daemon-e2e/fixtures/pi-btw-stub/runtime";
@@ -9,6 +10,8 @@ import { expectComposerEditable, submitMessageWithButton } from "../support/help
 import { waitForSettledPosition } from "../support/helpers/sheet-layout";
 import {
   askBtw,
+  btwRequests,
+  pressBtwComposerKey,
   btwViewportGeometry,
   expectBtwTextInViewport,
   revealBtwText,
@@ -128,9 +131,28 @@ for (const compact of [false, true]) {
       const before = await client.fetchProviderSubagentTimeline(handle.agentId, threadId ?? "", {
         limit: 0,
       });
+      const previousWindow = await window.elementHandle();
+      if (!previousWindow) throw new Error("Missing BTW window before refresh");
       await client.refreshAgent(handle.agentId);
-      await expect(window).toHaveCount(1);
-      await expect(window).toHaveAttribute("aria-label", threadId ?? "");
+      // The outgoing compact sheet remains mounted until its dismissal animation completes.
+      if (compact) {
+        await expect
+          .poll(() => previousWindow.evaluate((element) => element.isConnected), {
+            message: "Expected the previous BTW sheet owner to detach after refresh",
+          })
+          .toBe(false);
+      }
+      await previousWindow.dispose();
+      // Count and identity must share one read while the previous sheet dismisses.
+      await expect
+        .poll(() =>
+          window.evaluateAll((elements) => {
+            const threadIds = [];
+            for (const element of elements) threadIds.push(element.getAttribute("aria-label"));
+            return threadIds;
+          }),
+        )
+        .toEqual([threadId ?? ""]);
       expect(
         (
           await client.fetchProviderSubagentTimeline(handle.agentId, threadId ?? "", { limit: 0 })
@@ -576,4 +598,256 @@ async function verifyBusyMainDeliveries({
       contentType: "application/json",
     });
   }
+}
+
+test("BTW wide Send shortcut follows the existing preference", async ({
+  page,
+  btwRuntime,
+}, info) => {
+  test.setTimeout(240000);
+  const stub = btwRuntime.stub;
+  if (!stub) throw new Error("Missing deterministic HTTP fixture");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const transport = await installDaemonWebSocketGate(page);
+  const handle = await launchBtwAgent(page, btwRuntime);
+  const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "btw-keys" });
+  const window = page.getByTestId("btw-window").filter({ visible: true });
+  const composer = window.getByTestId("btw-composer");
+  const observations: object[] = [];
+  const count = () => btwRequests(btwRuntime).length;
+  const mainRequests = () =>
+    stub.requests.filter((request) => !JSON.stringify(request.messages).includes("<btw>"));
+  const mainUsers = async () =>
+    (await client.fetchAgentTimeline(handle.agentId, { limit: 0 })).entries.filter(
+      ({ item }) => item.type === "user_message",
+    ).length;
+  const observe = async (step: string) => {
+    observations.push({
+      step,
+      count: count(),
+      value: await composer.inputValue(),
+      thread: await window.getAttribute("aria-label"),
+    });
+    await info.attach(`observation-${step}`, {
+      body: JSON.stringify(observations.at(-1)),
+      contentType: "application/json",
+    });
+  };
+  const completed = async () => {
+    await expect
+      .poll(async () => (await client.listProviderSubagents(handle.agentId)).subagents[0]?.status)
+      .toBe("completed");
+    await expect(composer).toBeEditable();
+  };
+  const submitDraft = async (text: string, key: string) => {
+    const before = count();
+    await pressBtwComposerKey(page, key);
+    await expect.poll(count).toBe(before + 1);
+    await expect(composer).toHaveValue("");
+    await expect(window.getByTestId("agent-chat-scroll")).toContainText(text);
+    const request = btwRequests(btwRuntime).at(-1);
+    expect(JSON.stringify(request?.messages.at(-1)?.content)).toContain(
+      JSON.stringify(text).slice(1, -1),
+    );
+    await completed();
+    expect(count()).toBe(before + 1);
+    await observe(key + text);
+  };
+  const sent = async (text: string, key: string) => {
+    await composer.fill(text);
+    await submitDraft(text, key);
+  };
+  const changeShortcut = async (option: string) => {
+    const thread = await window.getAttribute("aria-label");
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    await toggleSettingsWithShortcut(page);
+    await selectSendingOption(page, "Send shortcut", option);
+    await toggleSettingsWithShortcut(page);
+    const minimized = !(await window.isVisible());
+    if (minimized) await page.getByTestId("btw-chip").filter({ visible: true }).click();
+    await expect(window).toHaveAttribute("aria-label", thread ?? "");
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
+    observations.push({ option, minimized });
+  };
+  try {
+    await submitMessageWithButton(page, "PARENT_A");
+    await expect(
+      page.getByTestId("assistant-message").filter({ hasText: "PARENT_A_FINISHED" }),
+    ).toBeVisible({ timeout: 60000 });
+    await handle.client.waitForFinish(handle.agentId, 60000);
+    await submitMessageWithButton(page, "/btw first question");
+    await expect(window).toHaveAttribute("aria-label", /^btw:/);
+    await expect(window).toContainText("BTW_REPLY CONTEXT_A");
+    await completed();
+    expect((await recordedBtwStates(btwRuntime)).at(-1)?.status).toBe("idle");
+    expect((await recordedBtwStates(btwRuntime)).at(-1)?.revision).toBeGreaterThanOrEqual(2);
+    // Control proves real producer multiline readiness before testing the missing keyboard feature.
+    const control = "AFTER_B control first\ncontrol second";
+    const beforeControl = count();
+    await askBtw(page, control);
+    await expect.poll(count).toBe(beforeControl + 1);
+    await expect(composer).toHaveValue("");
+    expect(JSON.stringify(btwRequests(btwRuntime).at(-1)?.messages.at(-1)?.content)).toContain(
+      JSON.stringify(control).slice(1, -1),
+    );
+    await expect(window.getByTestId("agent-chat-scroll")).toContainText(control);
+    await completed();
+    await observe("J2-multiline-button-ready");
+    const beforeEmpty = count();
+    await expect(window.getByTestId("btw-send")).toBeDisabled();
+    await pressBtwComposerKey(page, "Shift+Control+Enter");
+    await composer.pressSequentially("AFTER_B one");
+    await observe("J3-empty-line-break");
+    await expect(composer).toHaveValue("\nAFTER_B one");
+    expect(count()).toBe(beforeEmpty);
+    await sent("AFTER_B enter", "Enter");
+    const beforeShift = count();
+    await composer.fill("AFTER_B line");
+    await pressBtwComposerKey(page, "Shift+Enter");
+    await composer.pressSequentially("two");
+    await expect(composer).toHaveValue("AFTER_B line\ntwo");
+    expect(count()).toBe(beforeShift);
+    await sent("AFTER_B ctrl", "Control+Enter");
+    await sent("AFTER_B meta", "Meta+Enter");
+    await changeShortcut(process.platform === "darwin" ? "⌘+Enter" : "Ctrl+Enter");
+    const beforeLines = count();
+    await composer.fill("AFTER_B first");
+    await composer.press("Enter");
+    await composer.pressSequentially("AFTER_B second");
+    await composer.press("Shift+Control+Enter");
+    await composer.pressSequentially("third");
+    await composer.press("Shift+Meta+Enter");
+    await composer.pressSequentially("fourth");
+    const lines = "AFTER_B first\nAFTER_B second\nthird\nfourth";
+    await expect(composer).toHaveValue(lines);
+    expect(count()).toBe(beforeLines);
+    await observe("J6-multiline");
+    await submitDraft(lines, "Control+Enter");
+    await sent("AFTER_B meta2", "Meta+Enter");
+    await changeShortcut("Enter");
+    const beforeBack = count();
+    await composer.fill("AFTER_B again");
+    await composer.press("Shift+Meta+Enter");
+    await composer.pressSequentially("back");
+    await expect(composer).toHaveValue("AFTER_B again\nback");
+    expect(count()).toBe(beforeBack);
+    await submitDraft("AFTER_B again\nback", "Enter");
+    const beforeDouble = count();
+    await composer.fill("   ");
+    await composer.press("Control+Enter");
+    await expect(composer).toHaveValue("   ");
+    expect(count()).toBe(beforeDouble);
+    await composer.fill("AFTER_B double");
+    await composer.press("Control+Enter");
+    await composer.press("Control+Enter");
+    await expect.poll(count).toBe(beforeDouble + 1);
+    await expect(composer).toHaveValue("");
+    await completed();
+    await observe("J9-double");
+    const beforeOffline = count();
+    const listRequests = transport.getClientRequestCount("agent.provider_subagents.list.request");
+    await transport.drop();
+    await transport.waitForBlockedConnection();
+    await composer.fill("AFTER_B offline");
+    await composer.press("Control+Enter");
+    await expect(window.getByTestId("btw-action-feedback")).toContainText(
+      /connect|socket|offline/i,
+    );
+    await expect(composer).toHaveValue("AFTER_B offline");
+    expect(count()).toBe(beforeOffline);
+    transport.restore();
+    await transport.waitForServerMessage(
+      "agent.provider_subagents.list.response",
+      listRequests + 1,
+    );
+    await submitDraft("AFTER_B offline", "Control+Enter");
+    await submitMessageWithButton(page, "HOLD_PARENT");
+    await expect.poll(() => stub.pending("parent")).toBe(1);
+    const main = page.getByRole("textbox", { name: "Message agent..." });
+    await main.fill("MAIN_DRAFT_UNTOUCHED");
+    const parents = mainRequests().length;
+    const users = await mainUsers();
+    await sent("AFTER_B during parent", "Control+Enter");
+    await expect(window).toContainText("BTW_REPLY AFTER_B");
+    expect(stub.pending("parent")).toBe(1);
+    expect(mainRequests()).toHaveLength(parents);
+    expect((await client.fetchAgentTimeline(handle.agentId, { limit: 0 })).agent?.status).toBe(
+      "running",
+    );
+    await expect(main).toHaveValue("MAIN_DRAFT_UNTOUCHED");
+    expect(await mainUsers()).toBe(users);
+    stub.release("parent");
+    await handle.client.waitForFinish(handle.agentId, 60000);
+    await observe("J12-parent-finished");
+    await captureBtw(page, info, "btw-wide-send-shortcut");
+  } finally {
+    const evidence = info.outputPath("send-shortcut-evidence.json");
+    await writeFile(
+      evidence,
+      JSON.stringify(
+        {
+          revision: btwRuntime.revision,
+          observations,
+          requestQuestions: btwRequests(btwRuntime).map((request) => request.messages.at(-1)),
+        },
+        null,
+        2,
+      ),
+    );
+    await info.attach("send-shortcut-evidence", {
+      path: evidence,
+      contentType: "application/json",
+    });
+    transport.restore();
+    stub.release("parent");
+    stub.release("btw");
+    await client.close();
+    await closeAgent(handle);
+  }
+});
+
+for (const sendShortcut of ["enter", "mod-enter"]) {
+  test(`BTW compact Send shortcut keeps editing (${sendShortcut})`, async ({
+    page,
+    btwRuntime,
+  }, info) => {
+    test.setTimeout(180000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript((shortcut) => {
+      localStorage.setItem("@paseo:app-settings", JSON.stringify({ sendShortcut: shortcut }));
+    }, sendShortcut);
+    const handle = await launchBtwAgent(page, btwRuntime);
+    const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "btw-compact-keys" });
+    const window = page.getByTestId("btw-window").filter({ visible: true });
+    const composer = window.getByTestId("btw-composer");
+    try {
+      await submitMessageWithButton(page, "PARENT_A");
+      await handle.client.waitForFinish(handle.agentId, 60000);
+      await submitMessageWithButton(page, "/btw first question");
+      await expect(window).toContainText("BTW_REPLY CONTEXT_A");
+      await expect
+        .poll(async () => (await recordedBtwStates(btwRuntime)).at(-1)?.status)
+        .toBe("idle");
+      await expect
+        .poll(async () => (await client.listProviderSubagents(handle.agentId)).subagents[0]?.status)
+        .toBe("completed");
+      await waitForSettledPosition(window);
+      const before = btwRequests(btwRuntime).length;
+      await composer.fill("AFTER_B compact");
+      await composer.press("Enter");
+      await expect(composer).toHaveValue("AFTER_B compact\n");
+      await composer.press("Control+Enter");
+      await composer.press("Meta+Enter");
+      await expect(composer).toHaveValue("AFTER_B compact\n");
+      expect(btwRequests(btwRuntime)).toHaveLength(before);
+      await window.getByTestId("btw-send").click();
+      await expect.poll(() => btwRequests(btwRuntime).length).toBe(before + 1);
+      await expect(composer).toHaveValue("");
+      await expect(window.getByTestId("agent-chat-scroll")).toContainText("AFTER_B compact");
+      await captureBtw(page, info, "btw-compact-send-shortcut");
+    } finally {
+      await client.close();
+      await closeAgent(handle);
+    }
+  });
 }

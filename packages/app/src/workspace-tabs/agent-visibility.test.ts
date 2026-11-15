@@ -88,6 +88,12 @@ describe("workspace agent visibility", () => {
         pin: true,
       });
     }
+    await expect
+      .poll(() => {
+        const raw = values.get("workspace-layout-state");
+        return raw ? JSON.parse(raw).state.pinnedAgentIdsByWorkspace : null;
+      })
+      .toEqual({ "srv:ws-a": [agent.id], "srv:ws-b": [agent.id] });
     const restored = createWorkspaceLayoutStore(undefined, storage);
     await restored.persist.rehydrate();
     const sessionAgents = new Map([[agent.id, agent]]);

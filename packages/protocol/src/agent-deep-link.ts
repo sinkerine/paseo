@@ -1,6 +1,7 @@
 export interface AgentDeepLinkTarget {
   serverId: string;
   agentId: string;
+  focus?: boolean;
 }
 
 function normalizeSegment(value: string): string {
@@ -17,14 +18,14 @@ function normalizeAgentDeepLinkTarget(target: AgentDeepLinkTarget): AgentDeepLin
 }
 
 export function buildAgentDeepLinkRoute(
-  target: AgentDeepLinkTarget,
+  target: Pick<AgentDeepLinkTarget, "serverId" | "agentId">,
 ): `/h/${string}/agent/${string}` {
   const { serverId, agentId } = normalizeAgentDeepLinkTarget(target);
   return `/h/${encodeURIComponent(serverId)}/agent/${encodeURIComponent(agentId)}`;
 }
 
 export function buildAgentDeepLink(target: AgentDeepLinkTarget): string {
-  return `paseo:/${buildAgentDeepLinkRoute(target)}`;
+  return `paseo:/${buildAgentDeepLinkRoute(target)}${target.focus === false ? "?focus=0" : ""}`;
 }
 
 export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
@@ -41,8 +42,8 @@ export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
     url.username ||
     url.password ||
     url.port ||
-    url.search ||
-    url.hash
+    (url.search !== "" && url.search !== "?focus=0") ||
+    input.includes("#")
   ) {
     return null;
   }
@@ -55,7 +56,9 @@ export function parseAgentDeepLink(input: string): AgentDeepLinkTarget | null {
   try {
     const serverId = normalizeSegment(decodeURIComponent(segments[0] ?? ""));
     const agentId = normalizeSegment(decodeURIComponent(segments[2] ?? ""));
-    return serverId && agentId ? { serverId, agentId } : null;
+    return serverId && agentId
+      ? { serverId, agentId, ...(url.search === "?focus=0" ? { focus: false } : {}) }
+      : null;
   } catch {
     return null;
   }

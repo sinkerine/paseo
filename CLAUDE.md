@@ -118,7 +118,63 @@ When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: write
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
+Default E2E to the [background headless Playwright workflow](docs/testing.md#background-e2e-workflow), using the existing isolated harness and one targeted spec with one worker. Use real Electron or native tests when the changed behavior requires those platforms; run their UI in a separate display or disposable device environment.
+
 For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. For the [shared profile shortcut journey](docs/features/shared-profile-shortcuts-plan.md#e2e-journey), run `npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/shared-profile-shortcuts.spec.ts --project=browser`. The existing app Playwright harness owns Metro, disposable daemon homes and ports, throwaway workspaces, and cleanup; the spec adds a second isolated host with distinct profiles and seeds legacy browser storage. The spec reuses the desktop bridge fixture to expose Shortcuts settings in Chromium; this covers the desktop renderer, not a real Electron window. Its fake providers cover configuration routing, not live provider behavior. Keep evidence in ignored worktree `artifacts/`; use the [development shell](docs/development.md#nix-and-direnv) for Chromium runtime dependencies. Never touch the main daemon on 6767. See [docs/testing.md](docs/testing.md#running-tests-locally) for targeted execution and [docs/qa.md](docs/qa.md#evidence) for evidence requirements.
+
+### E2E resource admission
+
+Agents run feature E2E when a feature is first added, including repairs and reruns during that workflow. Future pushes and deployments of that feature do not require rerunning E2E; existing unit tests still run.
+
+Every E2E execution requires qex admission before setup starts, retained through teardown. Validate these estimates with `agent-job estimates`, then run the documented entrypoint through `agent-job run --e2e <name> -- <command>`. Do not nest reservations. These conservative cold-start estimates cover Metro, isolated daemons, browsers, fixture agents, and teardown.
+
+For the documented headless app Playwright harness, use the `browser-one-worker` declaration and `--workers=1`.
+
+```qex-e2e browser-one-worker
+{
+  "resources": {
+    "cpu": 4,
+    "mem": "16GiB"
+  },
+  "timeout": "30m"
+}
+```
+
+The desktop browser-tabs harness uses `electron`, including its build, two real windows, isolated Xvfb, and optional window manager. It uses separate ports and state from Playwright; keep both stacks serialized with builds in the tab-focus recipe.
+
+```qex-e2e electron
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "1h"
+}
+```
+
+## Isolated Android emulator
+
+Use `npm run android:isolated -- setup` to provision the Nix SDK and a checkout-local
+API 35 AVD on x86_64 Linux. See [docs/android.md](docs/android.md#nix-sdk-and-isolated-emulator-linux)
+for commands and isolation boundaries.
+
+The following estimate covers one headless KVM emulator (2 vCPUs, 2 GiB guest RAM),
+one private ADB server, and a lightweight command through teardown. It excludes
+Gradle/native builds, Metro, and app/daemon E2E stacks; those need their own estimate.
+The 6 GiB reservation includes the 2 GiB guest plus QEMU, software rendering,
+ADB, and launcher overhead. Gradle's separate 4 GiB heap limit also allows up to
+1 GiB metaspace and additional native/compiler memory; do not use the heap size
+as the whole-build qex claim. Build and emulator phases run separately. Reduce
+these whole-stack reservations only with a successful cgroup `memory.peak`
+measurement for the declared workload. Keep the runner in the foreground inside
+the admitted job.
+
+```qex-e2e android-emulator
+{
+  "resources": {
+    "cpu": 2,
+    "mem": "6GiB"
+  },
+  "timeout": "10m"
+}
+```
 
 ## Release branches
 

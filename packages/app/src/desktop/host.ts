@@ -126,7 +126,17 @@ export interface DesktopEventsBridge {
 }
 
 export interface DesktopAgentNavigationBridge {
-  ready?: () => Promise<{ serverId: string; agentId: string } | null>;
+  ready?: () => Promise<{ serverId: string; agentId: string; focus?: boolean } | null>;
+  setActiveWorkspace?: (
+    selection: { serverId: string; workspaceId: string } | null,
+  ) => Promise<void>;
+  onResolveWorkspaceRequest?: (
+    handler: (requestId: string, target: { serverId: string; agentId: string }) => void,
+  ) => () => void;
+  replyResolveWorkspace?: (
+    requestId: string,
+    response: { workspaceId: string | null },
+  ) => Promise<unknown>;
 }
 
 export type DesktopBrowserShortcutEvent =
@@ -134,6 +144,7 @@ export type DesktopBrowserShortcutEvent =
   | { browserId: string; action: "new-tab" };
 
 export interface DesktopBrowserNewTabRequestEvent {
+  background?: boolean;
   sourceBrowserId: string;
   url: string;
 }

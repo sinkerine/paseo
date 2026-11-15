@@ -168,6 +168,18 @@ describe("workflow notice parsers", () => {
       ],
     });
   });
+  test.each([
+    ["Auto-resumed as resumed-id.", "resumed-id"],
+    ["Resumed as resumed-id.", "resumed-id"],
+    ["Relaunched as resumed-id.", undefined],
+    ["Not auto-resumed: Resumed as resumed-id.", undefined],
+    ["Resume by hand: resumed-id.", undefined],
+    ["Relaunch it by hand with resumed-id.", undefined],
+    ["Auto-resumed as resumed-id", undefined],
+  ])("reads only an explicit resume correlation: %s", (line, expected) => {
+    const text = `${customMessageText(terminal(`/tmp/${runId}`))}\n${line}`;
+    expect(parseWorkflowTerminalNotice(text)?.resumedRunId).toBe(expected);
+  });
   test("rejects incomplete, malformed and uncorrelated notices", () => {
     for (const text of [
       "",
