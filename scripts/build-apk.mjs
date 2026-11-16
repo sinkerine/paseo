@@ -16,6 +16,10 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const app = path.join(root, "packages/app");
 const env = {
   ...process.env,
+  // Keep fallback scheduling defaults behind explicit caller/Nix settings.
+  GRADLE_OPTS: ["-Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false", process.env.GRADLE_OPTS]
+    .filter(Boolean)
+    .join(" "),
   APP_VARIANT: "production",
   PASEO_WATCHDOG_BUILD: "1",
   PASEO_DIAGNOSTIC_BUILD_TIME: new Date().toISOString(),
@@ -37,13 +41,7 @@ run("npx", ["expo", "prebuild", "--platform", "android", "--no-install"], app);
 rmSync(path.join(app, "android/app/build/generated/assets"), { recursive: true, force: true });
 run(
   "./gradlew",
-  [
-    "assembleRelease",
-    "--no-daemon",
-    "--max-workers=2",
-    "-Dorg.gradle.parallel=false",
-    `-PreactNativeArchitectures=${architectures}`,
-  ],
+  ["assembleRelease", "--no-daemon", `-PreactNativeArchitectures=${architectures}`],
   path.join(app, "android"),
 );
 const destination = path.join(root, `artifacts/paseo-dogfood-${target}.apk`);

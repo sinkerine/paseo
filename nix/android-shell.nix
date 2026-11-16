@@ -8,14 +8,16 @@ let
       android_sdk.accept_license = true;
     };
   };
+  cmakeVersion = "3.30.5";
   android = androidPkgs.androidenv.composeAndroidPackages {
     cmdLineToolsVersion = "19.0";
     platformToolsVersion = "36.0.0";
-    buildToolsVersions = [ "36.0.0" ];
+    # Some native dependencies still select 35 independently of the app's SDK 36.
+    buildToolsVersions = [ "35.0.0" "36.0.0" ];
     platformVersions = [ "35" "36" ];
     includeNDK = true;
     ndkVersions = [ "27.1.12297006" ];
-    cmakeVersions = [ "3.30.5" ];
+    cmakeVersions = [ cmakeVersion ];
     includeEmulator = true;
     emulatorVersion = "36.3.10";
     includeSystemImages = true;
@@ -33,10 +35,11 @@ pkgs.mkShell {
   ANDROID_SDK_ROOT = sdk;
   ANDROID_NDK_HOME = "${sdk}/ndk/27.1.12297006";
   PASEO_ANDROID_SDK = sdk;
-  GRADLE_OPTS = "'-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m' -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false";
+  CMAKE_VERSION = cmakeVersion;
   shellHook = ''
     export PATH="${sdk}/cmdline-tools/latest/bin:${sdk}/platform-tools:${sdk}/emulator:$PATH"
-    export GRADLE_OPTS="$GRADLE_OPTS -Dorg.gradle.project.android.aapt2FromMavenOverride=${sdk}/build-tools/36.0.0/aapt2"
+    # Explicit caller settings take precedence over these development defaults.
+    export GRADLE_OPTS="'-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:ActiveProcessorCount=2' -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=true -Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process ''${GRADLE_OPTS:-} -Dorg.gradle.project.android.aapt2FromMavenOverride=${sdk}/build-tools/36.0.0/aapt2"
     echo "Android SDK ready. Use npm run android:isolated -- <setup|doctor|run|emulator|smoke>."
   '';
 }

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / ".dev/android"
 AVD = "paseo-api35"
 IMAGE = "system-images;android-35;google_apis;x86_64"
+DEFAULT_EMULATOR_MEMORY_MIB = 2048
 
 
 def environment():
@@ -32,6 +33,13 @@ def environment():
     emulator_port = 5586 + (identity % 48) * 2
     for directory in ("home", "avd", "android-home", "gradle", "tmp", "cache", "config", "data", "agent-device"):
         (STATE / directory).mkdir(parents=True, exist_ok=True)
+    init_dir = STATE / "gradle/init.d"
+    init_dir.mkdir(parents=True, exist_ok=True)
+    init_script = init_dir / "paseo-resources.gradle"
+    source = ROOT / "scripts/android-gradle-resources.gradle"
+    if not init_script.is_symlink() or init_script.readlink() != source:
+        init_script.unlink(missing_ok=True)
+        init_script.symlink_to(source)
     env.update({
         "HOME": str(STATE / "home"),
         "ANDROID_USER_HOME": str(STATE / "android-home"),
@@ -99,7 +107,7 @@ def setup(env):
     # A real software keyboard is required by native input tests.
     config = avd / "config.ini"
     content = config.read_text().splitlines()
-    values = {"hw.keyboard": "no", "hw.ramSize": "2048", "hw.cpu.ncore": "2"}
+    values = {"hw.keyboard": "no", "hw.ramSize": str(env.get("PASEO_ANDROID_MEMORY_MIB", DEFAULT_EMULATOR_MEMORY_MIB)), "hw.cpu.ncore": "2"}
     content = [line for line in content if line.split("=", 1)[0].strip() not in values]
     config.write_text("\n".join(content + [f"{key}={value}" for key, value in values.items()]) + "\n")
     print(f"AVD ready: {avd}", flush=True)
@@ -136,7 +144,8 @@ def session(env, adb_port, emulator_port, command, emulator):
                     "emulator", "-avd", AVD, "-port", str(emulator_port),
                     "-grpc", env["PASEO_ANDROID_GRPC_PORT"], "-no-window", "-no-audio",
                     "-no-snapshot", "-no-boot-anim", "-gpu", "swiftshader_indirect",
-                    "-memory", "2048", "-cores", "2", "-accel", "on"]),
+                    "-memory", str(env.get("PASEO_ANDROID_MEMORY_MIB", DEFAULT_EMULATOR_MEMORY_MIB)),
+                    "-cores", "2", "-accel", "on"]),
                     env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 processes.append(device)
                 deadline = time.monotonic() + 240
@@ -187,15 +196,21 @@ def session(env, adb_port, emulator_port, command, emulator):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--memory-mib", type=int, default=DEFAULT_EMULATOR_MEMORY_MIB,
+                        help="Emulator guest RAM in MiB (2048–8192); place before the action")
     parser.add_argument("action", choices=("doctor", "setup", "run", "emulator", "smoke"))
     parser.add_argument("command", nargs=argparse.REMAINDER,
                         help="Command after --; emulator runs it after boot and then tears down")
     args = parser.parse_args()
+    if not 2048 <= args.memory_mib <= 8192:
+        parser.error("--memory-mib must be between 2048 and 8192; the pinned API 35 emulator raises smaller requests to 2048")
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     env, adb_port, emulator_port = environment()
+    env["PASEO_ANDROID_MEMORY_MIB"] = str(args.memory_mib)
     if args.action == "doctor":
         print(json.dumps({"sdk": env["ANDROID_HOME"], "state": str(STATE),
                           "adbSocket": env["ADB_SERVER_SOCKET"], "serial": env["ANDROID_SERIAL"],
+                          "memoryMiB": args.memory_mib,
                           "kvm": os.access("/dev/kvm", os.R_OK | os.W_OK)}, indent=2))
         return 0
     if args.action == "run" and not command:

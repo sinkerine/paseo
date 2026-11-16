@@ -66,7 +66,7 @@ Gradle auto-fetches the platform/build-tools it needs once licenses are accepted
 
 The `android` flake shell extends the default development shell with Java 21 and
 Android components pinned by `nix/android-shell.nix` and `flake.lock`. It includes
-platforms 35/36, build tools 36.0.0, NDK 27.1.12297006, CMake 3.30.5, and a Google
+platforms 35/36, build tools 35.0.0/36.0.0, NDK 27.1.12297006, CMake 3.30.5, and a Google
 APIs x86_64 emulator image. Selecting this shell accepts the Android SDK licenses;
 it downloads tools into the Nix store without changing your system SDK or mise.
 The regular `nix develop` shell stays small; `.envrc` keeps using that shell.
@@ -110,10 +110,34 @@ emulator logs. Bubblewrap mounts its temporary directory at `/tmp` because the
 emulator crash reporter ignores `TMPDIR`. The SDK remains read-only in the Nix
 store; update the Nix composition instead of installing packages with sdkmanager.
 Java and AAPT2 come from Nix, including Gradle's AAPT2 override. The Android shell
-caps Gradle's JVM heap at 4 GiB (`-Xmx4096m`), with 1 GiB maximum metaspace and one
-Gradle worker. The emulator uses 2 GiB guest RAM in both its AVD configuration and
-launch arguments. JVM/native compiler overhead and emulator host overhead are
-additional memory; these settings are not whole-process or whole-build RAM caps.
+uses a 2 GiB Gradle heap, 512 MiB maximum metaspace, two Gradle workers and parallel
+project execution. Its private Gradle initializer limits each project's native
+compile/link pool to one job, keeps dependencies on the provided CMake version,
+and applies React Native's selected ABI to native libraries. Metro uses one worker
+and a 2 GiB Node heap. Explicit caller settings take precedence; the APK builder
+preserves those settings.
+
+The emulator uses 2 GiB guest RAM in both its AVD configuration and launch arguments.
+The pinned API 35 configuration raises smaller requests to 2 GiB, so the CLI rejects
+ineffective lower values. Place overrides before the action, for example
+`npm run android:isolated -- --memory-mib 3072 emulator`. A larger guest requires
+its own resource estimate. JVM/native compiler and emulator host overhead are
+additional memory; these settings are not whole-stack RAM caps.
+
+Use rough qex reservations of **2 CPUs / 8 GiB for a single-ABI release build**
+and **2 CPUs / 4 GiB for the emulator**. The matching declarations are in
+[AGENTS.md](../AGENTS.md#android-resource-estimates). Provision the SDK separately
+and serialize builds with emulator execution. Multi-ABI, source-only F-Droid,
+Metro-server and test-daemon workloads need separate estimates.
+
+The estimate is informed by a complete serial x86_64 release build with a 1536 MiB
+Gradle heap and 2 GiB Node heap: it completed in about 14m 27s under a 6 GiB cgroup
+cap, with cache reclaim but no OOM events. Full builds under 4 GiB and 5 GiB caps
+were OOM-killed at bundling. The two-worker default is a practical setting for the
+two-CPU budget; its exact speedup was not calibrated. Installing and launching the
+standalone app and cycling it through the background peaked at 3.30 GiB with a
+2 GiB guest and a 3.5 GiB host cap, without OOM or an app restart. This covers the
+unpaired welcome screen, not a paired chat journey.
 
 The runner assigns checkout-specific ADB, emulator, and gRPC ports, disables ADB
 emulator scanning and mDNS discovery, and exports `ANDROID_SERIAL`. A busy port
@@ -283,7 +307,7 @@ PASEO_FDROID_BUILD=1 ./gradlew assembleRelease \
 
 Supported values are `armeabi-v7a`, `arm64-v8a`, `x86`, and `x86_64`. The F-Droid profile filters native libraries to that ABI and changes the APK version code to `baseVersionCode * 10 + abiSuffix`, where the suffixes are ordered `1` through `4` in that same sequence. F-Droid metadata should use four build blocks with `VercodeOperation` entries `10 * %c + 1` through `10 * %c + 4` and pass the matching `reactNativeArchitectures` value in each build command. Builds without a single architecture keep the base version code.
 
-Keep the excluded npm packages installed. Normal builds use them, while the F-Droid profile removes only their Android native modules and config plugins. Paseo always applies `expo-gradle-jvmargs` with `-Xmx4096m` and `-XX:MaxMetaspaceSize=1024m` so local Expo prebuilds have enough Gradle heap whether they use precompiled AARs or source-built Expo modules.
+Keep the excluded npm packages installed. Normal builds use them, while the F-Droid profile removes only their Android native modules and config plugins. Generated projects apply `expo-gradle-jvmargs` with `-Xmx4096m` and `-XX:MaxMetaspaceSize=1024m`. The Nix shell overrides this with lighter development defaults; for source-only F-Droid builds, pass `'-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m'` explicitly to Gradle.
 
 The EAS `production-apk` profile uses the large Android resource class. Release builds compile the native ABIs and run Hermes bundling in the same Gradle invocation; the default worker can exhaust its remaining memory and kill Hermes with exit code 137 even when Gradle's own heap is correctly sized.
 

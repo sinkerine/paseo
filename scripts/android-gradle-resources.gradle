@@ -1,0 +1,43 @@
+// Gradle's worker count does not bound Ninja jobs inside each native task.
+// Keep each project's native compile/link serial so project-level parallelism
+// has a predictable number of compiler processes.
+gradle.beforeProject { project ->
+    ["com.android.application", "com.android.library"].each { pluginId ->
+        project.pluginManager.withPlugin(pluginId) {
+            project.extensions.getByName("androidComponents").finalizeDsl { android ->
+                // Not every native library inherits React Native's ABI selection.
+                def architectures = project.findProperty("reactNativeArchitectures")
+                if (architectures) {
+                    android.defaultConfig.ndk.abiFilters.clear()
+                    android.defaultConfig.ndk.abiFilters.addAll(architectures.toString().split(",").collect { it.trim() })
+                }
+                // The read-only Nix SDK cannot install AGP's default CMake version.
+                def cmakeVersion = System.getenv("CMAKE_VERSION")
+                if (cmakeVersion) {
+                    android.externalNativeBuild.cmake.version = cmakeVersion
+                }
+                android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
+                    "-DCMAKE_JOB_POOLS=paseo_compile=1;paseo_link=1",
+                    "-DCMAKE_JOB_POOL_COMPILE=paseo_compile",
+                    "-DCMAKE_JOB_POOL_LINK=paseo_link"
+                ])
+            }
+        }
+    }
+    project.pluginManager.withPlugin("com.facebook.react") {
+        project.afterEvaluate {
+            def react = project.extensions.getByName("react")
+            def packagerArgs = react.extraPackagerArgs.get()
+            if (!packagerArgs.any { it == "--max-workers" || it.startsWith("--max-workers=") }) {
+                react.extraPackagerArgs.addAll(["--max-workers", "1"])
+            }
+            def nodeOptions = System.getenv("NODE_OPTIONS") ?: ""
+            def hasNodeHeap = react.nodeExecutableAndArgs.get().any {
+                it.startsWith("--max-old-space-size") || it.startsWith("--max_old_space_size")
+            } || nodeOptions.contains("--max-old-space-size") || nodeOptions.contains("--max_old_space_size")
+            if (!hasNodeHeap) {
+                react.nodeExecutableAndArgs.add("--max-old-space-size=2048")
+            }
+        }
+    }
+}

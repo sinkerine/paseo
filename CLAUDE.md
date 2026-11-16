@@ -228,29 +228,33 @@ do not increase heaps or reduce claims silently.
 }
 ```
 
-## Isolated Android emulator
+## Android resource estimates
 
-Use `npm run android:isolated -- setup` to provision the Nix SDK and a checkout-local
-API 35 AVD on x86_64 Linux. See [docs/android.md](docs/android.md#nix-sdk-and-isolated-emulator-linux)
-for commands and isolation boundaries.
+Use `npm run android:isolated -- setup` to provision the Nix SDK and checkout-local
+API 35 AVD on x86_64 Linux. Commands and measured scope live in
+[docs/android.md](docs/android.md#nix-sdk-and-isolated-emulator-linux).
 
-The following estimate covers one headless KVM emulator (2 vCPUs, 2 GiB guest RAM),
-one private ADB server, and a lightweight command through teardown. It excludes
-Gradle/native builds, Metro, and app/daemon E2E stacks; those need their own estimate.
-The 6 GiB reservation includes the 2 GiB guest plus QEMU, software rendering,
-ADB, and launcher overhead. Gradle's separate 4 GiB heap limit also allows up to
-1 GiB metaspace and additional native/compiler memory; do not use the heap size
-as the whole-build qex claim. Build and emulator phases run separately. Reduce
-these whole-stack reservations only with a successful cgroup `memory.peak`
-measurement for the declared workload. Keep the runner in the foreground inside
-the admitted job.
+These are rough, conservative reservations. Build and emulator phases run
+separately. The build estimate covers a ready SDK, one release ABI, two Gradle
+workers, a 2 GiB JVM heap, one native compile/link job per project, and one Metro
+worker with a 2 GiB Node heap. It excludes SDK provisioning, an emulator, and
+source-only F-Droid or unrestricted multi-ABI builds.
+
+```qex-e2e android-build
+{
+  "resources": { "cpu": 2, "mem": "8GiB" },
+  "timeout": "1h"
+}
+```
+
+The emulator estimate covers a 2 GiB guest, two vCPUs, private ADB, software
+rendering, and a lightweight standalone-app command through teardown. It excludes
+builds, Metro, and test daemons. Keep the runner in the foreground for the entire
+reservation; guest RAM and JVM heap limits are not whole-stack memory caps.
 
 ```qex-e2e android-emulator
 {
-  "resources": {
-    "cpu": 2,
-    "mem": "6GiB"
-  },
+  "resources": { "cpu": 2, "mem": "4GiB" },
   "timeout": "10m"
 }
 ```
