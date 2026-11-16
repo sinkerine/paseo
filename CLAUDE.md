@@ -118,16 +118,16 @@ When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: write
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
-Default E2E to the [background headless Playwright workflow](docs/testing.md#background-e2e-workflow), using the existing isolated harness and one targeted spec with one worker. Use real Electron or native tests when the changed behavior requires those platforms; run their UI in a separate display or disposable device environment.
+**Agents run E2E tests only for web and Android.** Before deciding whether E2E is needed or which tests to run for a feature or fix, read [`e2e-paths.yml`](e2e-paths.yml) and match the complete change against it, following [E2E test routing](docs/testing.md#e2e-test-routing). Run affected journeys from every matched group and all of its `required_tests`; record the triggering paths and selected tests, or explain why no E2E applies. Maintain web E2E paths in the `browser` and `website` groups alongside Android coverage. Do not run iOS, real Electron, or standalone daemon, CLI, or relay E2E suites; CI job routing remains separate. Review the map for every feature and update it in the same change when new or moved code, entrypoints, or test coverage changes which journeys must run. Fix routing gaps before delivery. Update `.github/ci-paths.yml` when the corresponding GitHub Actions job coverage changes.
 
-For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. For the [shared profile shortcut journey](docs/features/shared-profile-shortcuts-plan.md#e2e-journey), run `npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/shared-profile-shortcuts.spec.ts --project=browser`. The existing app Playwright harness owns Metro, disposable daemon homes and ports, throwaway workspaces, and cleanup; the spec adds a second isolated host with distinct profiles and seeds legacy browser storage. The spec reuses the desktop bridge fixture to expose Shortcuts settings in Chromium; this covers the desktop renderer, not a real Electron window. Its fake providers cover configuration routing, not live provider behavior. Keep evidence in ignored worktree `artifacts/`; use the [development shell](docs/development.md#nix-and-direnv) for Chromium runtime dependencies. Never touch the main daemon on 6767. See [docs/testing.md](docs/testing.md#running-tests-locally) for targeted execution and [docs/qa.md](docs/qa.md#evidence) for evidence requirements.
+Use the existing isolated harnesses referenced by the map. Run affected web specs with one worker for Playwright and Android journeys in a disposable emulator or dedicated test device. These harnesses may start isolated daemons and other dependencies. Keep evidence in ignored worktree `artifacts/`; see [QA evidence](docs/qa.md#evidence). Never touch the main daemon on 6767.
 
 ## Shared E2E resource estimates
 
-Run E2E when a feature is first added, including required repairs and reruns. Future
-pushes and deployments of that feature do not require fresh E2E runs. Existing unit
-tests still run. Every E2E execution requires actual qex admission before setup,
-with the reservation held through teardown; see `~/.config/qex/AGENT.md`.
+Every E2E execution requires actual qex admission before setup, retained through
+teardown; see `~/.config/qex/AGENT.md`. Validate these estimates with
+`agent-job estimates`, then run the documented entrypoint through
+`agent-job run --e2e <name> -- <command>`. Do not nest reservations.
 
 `browser-one-worker` covers one targeted app Playwright worker, cold Metro,
 Chromium, disposable daemon homes and ports, a secondary test host when needed,

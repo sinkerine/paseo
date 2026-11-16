@@ -216,17 +216,12 @@ Keep automation headless: do not pass `--headed`, `--ui`, or `--debug` unless th
 user requests an interactive run. Background tests still consume CPU, RAM, and
 I/O; serialize heavy builds, browser tests, and emulator runs.
 
-Choose additional coverage by the behavior being changed:
+Agents run E2E only for web and Android, selected through [E2E test routing](#e2e-test-routing):
 
-- Browser user journeys use `@getpaseo/app`'s `test:e2e` script.
-- Desktop renderer journeys use `npm run test:e2e:renderer --workspace=@getpaseo/desktop -- e2e/<spec>.spec.ts --workers=1`. The bridge
-  fixture exercises desktop renderer behavior in Chromium.
-- Real Electron window, focus, IPC, and native-dialog behavior needs the existing
-  real-Electron tests on a separate Xvfb display with a window manager, or inside
-  a VM. Do not launch them on the user's active display.
-- Native behavior needs the existing mobile tests on a disposable emulator or
-  dedicated device with separate tooling state. Browser coverage does not prove
-  native behavior.
+- Browser user journeys use `@getpaseo/app`'s `test:e2e` script; website journeys use the website Playwright harness.
+- Android journeys use the existing mobile tests on a disposable emulator or dedicated test device with separate tooling state. Select Android flows only; the combined mobile suite also runs iOS flows. Browser coverage does not prove Android behavior.
+
+Existing iOS, real-Electron, and standalone daemon/CLI/relay E2E suites are outside agent E2E selection. CI retains its own job routing. Web and Android harnesses can start isolated daemons and other dependencies.
 
 A VM or LXC is not a prerequisite for headless browser E2E. Use a separate test
 host when local resource contention would disrupt active work.
@@ -250,9 +245,17 @@ Test suites in this repo are heavy. Running them in bulk freezes the machine, es
 - Teardown kills the process tree, because a Windows signal reaches only the direct child and leaves forked workers holding the listening port.
 - The `asdf`-backed local Elixir relay stays POSIX-only, so the `relay-deployment` Playwright project is unavailable on Windows.
 
+## E2E test routing
+
+[`e2e-paths.yml`](../e2e-paths.yml) owns agents' E2E selection for features and fixes. Agents run only web and Android E2E, including Android journeys that have no GitHub Actions job. Each group declares its `platform`. Read its matching and evidence rules before selecting tests. The map is declarative guidance for agents; existing harnesses execute the tests. CI does not consume this file.
+
+Match the complete change against the map, using the PR base or worktree base and including uncommitted and untracked files and both sides of renames and deletions. Run affected specs in each matched group, including its `required_tests`; leave full suites to CI. The `tests` patterns identify where to choose journeys, not commands to run an entire directory. Android groups need Android journeys with their documented setup; shared React Native changes select Android coverage even when no Android-specific file changed. Browser coverage does not satisfy an Android group. An unavailable environment or missing resource declaration is a blocker to report, not passing evidence.
+
+Review the map for every feature. Prefer stable behavior directories over individual files, and exclude web/Electron-only files from native selection. Add or update groups when code moves or coverage changes; record why existing patterns suffice when no edit is needed. Trace affected user and API entrypoints to real journeys and repair gaps before delivery. When only routing or documentation changes, validate the manifest and the affected selection decisions without launching unrelated product journeys. If no journey applies, record why and run the remaining required checks. Keep commands and prerequisites in the existing harnesses and subject docs, and qex declarations in root `AGENTS.md`.
+
 ## Pull-request test routing
 
-PR checks are routed by the behavior each suite proves, using `.github/ci-paths.yml`. A package does not inherit every test suite of its runtime consumers: app changes do not run CLI or Electron-wrapper tests, and protocol changes do not run every package that imports the protocol. Cross-package static compatibility belongs to `typecheck`; full integration coverage runs after merge on main and in manual CI runs.
+GitHub Actions jobs are routed by the behavior each suite proves, using [`.github/ci-paths.yml`](../.github/ci-paths.yml) and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Update them when CI job coverage changes, keeping `scripts/ci-workflow.test.mjs` aligned and running that existing test. This routing is separate from [agent E2E selection](#e2e-test-routing). A package does not inherit every test suite of its runtime consumers: app changes do not run CLI or Electron-wrapper tests, and protocol changes do not run every package that imports the protocol. Cross-package static compatibility belongs to `typecheck`; full integration coverage runs after merge on main and in manual CI runs.
 
 Required matrix legs are declared as statically named jobs. Their shared steps use YAML anchors, while job-level `if` conditions let GitHub report an unaffected leg as genuinely skipped without allocating a runner or losing the exact required-check name.
 

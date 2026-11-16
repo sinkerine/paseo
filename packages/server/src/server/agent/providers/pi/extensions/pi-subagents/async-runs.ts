@@ -165,7 +165,7 @@ export function projectRun(
         childSessions.push({
           id,
           file: step.sessionFile,
-          ...(run.resumedRun ? { lifetime: "conversation" as const } : {}),
+          lifetime: "conversation",
         });
       }
     }
