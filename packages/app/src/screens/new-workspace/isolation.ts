@@ -64,7 +64,7 @@ export function resolveWorkspaceIsolation(
     nextDraft.manualIsolation ??
     input.projectDefaultIsolation ??
     input.preferredIsolation ??
-    "local";
+    "worktree";
   const canCreateWorktree = input.supportsMultiplicity && input.worktreeSupport !== "unsupported";
   const isWorktree = isolation === "worktree" && canCreateWorktree;
   return {

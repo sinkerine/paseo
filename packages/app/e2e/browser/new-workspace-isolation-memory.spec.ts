@@ -71,11 +71,13 @@ test.describe("New workspace isolation memory", () => {
       await gotoAppShell(page);
       await waitForSidebarHydration(page);
 
-      // First visit: the screen opens on Local, switch it to New worktree and create.
+      // First visit defaults to New worktree; explicit selections still work.
       await openNewWorkspaceComposer(page, {
         projectKey: openedProject.projectKey,
         projectDisplayName: openedProject.projectDisplayName,
       });
+      await expectWorkspaceIsolationSelected(page, "worktree");
+      await selectWorkspaceIsolation(page, "local");
       await expectWorkspaceIsolationSelected(page, "local");
       await page.getByTestId("workspace-create-isolation-trigger").click();
       const isolationPopup = page.getByTestId("combobox-desktop-container").last();

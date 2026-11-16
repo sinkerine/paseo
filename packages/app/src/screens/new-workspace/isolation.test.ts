@@ -13,6 +13,25 @@ describe("workspace isolation draft", () => {
     hostProjectId: "A",
     projectViewKey: "provisional",
   });
+  test.each([undefined, "local", "worktree"] as const)(
+    "defaults to New worktree and respects remembered choice %s",
+    (preferredIsolation) => {
+      const input = {
+        draft: createWorkspaceIsolationDraftState(targetKey),
+        targetKey,
+        projectDefaultIsolation: null,
+        preferredIsolation,
+        supportsMultiplicity: true,
+        worktreeSupport: "supported" as const,
+      };
+      expect(resolveWorkspaceIsolation(input).effectiveIsolation).toBe(
+        preferredIsolation ?? "worktree",
+      );
+      expect(
+        resolveWorkspaceIsolation({ ...input, worktreeSupport: "unsupported" }).effectiveIsolation,
+      ).toBe("local");
+    },
+  );
   test("project defaults win and unsupported projects create locally", () => {
     const input = {
       draft: createWorkspaceIsolationDraftState(targetKey),
