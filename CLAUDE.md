@@ -129,6 +129,8 @@ teardown; see `~/.config/qex/AGENT.md`. Validate these estimates with
 `agent-job estimates`, then run the documented entrypoint through
 `agent-job run --e2e <name> -- <command>`. Do not nest reservations.
 
+The browser and Electron declarations use the configured heavy estimate of 4 CPUs / 8 GiB, covering setup, Metro, isolated daemons, browsers, fixture agents, and teardown. This is a configured reservation, not a measured peak; revisit it if the complete stack needs more memory.
+
 `browser-one-worker` covers one targeted app Playwright worker, cold Metro,
 Chromium, disposable daemon homes and ports, a secondary test host when needed,
 and fixture providers through cleanup. Use the documented background headless
@@ -136,7 +138,7 @@ Playwright workflow in `docs/testing.md`.
 
 ```qex-e2e browser-one-worker
 {
-  "resources": { "cpu": 4, "mem": "16GiB" },
+  "resources": { "cpu": 4, "mem": "8GiB" },
   "timeout": "90m"
 }
 ```
@@ -170,7 +172,7 @@ with builds when the recipe shares generated outputs.
 
 ```qex-e2e electron
 {
-  "resources": { "cpu": 4, "mem": "16GiB" },
+  "resources": { "cpu": 4, "mem": "8GiB" },
   "timeout": "1h"
 }
 ```
