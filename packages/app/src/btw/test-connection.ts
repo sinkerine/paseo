@@ -1,69 +1,39 @@
-import { DaemonClient, type DaemonTransport } from "@getpaseo/client/internal/daemon-client";
+import type { ConnectionState, DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
 
-/** An inert socket boundary; connection status still comes from the real client handshake. */
-export function btwTestConnection() {
-  let receive = (_data: string) => {};
-  let open = () => {};
-  let close = () => {};
-  const transport: DaemonTransport = {
-    send(data) {
-      if (JSON.parse(String(data)).type === "hello") {
-        receive(
-          JSON.stringify({
-            type: "session",
-            message: {
-              type: "status",
-              payload: {
-                status: "server_info",
-                serverId: "host",
-                hostname: null,
-                version: null,
-              },
-            },
-          }),
-        );
-      }
-    },
-    close() {},
-    onMessage(handler) {
-      receive = (data) => {
-        void handler(data, false);
-      };
+export function btwTestConnection(rows: ProviderSubagentDescriptorPayload[] = []) {
+  const listeners = new Set<(state: ConnectionState) => void>();
+  let state: ConnectionState = { status: "disconnected" };
+  const calls: string[] = [];
+  let read: DaemonClient["listProviderSubagents"] = async (parentAgentId) => ({
+    requestId: "list",
+    parentAgentId,
+    subagents: rows,
+    error: null,
+  });
+  const client: Pick<DaemonClient, "subscribeConnectionStatus" | "listProviderSubagents"> = {
+    subscribeConnectionStatus(listener) {
+      listeners.add(listener);
+      listener(state);
       return () => {
-        receive = () => {};
+        listeners.delete(listener);
       };
     },
-    onOpen(handler) {
-      open = handler;
-      return () => {
-        open = () => {};
-      };
-    },
-    onClose(handler) {
-      close = handler;
-      return () => {
-        close = () => {};
-      };
-    },
-    onError() {
-      return () => {};
+    listProviderSubagents(parentAgentId) {
+      calls.push(parentAgentId);
+      return read(parentAgentId);
     },
   };
-  const client = new DaemonClient({
-    url: "ws://127.0.0.1:1/ws",
-    clientId: "btw-reconnect-unit",
-    transportFactory: () => transport,
-    reconnect: { enabled: false },
-  });
   return {
     client,
-    async connect() {
-      const ready = client.connect();
-      open();
-      await ready;
+    calls,
+    listeners,
+    setRead(next: DaemonClient["listProviderSubagents"]) {
+      read = next;
     },
-    disconnect() {
-      close();
+    status(next: ConnectionState) {
+      state = next;
+      for (const listener of listeners) listener(state);
     },
   };
 }

@@ -1,10 +1,6 @@
-/** @vitest-environment jsdom */
-import { expect, test, vi } from "vitest";
-import { btwCommandText, useSendBtwCommand } from "./send";
-import { useSessionStore } from "@/stores/session-store";
-import { renderHook } from "@testing-library/react";
-
-vi.mock("@/stores/session-store", () => ({ useSessionStore: vi.fn() }));
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { expect, test } from "vitest";
+import { btwCommandText, sendBtwCommand } from "./send";
 test("every BTW action encodes exactly one command, preserving multiline ASCII questions", () => {
   expect([
     btwCommandText({ kind: "ask", text: "Why ASCII?\nsecond line" }),
@@ -24,12 +20,20 @@ test("every BTW action encodes exactly one command, preserving multiline ASCII q
     "/btw:clear",
   ]);
 });
-test("window sends suppress the main timeline breadcrumb and propagate failures without resending", async () => {
-  const sendAgentMessage = vi.fn().mockRejectedValue(new Error("Disconnected"));
-  vi.mocked(useSessionStore).mockReturnValue({ sendAgentMessage });
-  const { result } = renderHook(() => useSendBtwCommand("host", "owner"));
-  await expect(result.current({ kind: "ask", text: "Question" })).rejects.toThrow("Disconnected");
-  expect(sendAgentMessage).toHaveBeenCalledExactlyOnceWith("owner", "/btw Question", {
-    messageId: "",
-  });
+test("sends suppress the main timeline breadcrumb and propagate failures without resending", async () => {
+  const calls: unknown[] = [];
+  const client = {
+    async sendAgentMessage(...args: Parameters<DaemonClient["sendAgentMessage"]>) {
+      calls.push(args);
+      throw new Error("Disconnected");
+    },
+  };
+  await expect(
+    sendBtwCommand({ client, agentId: "owner", command: { kind: "ask", text: "Question" } }),
+  ).rejects.toThrow("Disconnected");
+  expect(calls).toEqual([["owner", "/btw Question", { messageId: "" }]]);
+  await expect(
+    sendBtwCommand({ client: null, agentId: "owner", command: { kind: "clear" } }),
+  ).rejects.toThrow("Host disconnected");
+  expect(calls).toHaveLength(1);
 });

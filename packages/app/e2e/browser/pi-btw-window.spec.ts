@@ -1272,3 +1272,109 @@ for (const sendShortcut of ["enter", "mod-enter"]) {
     }
   });
 }
+
+test("BTW composer stays mounted and keeps focus through empty, first thread, New and Clear", async ({
+  page,
+  btwRuntime,
+}, info) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const handle = await launchBtwAgent(page, btwRuntime);
+  const panel = page.getByTestId("btw-panel").filter({ visible: true });
+  const stub = btwRuntime.stub;
+  if (!stub) throw new Error("Missing deterministic HTTP fixture");
+  try {
+    await submitMessageWithButton(page, "PARENT_A");
+    await handle.client.waitForFinish(handle.agentId, 60000);
+    const requestsBefore = stub.requests.length;
+    await submitMessageWithButton(page, "/btw");
+    await expect(panel).toHaveAttribute("aria-label", /^btw:/);
+    await panel.getByTestId("btw-clear").click();
+    await expect(panel.getByTestId("btw-empty")).toBeVisible();
+    const composer = panel.getByTestId("btw-composer");
+    await composer.fill("Keep this ASCII draft");
+    await composer.focus();
+    await composer.evaluate((input: HTMLTextAreaElement) => input.setSelectionRange(2, 6));
+    const original = await composer.elementHandle();
+    if (!original) throw new Error("Missing composer before thread transitions");
+    for (const command of ["/btw:new", "/btw:new", "/btw:clear"]) {
+      const previousId = await panel.getAttribute("aria-label");
+      await handle.client.sendAgentMessage(handle.agentId, command);
+      await expect(panel).not.toHaveAttribute("aria-label", previousId ?? "");
+      expect(await composer.evaluate((input, previous) => input === previous, original)).toBe(true);
+      await expect(composer).toHaveValue("Keep this ASCII draft");
+      await expect(composer).toBeFocused();
+      expect(
+        await composer.evaluate((input: HTMLTextAreaElement) => [
+          input.selectionStart,
+          input.selectionEnd,
+        ]),
+      ).toEqual([2, 6]);
+    }
+    await expect(panel.getByTestId("btw-empty")).toBeVisible();
+    await expect(panel.getByTestId("turn-footer")).toHaveCount(0);
+    expect(stub.requests).toHaveLength(requestsBefore);
+    await captureBtw(page, info, "stable-composer-real-thread-transitions");
+    await original.dispose();
+  } finally {
+    await closeAgent(handle);
+  }
+});
+
+test("BTW pending dispatch and read-error recovery survive real panel remount", async ({
+  page,
+  btwRuntime,
+}, info) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const transport = await installDaemonWebSocketGate(page);
+  const handle = await launchBtwAgent(page, btwRuntime);
+  const panel = page.getByTestId("btw-panel").filter({ visible: true });
+  const chip = page.getByTestId("btw-chip").filter({ visible: true });
+  const stub = btwRuntime.stub;
+  if (!stub) throw new Error("Missing deterministic HTTP fixture");
+  try {
+    await submitMessageWithButton(page, "PARENT_A");
+    await handle.client.waitForFinish(handle.agentId, 60000);
+    await submitMessageWithButton(page, "/btw FIRST_Q");
+    await expect(panel).toContainText("BTW_REPLY CONTEXT_A");
+    await expect(panel.getByTestId("btw-stop")).toHaveCount(0);
+    const sends = transport.getClientRequestCount("send_agent_message_request");
+    const requests = stub.requests.length;
+    await panel.getByTestId("btw-composer").fill("AFTER_B held remount");
+    transport.holdNextClientRequest("send_agent_message_request");
+    await panel.getByTestId("btw-send").click();
+    await transport.waitForHeldClientRequest();
+    await closeBtwSurface(page, handle.agentId, false);
+    await chip.click();
+    await expect(panel.getByTestId("btw-composer")).toHaveValue("AFTER_B held remount");
+    for (const id of ["btw-send", "btw-new", "btw-clear", "btw-inject", "btw-summarize"]) {
+      await expect(panel.getByTestId(id)).toBeDisabled();
+    }
+    expect(transport.getClientRequestCount("send_agent_message_request")).toBe(sends + 1);
+    expect(stub.requests).toHaveLength(requests);
+    transport.releaseHeldClientRequest();
+    await expect(panel.getByTestId("btw-composer")).toHaveValue("");
+    await expect(panel).toContainText("BTW_REPLY AFTER_B");
+    await expect(panel.getByTestId("btw-stop")).toHaveCount(0);
+    expect(stub.requests).toHaveLength(requests + 1);
+    await closeBtwSurface(page, handle.agentId, false);
+    await transport.drop();
+    await transport.waitForBlockedConnection();
+    await chip.click();
+    await panel.getByTestId("btw-composer").fill("Unsent read recovery");
+    await expect(panel.getByTestId("btw-action-feedback")).toContainText(/connect|socket|offline/i);
+    const listCount = transport.getClientRequestCount("agent.provider_subagents.list.request");
+    transport.restore();
+    await transport.waitForServerMessage("agent.provider_subagents.list.response", listCount + 1);
+    await expect(panel.getByTestId("btw-action-feedback")).not.toContainText(
+      /connect|socket|offline/i,
+    );
+    await expect(panel.getByTestId("btw-composer")).toHaveValue("Unsent read recovery");
+    expect(stub.requests).toHaveLength(requests + 1);
+    await captureBtw(page, info, "real-pending-remount-and-read-recovery");
+  } finally {
+    transport.restore();
+    await closeAgent(handle);
+  }
+});

@@ -139,3 +139,10 @@ it("preserves omitted and explicit false workspace background intent", () => {
   expect(readOptions(["--background"]).background).toBe(true);
   expect(readOptions(["--no-background"]).background).toBe(false);
 });
+
+it("exposes both focus overrides for agent open", () => {
+  const agent = createCli().commands.find((command) => command.name() === "agent")!;
+  const open = agent.commands.find((command) => command.name() === "open")!;
+  expect(open.helpInformation()).toContain("--focus");
+  expect(open.helpInformation()).toContain("--no-focus");
+});

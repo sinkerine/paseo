@@ -262,3 +262,72 @@ test("rejected ask preserves newer edits and authoritative completion while pend
     submitted: null,
   });
 });
+
+test("selection insertion appends exact quotes to this parent's retained failed draft without sending", async () => {
+  const store = useBtwConversationStore.getState();
+  store.edit(key, "Question");
+  await store.dispatch({
+    key,
+    command: { kind: "ask", text: "Question" },
+    after: null,
+    submittedAt: 0,
+    send: async () => {},
+  });
+  store.observeThread(key, {
+    threadId: "thread",
+    status: "failed",
+    updatedAt: "2026-01-04",
+    items: [],
+  });
+  const before = useBtwConversationStore.getState().byParent[key];
+  const otherKey = btwConversationKey("host", "other-parent");
+  store.edit(otherKey, "Other draft");
+  expect(store.insert(key, "> QUOTE\n\n")).toBe(true);
+  expect(useBtwConversationStore.getState().byParent[key]).toEqual({
+    ...before,
+    draft: { ...before.draft, text: "Question\n\n> QUOTE\n\n" },
+    pendingComposerFocus: true,
+  });
+  expect(useBtwConversationStore.getState().byParent[otherKey].draft.text).toBe("Other draft");
+  store.clearComposerFocus(key);
+  expect(useBtwConversationStore.getState().byParent[key].pendingComposerFocus).toBe(false);
+});
+
+test("selection insertion refuses pending admission and empty detail without modifying any state", async () => {
+  const store = useBtwConversationStore.getState();
+  store.edit(key, "Keep this question");
+  let finish = () => {};
+  const request = store.dispatch({
+    key,
+    command: { kind: "ask", text: "Keep this question" },
+    after: null,
+    send: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  });
+  const before = useBtwConversationStore.getState().byParent;
+  expect(store.insert(key, "> REFUSED\n\n")).toBe(false);
+  expect(useBtwConversationStore.getState().byParent).toBe(before);
+  finish();
+  await request;
+  const settled = useBtwConversationStore.getState().byParent;
+  expect(store.insert(key, "")).toBe(false);
+  expect(useBtwConversationStore.getState().byParent).toBe(settled);
+  expect(store.insert(key, "> AFTER_ACK\n\n")).toBe(true);
+  store.observeThread(key, {
+    threadId: "thread",
+    status: "completed",
+    updatedAt: "2026-01-04",
+    items: [
+      {
+        kind: "user_message",
+        id: "q",
+        text: "Keep this question",
+        timestamp: new Date("2026-01-02"),
+      },
+      { kind: "assistant_message", id: "a", text: "Done", timestamp: new Date("2026-01-02") },
+    ],
+  });
+  expect(useBtwConversationStore.getState().byParent[key].draft.text).toBe("> AFTER_ACK\n\n");
+});

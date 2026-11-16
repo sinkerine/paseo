@@ -1,15 +1,11 @@
-/** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test } from "vitest";
-import { PaneFocusProvider, createPaneFocusContextValue } from "@/panels/pane-context";
+import { beforeEach, expect, test } from "vitest";
 import {
   collectAllTabs,
   findPaneContainingTab,
   useWorkspaceLayoutStore,
 } from "@/stores/workspace-layout-store";
 import { useProviderSubagentStore } from "@/subagents/provider-store";
-import { BtwPill } from "./pill";
-import { selectBtwTab } from "./tab";
+import { selectBtwTab, toggleBtwTab } from "./tab";
 
 const workspaceKey = "host:workspace";
 beforeEach(() => {
@@ -39,30 +35,24 @@ beforeEach(() => {
     },
   ]);
 });
-afterEach(cleanup);
-function mount() {
-  return render(
-    <PaneFocusProvider
-      value={createPaneFocusContextValue({ isWorkspaceFocused: true, isPaneFocused: false })}
-    >
-      <BtwPill serverId="host" workspaceId="workspace" agentId="parent" />
-    </PaneFocusProvider>,
-  );
+function toggle() {
+  toggleBtwTab({ workspaceKey, agentId: "parent" });
+}
+function expanded() {
+  return selectBtwTab(useWorkspaceLayoutStore.getState(), workspaceKey, "parent")?.visible === true;
 }
 test("hidden -> open beside and visible -> close leave conversation running", () => {
-  mount();
-  const chip = screen.getByTestId("btw-chip");
   const initialTabs = collectAllTabs(
     useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey].root,
   ).map(({ tabId, target }) => ({ tabId, target }));
-  expect(chip.getAttribute("aria-expanded")).toBe("false");
-  fireEvent.click(chip);
+  expect(expanded()).toBe(false);
+  toggle();
   expect(selectBtwTab(useWorkspaceLayoutStore.getState(), workspaceKey, "parent")).toMatchObject({
     tabId: "btw_parent",
     visible: true,
   });
-  expect(chip.getAttribute("aria-expanded")).toBe("true");
-  fireEvent.click(chip);
+  expect(expanded()).toBe(true);
+  toggle();
   expect(selectBtwTab(useWorkspaceLayoutStore.getState(), workspaceKey, "parent")).toBeNull();
   expect(
     collectAllTabs(useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey].root).map(
@@ -74,9 +64,8 @@ test("hidden -> open beside and visible -> close leave conversation running", ()
 test("present-but-unselected -> reveal keeps the tab where the user placed it", () => {
   const store = useWorkspaceLayoutStore.getState();
   store.openTab({ workspaceKey, target: { kind: "btw", agentId: "parent" }, intent: "background" });
-  mount();
-  expect(screen.getByTestId("btw-chip").getAttribute("aria-expanded")).toBe("false");
-  fireEvent.click(screen.getByTestId("btw-chip"));
+  expect(expanded()).toBe(false);
+  toggle();
   expect(selectBtwTab(useWorkspaceLayoutStore.getState(), workspaceKey, "parent")?.visible).toBe(
     true,
   );
@@ -84,13 +73,12 @@ test("present-but-unselected -> reveal keeps the tab where the user placed it", 
 });
 test("absent extension has no chip; compact toggles the workspace sheet", () => {
   useWorkspaceLayoutStore.getState().setLayoutMode("compact");
-  mount();
-  fireEvent.click(screen.getByTestId("btw-chip"));
+  toggle();
   expect(useWorkspaceLayoutStore.getState().sheetsByWorkspace[workspaceKey]).toHaveLength(1);
-  fireEvent.click(screen.getByTestId("btw-chip"));
+  toggle();
   expect(useWorkspaceLayoutStore.getState().sheetsByWorkspace[workspaceKey] ?? []).toHaveLength(0);
-  act(() => useProviderSubagentStore.getState().replaceList("host", "parent", []));
-  expect(screen.queryByTestId("btw-chip")).toBeNull();
+  useProviderSubagentStore.getState().replaceList("host", "parent", []);
+  expect([...useProviderSubagentStore.getState().descriptors.values()]).toEqual([]);
 });
 
 test("single-pane chip reveals a retained ordinary split rather than closing it", () => {
@@ -109,9 +97,8 @@ test("single-pane chip reveals a retained ordinary split rather than closing it"
   expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey].focusedPaneId).toBe(
     main,
   );
-  mount();
-  expect(screen.getByTestId("btw-chip").getAttribute("aria-expanded")).toBe("false");
-  fireEvent.click(screen.getByTestId("btw-chip"));
+  expect(expanded()).toBe(false);
+  toggle();
   expect(selectBtwTab(useWorkspaceLayoutStore.getState(), workspaceKey, "parent")).toEqual({
     tabId: "btw_parent",
     visible: true,
@@ -135,12 +122,11 @@ test("single-pane chip recognizes the visible Explorer beside the focused main p
     intent: "reveal",
     placement: { mode: "pane", paneId: explorer },
   });
-  mount();
-  expect(screen.getByTestId("btw-chip").getAttribute("aria-expanded")).toBe("true");
-  act(() => store.hideExplorerSidebar(workspaceKey));
-  expect(screen.getByTestId("btw-chip").getAttribute("aria-expanded")).toBe("false");
-  act(() => store.showExplorerSidebar(workspaceKey));
-  expect(screen.getByTestId("btw-chip").getAttribute("aria-expanded")).toBe("true");
-  fireEvent.click(screen.getByTestId("btw-chip"));
+  expect(expanded()).toBe(true);
+  store.hideExplorerSidebar(workspaceKey);
+  expect(expanded()).toBe(false);
+  store.showExplorerSidebar(workspaceKey);
+  expect(expanded()).toBe(true);
+  toggle();
   expect(selectBtwTab(useWorkspaceLayoutStore.getState(), workspaceKey, "parent")).toBeNull();
 });

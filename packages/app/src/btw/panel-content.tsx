@@ -1,3 +1,4 @@
+import { btwConversationKey } from "./conversation-store";
 import { useAppSettings } from "@/hooks/use-settings";
 import { isWeb } from "@/constants/platform";
 import {
@@ -5,9 +6,10 @@ import {
   resolveComposerSubmitOnEnter,
   type WebTextInputKeyPressEvent,
 } from "@/composer/input/enter-key";
+import { focusBtwComposerInput, type BtwComposerInputRef } from "./selection-target";
 import { useMutation } from "@tanstack/react-query";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
-import { useCallback, useMemo, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useEffect, type RefObject } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
@@ -40,9 +42,12 @@ export interface BtwPanelContentProps {
   streamViewRef: RefObject<AgentStreamViewHandle | null>;
   onUserScrollIntent(): void;
   compact: boolean;
+  selectionTarget: RefObject<View | null>;
   draft: string;
   onDraft(text: string): void;
   onCommand(command: BtwCommand): void;
+  pendingComposerFocus?: boolean;
+  onComposerFocusHandled?: () => void;
   pending: boolean;
   feedback: string | null;
   error: string | null;
@@ -142,6 +147,9 @@ export function BtwPanelContent({
   streamViewRef,
   onUserScrollIntent,
   compact,
+  selectionTarget,
+  pendingComposerFocus,
+  onComposerFocusHandled,
   draft,
   onDraft,
   onCommand,
@@ -151,12 +159,22 @@ export function BtwPanelContent({
 }: BtwPanelContentProps) {
   const { t } = useTranslation();
   const { settings } = useAppSettings();
+  const inputRef = useRef<BtwComposerInputRef>(null);
+  useEffect(() => {
+    if (!pendingComposerFocus || !inputRef.current) return;
+    focusBtwComposerInput(inputRef.current);
+    onComposerFocusHandled?.();
+  }, [pendingComposerFocus, onComposerFocusHandled]);
   const { timeline, stream, historyPagination, olderError } = useBtwTimeline({
     serverId,
     agentId,
     thread,
   });
   const { streamId, context, turnPresentation } = useBtwStream({ serverId, agentId, thread });
+  const composerOwnership = useMemo(
+    () => ({ chatComposerOwner: btwConversationKey(serverId, agentId) }),
+    [serverId, agentId],
+  );
   const visibleError = error ?? olderError;
   const deliveryDisabled =
     !thread || !canDeliverToMain({ pending, status: thread.status, timeline });
@@ -183,9 +201,14 @@ export function BtwPanelContent({
   const newThread = useCallback(() => onCommand({ kind: "new" }), [onCommand]);
   const clear = useCallback(() => onCommand({ kind: "clear" }), [onCommand]);
   return (
-    <View style={styles.content} testID="btw-panel" accessibilityLabel={thread?.id ?? ""}>
+    <View
+      style={styles.content}
+      dataSet={composerOwnership}
+      testID="btw-panel"
+      accessibilityLabel={thread?.id ?? ""}
+    >
       {thread?.subtitle ? <PaneSubtitle text={thread.subtitle} testID="btw-subtitle" /> : null}
-      <View style={styles.timeline}>
+      <View ref={selectionTarget} style={styles.timeline}>
         {thread && context ? (
           <AgentStreamView
             key={streamId}
@@ -216,6 +239,7 @@ export function BtwPanelContent({
       ) : null}
       <View style={styles.footer}>
         <SheetAwareTextInput
+          ref={inputRef}
           testID="btw-composer"
           accessibilityLabel={t("btw.placeholder")}
           placeholder={t("btw.placeholder")}

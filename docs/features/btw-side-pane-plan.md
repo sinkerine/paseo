@@ -8,65 +8,36 @@ workspace `wks_a1e0afde2e6a527d`, project `prj_fd25e9856e774463`, orchestrator
 `727c86fe-8ee5-4729-aaab-0d95ce7049dd`, mission `06278da1-6904-4755-b06f-24b6f365da28`, run dir
 `/home/sinkerine/dev/paseo/.git/worktrees/feat-btw-side-pane/e2e-feature/btw-side-pane`.
 
-Status: **design final, finalized autonomously (revision 2 after orchestrator audit).** G1 is
+Status: **worker integration checked; parent staging, independent acceptance and review R2 remain.**
+The provisional feature checkpoint is `a231ade4865807788c1864fbfb92dc5a7b115ecf`
+(tree `a898be9f69eb0871104c057fa490c74d8a596f4e`); the in-progress merge imports
+committed main `8497d82207604509651c3b24a70bc24463784c98`. The original base above
+remains historical. Parent owns staging, independent verification, review and merge completion. G1 is
 resolved for native observation capability. The user subsequently exempted Android E2E for
 this feature: AC11 is user-exempt, not passed. ASCII-only feature test inputs remain required.
 Browser wide/compact proof, native JS export and the pre-E2E host inspection remain mandatory.
 
 ## 0. Findings (established from the code before design)
 
-| #   | Finding                                                                                                                                                                                                                                                                                                                                                           | Source                                                                                                                   |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| F1  | BTW is mounted inside the parent agent pane as `<BtwWindow>` and gated by `hasActiveComposer && !draft`. Its chip is rendered by `<BtwPill>` in the composer track bar.                                                                                                                                                                                           | `packages/app/src/panels/agent-panel.tsx:1216-1229`, `packages/app/src/panels/agent-tracks.tsx:151`                      |
-| F2  | Wide renders `BtwFloatingCard` (absolute 440px card, Escape hides). Compact renders `BtwSheet` (`IsolatedBottomSheetModal` 92%, `keyboardBehavior="extend"`, `keyboardBlurBehavior="restore"`, header BTW chip and Minimize).                                                                                                                                     | `packages/app/src/btw/floating-card.tsx`, `packages/app/src/btw/sheet.tsx`, `btw/window-content.tsx`                     |
-| F3  | Draft, submitted question, failure recovery, dispatch pending and dispatch error are **component-local** (`useReducer`, `useMutation`, `admitting` ref) in `BtwThreadWindow`. This works only because minimize keeps the component mounted.                                                                                                                       | `packages/app/src/btw/window.tsx:57-122`                                                                                 |
-| F4  | Visibility is an in-memory `byThread` map. `discover` opens a thread the first time this app session sees it, including after every page reload.                                                                                                                                                                                                                  | `packages/app/src/btw/window-store.ts`                                                                                   |
-| F5  | A BTW thread is a provider-subagent descriptor `btw:<threadId>` with `presentation: "side_conversation"`. `/btw:new` removes the old id and upserts a new one. `/btw:clear` removes it. Empty `/btw` creates an idle thread.                                                                                                                                      | `packages/server/src/server/agent/providers/pi/extensions/pi-btw/index.ts:135,222-252`; pi-btw `src/commands.ts:449-458` |
-| F6  | The Side pane is an ordinary pane holding workspace tabs. `open-beside.ts` owns placement: split-panes open beside, while compact and single-pane open in the main pane. Compact sheet placement comes from the panel manifest's `compactSheet`.                                                                                                                  | `packages/app/src/workspace-tabs/open-beside.ts`, `packages/app/src/panels/panel-manifest.ts`                            |
-| F7  | The panel host retains three recent tabs plus modified tabs, and other tabs can remount. Moving a tab between sheet and pane remounts it. A component-local BTW state would lose drafts and pending guards on remount.                                                                                                                                            | `docs/explorer-sidebar.md` §Panel host contract, §Sheets                                                                 |
-| F8  | Precedent for opening beside without interrupting the user: PR discovery uses `ensureSidePane(key, { focus: false })` plus a background `openTab`. `selectTabInPane` always sets `focusRequest` and dismisses sheets, so it cannot be used for a non-focusing show.                                                                                               | `packages/app/src/workspace-tabs/open-supporting-view.ts:92-133`, `stores/workspace-layout-store.ts:1530-1556`           |
-| F9  | Workspace sheets (`SheetTabSheet`) use 92% snap points but the default Gorhom keyboard behavior. Every other app sheet with a text input uses `keyboardBehavior="extend"`. `SheetTab.policy` is available to the sheet container.                                                                                                                                 | `packages/app/src/screens/workspace/sheet-tabs.tsx:121-138`, `stores/workspace-layout-store.ts:120-124`                  |
-| F10 | `supportsDesktopPaneSplits()` is `isWeb`. Headless Chromium at 1440×900 therefore runs the real split-panes Side pane. Electron uses the same renderer path, and no `.electron.*` module is involved.                                                                                                                                                             | `packages/app/src/constants/layout.ts:59-61`                                                                             |
-| F11 | Escape interrupts an agent only through the composer whose pane is the active composer. A focused BTW pane is not that composer.                                                                                                                                                                                                                                  | `packages/app/src/composer/index.tsx:560-640`, `docs/keyboard-shortcuts.md` §Focus scopes                                |
-| F12 | Existing BTW coverage: `packages/app/e2e/browser/pi-btw-window.spec.ts` (deterministic HTTP model stub with the real Pi 1.4.0 binary and the real pi-btw package), `pi-btw-window.real.spec.ts` (live provider, copies `auth.json`), and `e2e/mobile/agent-device/pi-btw.{android,ios}.ad`. The fixture requires `PASEO_PI_BINARY` and `PASEO_PI_BTW_PACKAGE`.    | `packages/server/src/server/daemon-e2e/fixtures/pi-btw-stub/runtime.ts:9-27`                                             |
-| F13 | Overlapping unmerged branches: `add-btw-panel-expand-button` (rural-flamingo) expands the floating card to fill the pane. `add-shortcut-config-add-to-chat-btw` (fast-fish) inserts selected text through a DOM event on the parent stream element that `BtwWindow` registers. Both edit `btw/window.tsx`, `btw/window-content.tsx` and `panels/agent-panel.tsx`. | `git diff ce02bbe32...HEAD` in each worktree (read-only)                                                                 |
+| #   | Finding                                                                                                                                                                                                                                                             | Source                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| F1  | BTW is mounted inside the parent agent pane as `<BtwWindow>` and gated by `hasActiveComposer && !draft`. Its chip is rendered by `<BtwPill>` in the composer track bar.                                                                                             | `packages/app/src/panels/agent-panel.tsx:1216-1229`, `packages/app/src/panels/agent-tracks.tsx:151`                      |
+| F2  | Wide renders `BtwFloatingCard` (absolute 440px card, Escape hides). Compact renders `BtwSheet` (`IsolatedBottomSheetModal` 92%, `keyboardBehavior="extend"`, `keyboardBlurBehavior="restore"`, header BTW chip and Minimize).                                       | `packages/app/src/btw/floating-card.tsx`, `packages/app/src/btw/sheet.tsx`, `btw/window-content.tsx`                     |
+| F3  | Draft, submitted question, failure recovery, dispatch pending and dispatch error are **component-local** (`useReducer`, `useMutation`, `admitting` ref) in `BtwThreadWindow`. This works only because minimize keeps the component mounted.                         | `packages/app/src/btw/window.tsx:57-122`                                                                                 |
+| F4  | Visibility is an in-memory `byThread` map. `discover` opens a thread the first time this app session sees it, including after every page reload.                                                                                                                    | `packages/app/src/btw/window-store.ts`                                                                                   |
+| F5  | A BTW thread is a provider-subagent descriptor `btw:<threadId>` with `presentation: "side_conversation"`. `/btw:new` removes the old id and upserts a new one. `/btw:clear` removes it. Empty `/btw` creates an idle thread.                                        | `packages/server/src/server/agent/providers/pi/extensions/pi-btw/index.ts:135,222-252`; pi-btw `src/commands.ts:449-458` |
+| F6  | The Side pane is an ordinary pane holding workspace tabs. `open-beside.ts` owns placement: split-panes open beside, while compact and single-pane open in the main pane. Compact sheet placement comes from the panel manifest's `compactSheet`.                    | `packages/app/src/workspace-tabs/open-beside.ts`, `packages/app/src/panels/panel-manifest.ts`                            |
+| F7  | The panel host retains three recent tabs plus modified tabs, and other tabs can remount. Moving a tab between sheet and pane remounts it. A component-local BTW state would lose drafts and pending guards on remount.                                              | `docs/explorer-sidebar.md` §Panel host contract, §Sheets                                                                 |
+| F8  | Precedent for opening beside without interrupting the user: PR discovery uses `ensureSidePane(key, { focus: false })` plus a background `openTab`. `selectTabInPane` always sets `focusRequest` and dismisses sheets, so it cannot be used for a non-focusing show. | `packages/app/src/workspace-tabs/open-supporting-view.ts:92-133`, `stores/workspace-layout-store.ts:1530-1556`           |
+| F9  | Workspace sheets (`SheetTabSheet`) use 92% snap points but the default Gorhom keyboard behavior. Every other app sheet with a text input uses `keyboardBehavior="extend"`. `SheetTab.policy` is available to the sheet container.                                   | `packages/app/src/screens/workspace/sheet-tabs.tsx:121-138`, `stores/workspace-layout-store.ts:120-124`                  |
+| F10 | `supportsDesktopPaneSplits()` is `isWeb`. Headless Chromium at 1440×900 therefore runs the real split-panes Side pane. Electron uses the same renderer path, and no `.electron.*` module is involved.                                                               | `packages/app/src/constants/layout.ts:59-61`                                                                             |
+| F11 | Escape interrupts an agent only through the composer whose pane is the active composer. A focused BTW pane is not that composer.                                                                                                                                    | `packages/app/src/composer/index.tsx:560-640`, `docs/keyboard-shortcuts.md` §Focus scopes                                |
+| F12 | Existing BTW coverage: `packages/app/e2e/browser/pi-btw-window.spec.ts` (deterministic HTTP model stub with the real Pi 1.4.0 binary and the real pi-btw package (§5). Units use pure reducers, actual stores and typed                                             |
 
-## 1. Goal and acceptance criteria
-
-### Goal
-
-Show the BTW conversation as an ordinary workspace tab instead of a floating card or popup sheet.
-On wide split layouts it opens in the **Side pane**. On compact layouts it opens in the
-shared workspace sheet. On single-pane layouts it opens as a main-pane tab. The move must keep
-parent isolation, the six existing commands, request boundaries, draft/error/streaming behavior,
-scroll stability and compact usability.
-
-### Entry paths and variants
-
-- **EP1 — Main composer command.** `/btw <q>` (or `/side <q>`, `/btw:new <q>`, empty `/btw`) typed
-  in the parent's composer, with the parent idle or running. A new thread auto-opens the BTW tab.
-- **EP2 — BTW chip** in the parent's composer track bar (`btw-chip`). It shows or hides the tab.
-- **EP3 — BTW tab controls**: Send button, Enter / Mod+Enter per the Send shortcut setting, Stop,
-  Send to main, Summarize to main, New thread, Clear.
-- **EP4 — Tab chrome.** Wide: tab close control and tab context menu. Compact: sheet header Close,
-  backdrop, drag-down and Android Back.
-- **EP5 — Lifecycle.** Wide↔compact resize, page reload, isolated daemon restart, agent refresh,
-  tab remount after a retention-budget eviction or a sheet↔pane move.
-- **EP6 — Empty BTW tab** after Clear. Asking from it creates a new thread.
-
-Variants: **wide split-panes** (browser 1440×900; Electron uses the same renderer), **compact**
-(browser 390×844; Android phone native), **single-pane** (native tablet; unit evidence only, see
-D12).
-
-### Acceptance criteria
-
-Unless stated otherwise, "E2E" below means `packages/app/e2e/browser/pi-btw-window.spec.ts`. It
-runs on the existing isolated harness with the deterministic HTTP model stub, the real Pi 1.4.0
-binary and the real pi-btw package (§5). "Unit" tests use the real store, open-beside and panel
-code. Only daemon transport and `AgentStreamView` rendering may be substituted where named:
-`useSendBtwCommand` in panel dispatch cases, fake list/read client methods in the panel's
-`fresh history clears a disconnected read error without resending` regression, and the list
-client in auto-open cases. Timeline observation, layout, status and conversation stores remain real.
+connection/read/send ports with in-memory adapters, following the final categorical rule in
+`docs/testing.md`. Real Chromium journeys own component, DOM, focus, retention and portal proof.
+The earlier component/mock R1 receipts remain historical; those suites have been migrated,
+and the feature-added WebAnimations shim removed. Existing legacy repository tests are unchanged.
 
 - **AC1 — Wide auto-open beside without taking focus (EP1, wide).** At 1440×900, the parent runs
   `HOLD_PARENT` and the user submits `/btw HOLD_BTW` from the running main composer. Then:
@@ -106,9 +77,8 @@ and keeps an existing pane tab`. The real main-composer entry matrix repeats eve
   same id reappearing after a transient removal does not reopen. A failed list establishes no
   baseline and opens nothing until a later successful list.
   - Evidence: E2E `BTW wide side pane lifecycle survives resize, reload and restart` (steps L4–L5),
-    plus `packages/app/src/btw/auto-open.test.tsx` (real `useBtwThread`, provider store,
-    `refreshProviderSubagents` with a fake `listProviderSubagents` client, and the real layout
-    store).
+    plus `packages/app/src/btw/auto-open.test.ts` (the production discovery controller,
+    typed connection/list port, actual provider/layout stores and same-client reconnect).
 - **AC4 — Chip toggles both ways without side effects (EP2).**
   - Wide: `btw-chip` has `aria-expanded="true"` while the BTW tab is the selected tab of a visible
     pane. Clicking it closes the tab: `btw-panel` count 0, and the empty Side pane is removed so the
@@ -120,7 +90,7 @@ and keeps an existing pane tab`. The real main-composer entry matrix repeats eve
   - On every layout, neither click sends a command (`stub.requests.length` unchanged), stops
     generation (`stub.pending("btw")` stays 1) or changes the thread id.
   - Evidence: E2E steps W3–W4 and C3–C4, E2E `BTW compact sheet backdrop dismissal preserves
-generation and reopens the same thread`, plus `packages/app/src/btw/pill.test.tsx` (real layout
+generation and reopens the same thread`, plus `packages/app/src/btw/pill.test.ts` (real layout
     store: hidden→open beside, visible→close, present-but-unselected→reveal).
 - **AC5 — Commands and duplicate prevention (EP3).**
   - Each control dispatches exactly one command, with the texts `/btw <q>`, `/btw:abort`,
@@ -129,11 +99,10 @@ generation and reopens the same thread`, plus `packages/app/src/btw/pill.test.ts
     closed and reopened (unmount and mount) before the pending dispatch settles.
   - Send to main and Summarize to main are disabled for an empty thread and during generation.
     Stop is present only while running.
-  - Evidence: `packages/app/src/btw/panel.test.tsx` (real `BtwPanel`, real conversation store and
-    pane context; `useSendBtwCommand` and `AgentStreamView` substituted). Tests: `pending action
-prevents duplicates and every control dispatches its one command`, `pending dispatch survives
-remount without a second send`, `explicit delivery is disabled for an empty thread and during
-generation`. `send.test.ts` covers the command texts. E2E W7 exercises the real transport.
+  - Evidence: `conversation-store.test.ts` covers pending ownership and retries through typed
+    send functions, `send.test.ts` covers exact transport arguments and failure propagation, and
+    the wide/compact browser controls exercise actual buttons, remounts and provider outcomes.
+
 - **AC6 — Draft, error and streaming continuity across surfaces (EP3, EP4, EP5).**
   - Unsent draft text survives tab close→chip reopen, remount, and wide→compact→wide resize. The
     test uses the ASCII sample `draft line 1\nASCII line 2`.
@@ -145,10 +114,10 @@ generation`. `send.test.ts` covers the command texts. E2E W7 exercises the real 
   - A late provider failure restores the accepted question into `btw-composer` and shows
     `btw-provider-error`. One retry sends exactly once and clears the composer.
   - Streaming output continues while the tab is closed and is shown on reopen.
-  - Evidence: `packages/app/src/btw/conversation-store.test.ts`, `panel.test.tsx` `dispatch failure
-preserves the draft and error across remount and never resends`, `late Pi command rejection
-recovers the accepted question locally without resending`, `fresh history clears a disconnected
-read error without resending`, `draft.test.ts` thread-replacement cases, plus E2E W5–W8 and L1–L3.
+  - Evidence: actual reducers/stores in `conversation-store.test.ts` and `draft.test.ts`,
+    production read/reconnect lifetime in `panel-reads.test.ts`, E2E W5–W8 and L1–L3, and
+    `BTW pending dispatch and read-error recovery survive real panel remount`. The last journey
+    proves reconnect recovery with the same client, descriptor id and status, without resending.
 - **AC7 — Scroll stability in the BTW tab (EP3).** The existing scenario runs in the BTW tab, wide
   and compact:
   - An explicit send lands once when the submitted question enters the transcript.
@@ -189,7 +158,11 @@ read error without resending`, `draft.test.ts` thread-replacement cases, plus E2
   - Without the pi-btw extension, no `btw-panel` or `btw-chip` appears on wide or compact, and
     `/btw no extension` reaches the main agent.
   - Evidence: E2E W9–W10, E2E `BTW absent extension {wide|compact} keeps the main fallback without
-a tab or pill`, plus unit `draft.test.ts`, `panel.test.tsx` `empty tab asks a new thread`.
+a tab or pill`, plus actual store/reducer tests in `conversation-store.test.ts` and `draft.test.ts`.
+  - `BTW composer stays mounted and keeps focus through empty, first thread, New and Clear`
+    preserves the actual input node, focus, selection and unsent text. Both real older-page
+    replacement variants in `btw-selection-insert.spec.ts` hold an actual bounded history response;
+    New/Clear retire its rows, loading and error without replacing the composer.
 - **AC10 — Request boundaries and history integrity (EP5).**
   - `btw-subtitle` shows `pinned turn 1` for an answer asked while the parent's second turn runs,
     and `pinned turn 2` after it finishes.
@@ -210,23 +183,23 @@ a tab or pill`, plus unit `draft.test.ts`, `panel.test.tsx` `empty tab asks a ne
 
 ### Introduced state, lifecycle and concurrency transitions
 
-| #   | Transition                                                                  | Expected outcome                                                                  | Criterion / named test                                                                   |
-| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| S1  | Parent pane mounts → first successful list → baseline set                   | No open for the thread present in the list                                        | AC3; `auto-open.test.tsx` `existing thread at baseline does not open`                    |
-| S2  | Baseline set → new thread id                                                | `showWorkspaceTargetBeside` once; no focus change                                 | AC1, AC2; `auto-open.test.tsx` `new thread after baseline opens once`                    |
-| S3  | Thread A → removed → A again (transient)                                    | No reopen                                                                         | AC3; `auto-open.test.tsx` `same id after removal does not reopen`                        |
-| S4  | List fails → later list succeeds                                            | No open before success; baseline from the successful list                         | AC3; `auto-open.test.tsx` `failed list establishes no baseline`                          |
-| S5  | Reconnect after baseline                                                    | Baseline kept; a thread created while disconnected opens once                     | AC3; `auto-open.test.tsx` `reconnect keeps the baseline`                                 |
-| S6  | Tab absent ↔ present (chip, tab close, sheet close, Back)                   | Present = visible; absent = hidden; the thread keeps running                      | AC4, AC11; `pill.test.tsx`                                                               |
-| S7  | Dispatch idle → pending → accepted \| rejected                              | One send; draft cleared on accept unless failed; error kept on reject             | AC5, AC6; `conversation-store.test.ts` `accept`, `reject`                                |
-| S8  | Pending dispatch + panel unmount/mount                                      | Pending kept; second dispatch ignored; settles into the store                     | AC5; `panel.test.tsx` `pending dispatch survives remount without a second send`          |
-| S9  | Accepted ask → provider `failed`                                            | Question restored into the composer; error banner shown                           | AC6; `panel.test.tsx` `late Pi command rejection…`; `draft.test.ts`                      |
-| S10 | Thread id change (New thread, Clear then ask, external `/btw:new`)          | Text kept; `failed` reset; `submitted` kept only when `after === null`            | AC9; `draft.test.ts` `thread replacement keeps text and drops a bound submission`        |
-| S11 | Thread removed (Clear)                                                      | Tab stays and shows the empty state; chip hidden                                  | AC9; `panel.test.tsx` `empty tab asks a new thread`                                      |
-| S12 | Wide → compact → wide with the BTW tab in the Side pane                     | Tab stays in the layout; the chip reveals it as a pane tab on compact; draft kept | AC6; E2E L1–L2                                                                           |
-| S13 | Explicit ask → question admitted \| user scrolls first \| dispatch rejected | Lands once \| landing cancelled \| landing cancelled                              | AC7; E2E land-once tests                                                                 |
-| S14 | Reload / daemon restart                                                     | Persisted tab restored; closed tab not reopened; rows unchanged                   | AC3, AC10; E2E L3–L5                                                                     |
-| S15 | Disconnected history read → fresh caught-up history                         | Stale read error cleared; draft kept; no command resent                           | AC6; `panel.test.tsx` `fresh history clears a disconnected read error without resending` |
+| #   | Transition                                                                  | Expected outcome                                                                  | Criterion / named test                                                                  |
+| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| S1  | Parent pane mounts → first successful list → baseline set                   | No open for the thread present in the list                                        | AC3; `auto-open.test.ts` `existing thread at baseline does not open`                    |
+| S2  | Baseline set → new thread id                                                | `showWorkspaceTargetBeside` once; no focus change                                 | AC1, AC2; `auto-open.test.ts` `new thread after baseline opens once`                    |
+| S3  | Thread A → removed → A again (transient)                                    | No reopen                                                                         | AC3; `auto-open.test.ts` `same id after removal does not reopen`                        |
+| S4  | List fails → later list succeeds                                            | No open before success; baseline from the successful list                         | AC3; `auto-open.test.ts` `failed list establishes no baseline`                          |
+| S5  | Reconnect after baseline                                                    | Baseline kept; a thread created while disconnected opens once                     | AC3; `auto-open.test.ts` `reconnect keeps the baseline`                                 |
+| S6  | Tab absent ↔ present (chip, tab close, sheet close, Back)                   | Present = visible; absent = hidden; the thread keeps running                      | AC4, AC11; `pill.test.ts`                                                               |
+| S7  | Dispatch idle → pending → accepted \| rejected                              | One send; draft cleared on accept unless failed; error kept on reject             | AC5, AC6; `conversation-store.test.ts` `accept`, `reject`                               |
+| S8  | Pending dispatch + panel unmount/mount                                      | Pending kept; second dispatch ignored; settles into the store                     | AC5; `conversation-store.test.ts` + real pending/remount browser journey                |
+| S9  | Accepted ask → provider `failed`                                            | Question restored into the composer; error banner shown                           | AC6; `conversation-store.test.ts`, `draft.test.ts` + real wide/compact failure journeys |
+| S10 | Thread id change (New thread, Clear then ask, external `/btw:new`)          | Text kept; `failed` reset; `submitted` kept only when `after === null`            | AC9; `draft.test.ts` `thread replacement keeps text and drops a bound submission`       |
+| S11 | Thread removed (Clear)                                                      | Tab stays and shows the empty state; chip hidden                                  | AC9; actual store/reducer tests + real wide/compact Clear-then-ask                      |
+| S12 | Wide → compact → wide with the BTW tab in the Side pane                     | Tab stays in the layout; the chip reveals it as a pane tab on compact; draft kept | AC6; E2E L1–L2                                                                          |
+| S13 | Explicit ask → question admitted \| user scrolls first \| dispatch rejected | Lands once \| landing cancelled \| landing cancelled                              | AC7; E2E land-once tests                                                                |
+| S14 | Reload / daemon restart                                                     | Persisted tab restored; closed tab not reopened; rows unchanged                   | AC3, AC10; E2E L3–L5                                                                    |
+| S15 | Disconnected history read → fresh caught-up history                         | Stale read error cleared; draft kept; no command resent                           | AC6; `panel-reads.test.ts` + real same-client disconnected-read recovery                |
 
 ### Decisions
 
@@ -348,14 +321,39 @@ paneId, tabId, options?: { focus: boolean })`. With `focus: false` it sets no `f
     receipts are preserved.
   - Before branch browser E2E, the orchestrator still inspects the three interfaces at
     **T1_CHECKPOINT_PRE_E2E** and must issue **RELEASE_E2E**.
-- **G2 — Overlapping branches: note, not a blocker.**
-  - rural-flamingo's full-pane expand targets the floating card that D7 removes. The Side pane
-    already provides resize and split behavior, so merging both would conflict and duplicate the
-    behavior. Decide its fate before merging either.
-  - fast-fish's Add to BTW must re-target after this lands. It should call
-    `useBtwConversationStore.getState().edit(...)` or a new `insert` action for the parent key, then
-    `toggleBtwTab`'s reveal path. It should not use a DOM target in the parent stream.
-  - This branch does not edit or merge either branch.
+- **G2 — Committed-main consumers are part of this integration.**
+  - Main advanced 18 commits after the original base. Preserve its selection shortcuts,
+    tab/window focus, attention routing, notification filtering and runtime fixes.
+  - `data-btw-thread` / cancelable `paseo:btw-insert` remain the real plugin contract. The parent
+    stream and separate wide BTW transcript each own a scoped target. Accepted insertion calls
+    the parent/server-keyed conversation `insert`, then ordinary `revealBtwTab`; it sends nothing.
+    Pending dispatch refuses insertion without preventing the event. Compact BTW transcript
+    retains the existing portal boundary; the parent stream can reveal its sheet.
+  - Composer focus requests survive panel mount and are consumed once. New/Clear retain the
+    composer; only the thread stream and pagination reset. Discovery remains quiet.
+  - Add to chat uses separate source and destination roles across pane/portal boundaries:
+    `data-chat-composer-owner` on the actual parent root and BTW region, and
+    `data-chat-composer-root` only on a real normal parent composer root. Both carry the opaque
+    parent/server conversation key. Explicit owners resolve only to visible writable fields
+    under matching destination roots in the source document; missing/hidden/archived parents
+    use the existing copy fallback. Unmarked plugin surfaces retain legacy ancestry lookup.
+  - The separately authorized producer is Better Paseo commit
+    `7f1573052f916fe576bd2516449a9b5f25461fca`, tree
+    `08a1560bf8b4b04a02486af3ce95c3d770754aaa`, from base
+    `18489ac5bb0383ce861c08d441b80e9066cfef8f`. The parent owns its local integration and R2.
+    The consumer uses the sealed built-install archive unchanged, never the producer's mutable
+    worktree. Actual host entry priority is generated `index.client.ts` before the raw `.tsx`;
+    acceptance witnesses its execution/catalog hash and the generated Tasks chunk's public RPC
+    code hash. Testing only raw `.tsx` would miss the installed variant.
+  - Current consumer proof is 15 Side-pane, 9 paired selection, 5 current-main tab-focus and
+    2 scripted Pi workflow browser cases, all passed. The old producer's actual hidden-Alpha
+    write into Beta remains the negative experiment. Closing a root tab archives and clears its
+    BTW descriptors; the unavailable-view case therefore uses a genuine managed child's
+    layout-only close, while archived copy fallback selects the actual archived History stream.
+  - Main's background opens keep a user's launcher. Supporting discovery may consume only the
+    synthetic sole launcher of a Side pane created by that same call. Reused panes keep their
+    launchers; quiet creation also preserves parked focus restoration tokens. Explicit/default
+    focus semantics stay current-main's.
 
 ### Documentation items
 
@@ -372,9 +370,9 @@ paneId, tabId, options?: { focus: boolean })`. With `focus: false` it sets no `f
   - The orchestrator's preflight hunk, the "E2E resource declarations" section with the initial-
     feature-only scope prose and the `qex-e2e browser` block (4 CPU / 16 GiB / 30m, one worker),
     is preserved verbatim.
-  - Keep the `android-build` and `android` blocks and their workload/estimate rationale in the
+  - Keep the `android-btw-build` and `android` blocks and their workload/estimate rationale in the
     [root declarations](../../CLAUDE.md#e2e-resource-declarations), following the user's staged
-    claim update. The build wrapper consumes `android-build`; the full runtime consumes
+    claim update. The build wrapper consumes `android-btw-build`; the full runtime consumes
     `android`. They share the feature build lock and never overlap.
   - The runtime prose covers host emulator overhead, this checkout's Metro, one disposable daemon,
     real Pi test agents, automation and teardown, and names
@@ -388,23 +386,26 @@ paneId, tabId, options?: { focus: boolean })`. With `focus: false` it sets no `f
 
 ### Module boundaries
 
-| Module (packages/app/src)                                          | Owns                                                                                                               |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `workspace-tabs/model.ts`, `identity.ts`                           | `btw` target type, normalization, equality, deterministic tab id `btw_<agentId>`                                   |
-| `stores/workspace-layout-storage.ts`                               | Persisted schema entry for `btw`                                                                                   |
-| `stores/workspace-layout-store.ts`                                 | `selectTabInPane` `focus` option (D13)                                                                             |
-| `panels/panel-manifest.ts`                                         | `btw` manifest; `CompactSheetPolicy.keyboardBehavior?: "extend"`                                                   |
-| `screens/workspace/sheet-tabs.tsx`                                 | Passes `keyboardBehavior` / `keyboardBlurBehavior="restore"` from `sheet.policy`                                   |
-| `workspace-tabs/open-beside.ts`                                    | `showWorkspaceTargetBeside` (non-focusing show, layout-agnostic for callers)                                       |
-| `btw/conversation-store.ts` (new)                                  | Per-parent draft/pending/error/accepted and dispatch                                                               |
-| `btw/draft.ts`                                                     | Reducer gains `threadId` and the D9 rule                                                                           |
-| `btw/tab.ts` (new)                                                 | `btwTabTarget`, `selectBtwTab`, `toggleBtwTab`                                                                     |
-| `btw/auto-open.tsx` (new)                                          | `BtwAutoOpen` discovery baseline                                                                                   |
-| `btw/panel.tsx` (new)                                              | `BtwPanel`, descriptor hook, `btwPanelRegistration`                                                                |
-| `btw/panel-content.tsx` (renamed from `window-content.tsx`)        | Stream, subtitle, composer, actions, empty state                                                                   |
-| `btw/pill.tsx`                                                     | Chip bound to tab visibility                                                                                       |
-| `panels/register-panels.ts`, `agent-panel.tsx`, `agent-tracks.tsx` | Registration and mounting                                                                                          |
-| Tab label switches                                                 | `compact-workspace-header/tab-switcher.tsx`, `workspace-tab-menu.ts` close test id `workspace-btw-close-<agentId>` |
+| Module (packages/app/src)                                                     | Owns                                                                                                               |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `workspace-tabs/model.ts`, `identity.ts`                                      | `btw` target type, normalization, equality, deterministic tab id `btw_<agentId>`                                   |
+| `stores/workspace-layout-storage.ts`                                          | Persisted schema entry for `btw`                                                                                   |
+| `stores/workspace-layout-store.ts`                                            | Quiet selection/Side-pane focus options; explicit synthetic-launcher consumption                                   |
+| `panels/panel-manifest.ts`                                                    | `btw` manifest; `CompactSheetPolicy.keyboardBehavior?: "extend"`                                                   |
+| `screens/workspace/sheet-tabs.tsx`                                            | Passes `keyboardBehavior` / `keyboardBlurBehavior="restore"` from `sheet.policy`                                   |
+| `workspace-tabs/open-beside.ts`                                               | `showWorkspaceTargetBeside` (non-focusing show, layout-agnostic for callers)                                       |
+| `btw/conversation-store.ts` (new)                                             | Per-parent draft/pending/error/accepted, selection insert/focus request and dispatch                               |
+| `btw/draft.ts`                                                                | Reducer gains `threadId` and the D9 rule                                                                           |
+| `btw/tab.ts` (new)                                                            | `btwTabTarget`, `selectBtwTab`, `toggleBtwTab`                                                                     |
+| `btw/auto-open.tsx` (new)                                                     | `BtwAutoOpen` discovery baseline                                                                                   |
+| `btw/discovery.ts`, `refresh-on-connect.ts`                                   | Pure once-per-ID discovery and typed connection/list lifetime                                                      |
+| `btw/panel-reads.ts`                                                          | Standalone read/retry/error lifetime through typed connection and history ports                                    |
+| `btw/selection-contract.ts`, `selection-target.ts`, `selection-target.web.ts` | Cancelable scoped insertion and platform composer-focus adapter                                                    |
+| `btw/panel.tsx` (new)                                                         | `BtwPanel`, descriptor hook, `btwPanelRegistration`                                                                |
+| `btw/panel-content.tsx` (renamed from `window-content.tsx`)                   | Stream, subtitle, composer, actions, empty state                                                                   |
+| `btw/pill.tsx`                                                                | Chip bound to tab visibility                                                                                       |
+| `panels/register-panels.ts`, `agent-panel.tsx`, `agent-tracks.tsx`            | Registration and mounting                                                                                          |
+| Tab label switches                                                            | `compact-workspace-header/tab-switcher.tsx`, `workspace-tab-menu.ts` close test id `workspace-btw-close-<agentId>` |
 
 Unchanged: `btw/send.ts`, `btw/select.ts`, server, protocol and pi-btw.
 Review round 1 approved the narrow `subagents/provider-store.ts` / existing test seam:
@@ -464,6 +465,10 @@ selectTabInPane: (
   options?: { focus: boolean }, // focus:false → no focusRequest, no sheet dismissal
 ) => void;
 
+// workspace-layout-store.ts
+// OpenWorkspaceTabInput.allowNewTabReplace?: boolean is also passed through openBackgroundTab.
+// Only a just-created Side pane's sole synthetic launcher opts in; defaults stay main's.
+
 // workspace-tabs/open-beside.ts
 /**
  * Shows a target beside the user's work without moving workspace focus. Split panes add it to
@@ -483,12 +488,15 @@ export interface BtwConversation {
   pending: boolean;
   error: string | null;      // last dispatch error message
   accepted: boolean;         // last dispatch accepted → t("btw.accepted")
+  pendingComposerFocus: boolean; // one explicit insertion, consumed after the input mounts
 }
 export const EMPTY_BTW_CONVERSATION: BtwConversation;
 export type BtwDispatchResult = { ok: true } | { ok: false; error: string };
 interface BtwConversationStore {
   byParent: Record<string, BtwConversation>;
   edit(key: string, text: string): void;
+  insert(key: string, text: string): boolean; // refuses pending dispatch or empty input
+  clearComposerFocus(key: string): void;
   observeThread(
     key: string,
     thread: {
@@ -521,10 +529,11 @@ export function selectBtwTab(
   workspaceKey: string,
   agentId: string,
 ): { tabId: string; visible: boolean } | null;
+export function revealBtwTab(input: { workspaceKey: string | null; agentId: string }): string | null;
 export function toggleBtwTab(input: { workspaceKey: string | null; agentId: string }): void;
 
 // btw/auto-open.tsx
-export function BtwAutoOpen(props: { serverId: string; workspaceId: string; agentId: string }): null;
+export function BtwAutoOpen(props: { serverId: string; workspaceId: string; agentId: string; selectionTarget: RefObject<View | null> }): null;
 
 // btw/panel.tsx
 export const btwPanelRegistration: PanelRegistration<"btw">;
@@ -540,6 +549,9 @@ export interface BtwPanelContentProps {
   streamViewRef: RefObject<AgentStreamViewHandle | null>;
   onUserScrollIntent(): void;
   compact: boolean;
+  selectionTarget: RefObject<View | null>;
+  pendingComposerFocus?: boolean;
+  onComposerFocusHandled?: () => void;
   draft: string;
   onDraft(text: string): void;
   onCommand(command: BtwCommand): void;
@@ -586,17 +598,19 @@ Test ids: `btw-panel` (`accessibilityLabel` = thread id or `""`), `btw-subtitle`
 
 ### T1 — BTW tab, Side pane placement, wiring, tests and representative proof
 
-Single task. Producer and consumer are the same client package, and no part gains from a
-parallel writer.
+One Side-pane writer owns this integration. The parent owns the separately authorized paired
+producer writer, immutable handoff, independent review and local merges; this task never writes
+that worktree or stages the Paseo index.
 
 - **Depends on:** nothing. The base build artifacts exist; their freshness is unverified.
 - **Owned files (create/modify/delete):**
   - `packages/app/src/subagents/provider-store.ts` and `provider-store.test.ts`: parent-approved
     review repair only, reject reported list errors before replacing cached rows.
   - `packages/app/src/btw/`: create `conversation-store.ts`, `conversation-store.test.ts`,
-    `tab.ts`, `auto-open.tsx`, `auto-open.test.tsx`, `panel.tsx` and `panel.test.tsx`. Rename
+    `tab.ts`, `auto-open.tsx`, `auto-open.test.ts`, `discovery.ts`, `panel.tsx`, `panel-reads.ts`
+    and `panel-reads.test.ts`. Remove migrated component suites. Rename
     `window-content.tsx` to `panel-content.tsx`. Modify `draft.ts`, `draft.test.ts`, `pill.tsx` and
-    `pill.test.tsx`. Delete `window.tsx`, `window.test.tsx`, `floating-card.tsx`, `sheet.tsx`,
+    `pill.test.ts`. Delete `window.tsx`, `window.test.tsx`, `floating-card.tsx`, `sheet.tsx`,
     `window-store.ts` and `window-store.test.ts`.
   - `packages/app/src/workspace-tabs/model.ts`, `identity.ts`, `identity.test.ts`,
     `open-beside.ts` and `open-beside.test.ts`.
@@ -612,10 +626,8 @@ parallel writer.
   - `packages/app/src/i18n/resources/{en,ar,es,fr,ja,ko,pt-BR,ru,zh-CN}.ts`.
   - `packages/app/test-stubs/lucide-react-native.ts`: add `MessagesSquare`. The unit project
     aliases lucide to this stub (`packages/app/vitest.config.ts:313`).
-  - `packages/app/vitest.setup.ts` (orchestrator-approved environment seam): add only a guarded
-    jsdom shim for absent `Element.animate`, returning independent writable-startTime/cancel
-    objects for the real status ring. Preserve real browser implementations and all real chip,
-    layout and status components. Chromium remains authoritative for animation/visibility.
+  - `packages/app/vitest.setup.ts`: remove only the feature-created WebAnimations shim after
+    migrating the component suites. Preserve existing global setup and other legacy tests.
   - `packages/app/e2e/browser/pi-btw-window.spec.ts`, `pi-btw-window.real.spec.ts` (selectors
     only), `packages/app/e2e/support/helpers/pi-btw.ts`, and
     `packages/app/e2e/mobile/agent-device/pi-btw.android.ad` (and `pi-btw.ios.ad` selectors).
@@ -635,13 +647,9 @@ parallel writer.
      on base code (§4.1 step 4) under `--e2e android`.
      - If qex rejects it or tooling is missing, send `contact_supervisor` (`need_decision`,
        message prefix `G1_BLOCKED`) with the receipt, and keep working only on steps 3–4.
-  3. Write **all** unit tests red against the §2 interfaces. This includes `panel.test.tsx` and
-     `pill.test.tsx` as well as `open-beside`, `identity`, `workspace-layout-store`,
-     `workspace-layout-persistence`, `panel-manifest`, `conversation-store`, `draft`, `auto-open`
-     and `i18n`. Run the T1 unit command and record the red output. Expected red reasons are a
-     missing module or export (for example `./panel`, `showWorkspaceTargetBeside`), a missing
-     manifest kind, or an assertion on new behavior. A crash in an unrelated module, a vitest
-     configuration error or a missing dependency is "cannot observe". Fix it first.
+  3. Add behavioral regressions through pure reducers, typed ports and real browser consumers.
+     Missing imports/parser failures are cannot-observe; retain actual invariant red/green receipts.
+     Preserve original criteria when migrating historical component tests to permitted shapes.
   4. Update the E2E spec, helpers and `.ad` flows to the new surface. Do not run them yet.
   5. **Gate:** start only after the native baseline probe passes, or after the orchestrator relays
      an explicit user Android exemption (`G1_RESOLVED` / `G1_EXEMPT`). Then implement and wire.
@@ -670,8 +678,8 @@ parallel writer.
     (`open-beside.test.ts`).
   - (b) `selectTabInPane(…, { focus: false })` leaves default callers unchanged
     (`workspace-layout-store.test.ts`).
-  - (c) The dispatch guard holds across remount (`panel.test.tsx` `pending dispatch survives
-remount without a second send`).
+  - (c) The dispatch guard holds in the actual conversation store and the real held-RPC
+    close/reopen browser journey; no component mounting or own-module mocks.
   - The browser E2E starts only after `RELEASE_E2E`.
 - **Protected boundaries (no edits):** server, protocol, client package, the pi-btw checkout
   (`/home/sinkerine/dev/pi-btw`, read-only), other worktrees, and the shared daemon on 6767.
@@ -693,7 +701,7 @@ The baseline probes below are retained for provenance and must not be repeated w
 relevant inputs. Native steps are archived under the subsequent user exemption (G1).
 
 1. `agent-job estimates --cwd /home/sinkerine/.paseo/worktrees/28vpgp2p/feat-btw-side-pane` lists
-   `browser`, `android-build` and `android` as valid.
+   `browser`, `android-btw-build` and `android` as valid.
 2. Environment for the BTW fixture: `export PASEO_PI_BINARY="$(command -v pi)"` (`pi --version`
    must print `1.4.0`) and `export PASEO_PI_BTW_PACKAGE=/home/sinkerine/dev/pi-btw` (record
    `git -C … rev-parse HEAD`, currently `7ea4f10`). Run inside the development shell
@@ -715,7 +723,7 @@ relevant inputs. Native steps are archived under the subsequent user exemption (
      the task-owned G1 setup declaration.
    - Build the base APK from the worktree root with
      `packages/app/e2e/mobile/pi-btw/low-memory.sh build`. The wrapper acquires the feature
-     build lock before `agent-job run --e2e android-build` and produces the development
+     build lock before `agent-job run --e2e android-btw-build` and produces the development
      x86_64 debug APK (`sh.paseo.debug`) for the matching AVD. The old 24 GiB rejection remains
      historical evidence; current claims are owned by the root declarations.
    - After the build exits, run the baseline with the same lock:
@@ -744,38 +752,45 @@ python3 packages/app/e2e/mobile/pi-btw/measure.py <evidence-directory> bash pack
 
 ### 4.2 Unit and integration inventory (vitest `unit` project, `packages/app/vitest.config.ts`)
 
-| File                                                 | Proves                                     | Command / profile                                      |
-| ---------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| `src/btw/conversation-store.test.ts`                 | S7, S8 store side, AC5, AC6, AC8 parents   | T1 unit command (`medium`); a single file uses `small` |
-| `src/btw/draft.test.ts`                              | S9, S10 (D9)                               | same                                                   |
-| `src/btw/panel.test.tsx` (jsdom)                     | AC5, AC6, AC9, S8, S11                     | same                                                   |
-| `src/btw/pill.test.tsx` (jsdom)                      | AC4, S6                                    | same                                                   |
-| `src/btw/auto-open.test.tsx` (jsdom)                 | AC3, S1–S5                                 | same                                                   |
-| `src/btw/send.test.ts`, `select.test.ts` (unchanged) | Command texts, thread selection            | same                                                   |
-| `src/workspace-tabs/open-beside.test.ts`             | AC1, AC2 placement, D12 single-pane        | same                                                   |
-| `src/workspace-tabs/identity.test.ts`                | `btw` normalize/equality/id                | same                                                   |
-| `src/stores/workspace-layout-store.test.ts`          | D13 default unchanged and `focus:false`    | same                                                   |
-| `src/stores/workspace-layout-persistence.test.ts`    | Persisted `btw` round-trip                 | same                                                   |
-| `src/panels/panel-manifest.test.ts`                  | `btw` manifest and sheet policy            | same                                                   |
-| `src/i18n` resource tests                            | Key parity for `btw.empty` and the removal | same                                                   |
+| File                                                  | Proves                                     | Command / profile                                      |
+| ----------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| `src/btw/conversation-store.test.ts`                  | S7, S8 store side, AC5, AC6, AC8 parents   | T1 unit command (`medium`); a single file uses `small` |
+| `src/btw/draft.test.ts`                               | S9, S10 (D9)                               | same                                                   |
+| `src/btw/panel-reads.test.ts` (Node ports)            | AC5, AC6, AC9, S8, S11                     | same                                                   |
+| `src/btw/pill.test.ts` (Node store)                   | AC4, S6                                    | same                                                   |
+| `src/btw/auto-open.test.ts` (Node ports)              | AC3, S1–S5                                 | same                                                   |
+| `src/btw/send.test.ts`, `select.test.ts` (Node ports) | Command texts, thread selection            | same                                                   |
+| `src/workspace-tabs/open-beside.test.ts`              | AC1, AC2 placement, D12 single-pane        | same                                                   |
+| `src/workspace-tabs/identity.test.ts`                 | `btw` normalize/equality/id                | same                                                   |
+| `src/stores/workspace-layout-store.test.ts`           | D13 default unchanged and `focus:false`    | same                                                   |
+| `src/stores/workspace-layout-persistence.test.ts`     | Persisted `btw` round-trip                 | same                                                   |
+| `src/panels/panel-manifest.test.ts`                   | `btw` manifest and sheet policy            | same                                                   |
+| `src/i18n` resource tests                             | Key parity for `btw.empty` and the removal | same                                                   |
 
-Consumers of the changed interfaces (`WorkspaceTabTarget`, `CompactSheetPolicy`,
-`selectTabInPane`, `BtwPill` props, the panel registry) all live in `packages/app`. They are
-checked by the root typecheck and by three app bundle builds (§4.3): browser web, Electron renderer
-(`.electron.*` resolution) and the Android JS bundle (`.native.*` resolution, no Gradle).
-
-The desktop main process (`packages/desktop`, `build:main`) imports no app module, so it is not a
-consumer. No server, protocol or client consumer changes. The daemon contract
-(`pi-btw.local.e2e.test.ts`) is untouched and is not rerun.
+Consumers of the changed interfaces include the ordinary workspace store/panel/sheet hosts,
+current-main selection DOM targets and tab-focus behavior, plus the paired Better Paseo producer.
+Root typecheck and the three distinct app exports cover browser, Electron renderer and Android JS
+module resolution. The real compiled producer is required for the selection/table/gutter/preview
+entrypoints; a handcrafted selection bar is not an acceptable substitute. The migration from old
+component tests is mapped declaration by declaration in
+`artifacts/btw-side-pane/main-integration/attempt-1/migration-map.json`; pending/failed history
+variants are real browser cases, and historical R1 component receipts are retained separately.
 
 ### 4.3 Repository and consumer gates (after implementation, serialized, producers first)
 
 Run from the worktree root unless a different `--cwd` is shown. Run one heavy job at a time.
 Receipts are tied to their relevant source, generated artifacts and environment. Reuse a producer
 receipt only after validating that closure; rebuild changed producers before their consumers.
-The resumed run records identities and unique outputs under `artifacts/btw-side-pane/resumed-1/`.
+Current integration records identities and unique outputs under
+`artifacts/btw-side-pane/main-integration/attempt-2/`; the initial repairs and declaration-by-
+declaration migration map remain in `attempt-1/`. Historical pre-integration outputs remain
+under their original resumed/repair directories. During the unmerged-index phase, Nix uses the
+exact committed-main flake URI with `--offline --no-write-lock-file`; it asserts feature cwd and
+byte-identical environment definitions so deletion of the obsolete popup cannot break Nix snapshot
+collection. No temporary index or source restoration is permitted.
 
-1. Generated inputs (producer): `agent-job run heavy --cwd <worktree> --timeout 30m -- npm run
+1. Integrated server producers first: `npm run build:server`. Then generated app inputs:
+   `agent-job run heavy --cwd <worktree> --timeout 30m -- npm run
 build:app-deps`. This writes the `dist` of highlight, client, plugin and expo-two-way-audio,
    which app typecheck, Metro and the exports consume.
 2. `agent-job run medium --cwd <worktree> --timeout 20m -- npm run typecheck`
@@ -799,11 +814,28 @@ bundle for Android). Record each qex job id.
 
 ### 4.4 Browser E2E (initial-feature run, with repairs and reruns)
 
-The spec is `packages/app/e2e/browser/pi-btw-window.spec.ts`, run with one worker under
-`--e2e browser` (4 CPU / 16 GiB / 30m). If the whole file exceeds 30m, run two serialized jobs:
-`--grep "wide"` and `--grep "compact"`. Command:
+Run each selected file separately, one worker, under the root `browser` declaration
+(4 CPU / 16 GiB). Each command takes the existing feature build lock before synchronous qex
+admission and retains it through teardown. Preserve each attempt's terminal exit and JSON report.
 
-`agent-job submit --e2e browser --cwd <worktree> --id-file <run-dir>/browser-e2e.id -- npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/pi-btw-window.spec.ts --workers=1 --output=artifacts/btw-side-pane/results`
+- `pi-btw-window.spec.ts`: keep all original 13 wide/compact cases and add actual textarea
+  identity/focus/New/Clear and held-RPC close/reopen/read recovery regressions.
+- `btw-selection-insert.spec.ts`: real compiled Better Paseo selection/table/gutter/preview
+  entrypoints, scoped Add to BTW, Copy/Add to chat, compact portal, sibling and window isolation,
+  missing/archived owner fallback, plus actual old-page pending/failure retirement on New/Clear.
+- `tab-focus-preservation.spec.ts`: current-main background/default focus and reload/visibility
+  consumers affected by the shared store integration.
+- `pi-workflow-subagent-tree.real.spec.ts`: required by `e2e-paths.yml` for `src/subagents/**`.
+  Its real Pi 1.4.0 / pi-subagents 0.84.0 fixture registers local `paseo-scripted/workflow` with
+  `scripted-no-network`, without external model calls or copied user auth. Use direct
+  `npm exec --workspace=@getpaseo/app -- playwright test ... --project=real-provider --workers=1`
+  with `E2E_FORK_PASEO_HOME_FROM` unset after entering Nix. Do not use the convenience real-suite
+  wrapper that copies a dev home.
+
+The browser group already covers added/moved BTW and layout paths. The existing pi-workflow
+required-test group covers the R1 provider-store repair; no routing-map edit is necessary.
+Android shared paths match, but native journeys remain explicitly user-exempt. No website runtime
+path changed; the imported root script adds only the Android isolated entrypoint.
 
 Evidence: qex job id, exit code, `run.log`, traces, and named screenshots `btw-wide-running`,
 `btw-wide-side-pane-reopened`, `btw-compact-sheet`, `btw-provider-failed` and

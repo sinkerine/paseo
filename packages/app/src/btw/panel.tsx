@@ -1,3 +1,7 @@
+import type { View } from "react-native";
+import { useBtwSelectionTarget } from "./selection-target";
+import { revealBtwTab } from "./tab";
+import { buildWorkspaceTabPersistenceKey } from "@/workspace-tabs/model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MessagesSquare } from "lucide-react-native";
@@ -8,12 +12,10 @@ import { definePanel, type PanelDescriptorContext } from "@/panels/panel-registr
 import { useSessionStore } from "@/stores/session-store";
 import { deriveSubagentStatusBucket } from "@/subagents";
 import {
-  observeProviderSubagentTimeline,
   providerSubagentKey,
   providerSubagentLifecycleStatus,
   useProviderSubagentStore,
 } from "@/subagents/provider-store";
-import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
 import type { AgentStreamViewHandle } from "@/agent-stream/view";
 import { useBtwThread } from "./select";
 import { useSendBtwCommand, type BtwCommand } from "./send";
@@ -24,8 +26,7 @@ import {
 } from "./conversation-store";
 import { findBtwSubmittedQuestionIndex } from "./draft";
 import { BtwPanelContent } from "./panel-content";
-import { selectBtwThread } from "./select";
-import { refreshBtwOnConnect } from "./refresh-on-connect";
+import { observeBtwPanelReads } from "./panel-reads";
 
 function useBtwDescriptor(
   target: { kind: "btw"; agentId: string },
@@ -45,7 +46,7 @@ function useBtwDescriptor(
   };
 }
 function BtwPanel() {
-  const { serverId, target } = usePaneContext();
+  const { serverId, workspaceId, target } = usePaneContext();
   invariant(target.kind === "btw", "BtwPanel requires a BTW target");
   const agentId = target.agentId;
   const { t } = useTranslation();
@@ -53,6 +54,26 @@ function BtwPanel() {
   const thread = useBtwThread(serverId, agentId);
   const key = btwConversationKey(serverId, agentId);
   const conversation = useBtwConversation(key);
+  const selectionTarget = useRef<View>(null);
+  const insert = useCallback(
+    (text: string) => {
+      if (!useBtwConversationStore.getState().insert(key, text)) return false;
+      revealBtwTab({
+        workspaceKey: buildWorkspaceTabPersistenceKey({ serverId, workspaceId }),
+        agentId,
+      });
+      return true;
+    },
+    [key, serverId, workspaceId, agentId],
+  );
+  useBtwSelectionTarget({
+    target: thread && !compact ? selectionTarget : undefined,
+    onInsert: insert,
+  });
+  const clearComposerFocus = useCallback(
+    () => useBtwConversationStore.getState().clearComposerFocus(key),
+    [key],
+  );
   const threadId = thread?.id ?? null;
   const hasTimeline = thread?.hasTimeline !== false;
   const timelineKey = threadId ? providerSubagentKey(serverId, agentId, threadId) : null;
@@ -77,40 +98,16 @@ function BtwPanel() {
     });
   }, [key, thread, timeline]);
   useEffect(() => {
-    setHistoryError(null);
-    if (!client || !threadId || !hasTimeline) return;
-    return observeProviderSubagentTimeline({
-      client,
-      serverId,
-      parentAgentId: agentId,
-      subagentId: threadId,
-      limit: TIMELINE_FETCH_PAGE_SIZE,
-      reportError: (error) =>
-        setHistoryError(error instanceof Error ? error.message : String(error)),
-    });
-  }, [client, serverId, agentId, threadId, hasTimeline]);
-  useEffect(() => {
-    // Reconnect can reuse the client; fresh history retires the disconnected read's error.
-    if (timeline && !timeline.needsRefresh) setHistoryError(null);
-  }, [timeline]);
-  useEffect(() => {
     if (!client) return;
-    // A restored tab can be mounted while its parent tab is closed or retained inactive.
-    return refreshBtwOnConnect(
+    return observeBtwPanelReads({
       client,
       serverId,
       agentId,
-      () => {
-        const prefix = `${serverId}\0${agentId}\0`;
-        const rows = [...useProviderSubagentStore.getState().descriptors]
-          .filter(([descriptorKey]) => descriptorKey.startsWith(prefix))
-          .map(([, row]) => row);
-        const current = selectBtwThread(rows);
-        if (!current || current.hasTimeline === false) setHistoryError(null);
-      },
-      (error) => setHistoryError(error instanceof Error ? error.message : String(error)),
-    );
-  }, [client, serverId, agentId]);
+      threadId,
+      hasTimeline,
+      reportError: setHistoryError,
+    });
+  }, [client, serverId, agentId, threadId, hasTimeline]);
   // RPC acceptance precedes Pi's question row; only this mounted explicit ask may land once.
   useEffect(() => {
     const submitted = conversation.draft.submitted;
@@ -153,6 +150,9 @@ function BtwPanel() {
       serverId={serverId}
       agentId={agentId}
       thread={thread}
+      selectionTarget={selectionTarget}
+      pendingComposerFocus={conversation.pendingComposerFocus}
+      onComposerFocusHandled={clearComposerFocus}
       streamViewRef={streamViewRef}
       onUserScrollIntent={cancelSendLanding}
       compact={compact}

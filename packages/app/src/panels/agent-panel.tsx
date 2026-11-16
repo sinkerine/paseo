@@ -1,3 +1,4 @@
+import { btwConversationKey } from "@/btw/conversation-store";
 import { BtwAutoOpen } from "@/btw/auto-open";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
@@ -1187,8 +1188,10 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     onAttentionInputFocus();
     return false;
   }, [onAttentionInputFocus]);
+  const streamContentRef = useRef<View>(null);
   const streamContent = (
     <View
+      ref={streamContentRef}
       style={animatedStaticStyles.content}
       onStartShouldSetResponderCapture={handleAttentionInteraction}
     >
@@ -1217,6 +1220,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
         <>
           <BtwAutoOpen
             key={JSON.stringify([serverId, agentId])}
+            selectionTarget={streamContentRef}
             serverId={serverId}
             workspaceId={workspaceId}
             agentId={agentId}
@@ -1262,13 +1266,18 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     </ChatSurface>
   );
 
+  const composerOwnership = useMemo(() => {
+    const owner = draft ? undefined : btwConversationKey(serverId, agentId);
+    const ownsMainComposer = showsComposer && hasActiveComposer && !draft;
+    return { chatComposerOwner: owner, chatComposerRoot: ownsMainComposer ? owner : undefined };
+  }, [serverId, agentId, draft, showsComposer, hasActiveComposer]);
   const content = (
     <RewindComposerRestoreProvider
       textSource={agentInputDraft.textSource}
       setText={agentInputDraft.replaceText}
       onRewindComplete={handleRewindComplete}
     >
-      <View style={styles.root}>
+      <View style={styles.root} dataSet={composerOwnership}>
         {dock}
 
         {isArchivingCurrentAgent ? (

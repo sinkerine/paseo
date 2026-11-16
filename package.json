@@ -42,6 +42,7 @@
     "dev:server:raw": "npm run dev --workspace=@getpaseo/server",
     "dev:app": "cross-env PASEO_LISTEN=127.0.0.1:6768 EXPO_PORT=8081 ./scripts/dev-app.sh",
     "dev:android": "npm run dev:android --workspace=@getpaseo/app",
+    "android:isolated": "bash scripts/android-isolated.sh",
     "dev:ios": "npm run dev:ios --workspace=@getpaseo/app",
     "test:e2e:mobile": "./scripts/test-mobile-agent-device.sh",
     "test:e2e:composer-keyboard:android": "./packages/app/e2e/mobile/composer-keyboard/android.sh",

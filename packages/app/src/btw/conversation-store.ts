@@ -12,12 +12,14 @@ export interface BtwConversation {
   pending: boolean;
   error: string | null;
   accepted: boolean;
+  pendingComposerFocus: boolean;
 }
 export const EMPTY_BTW_CONVERSATION: BtwConversation = {
   draft: { threadId: null, text: "", submitted: null, failed: false },
   pending: false,
   error: null,
   accepted: false,
+  pendingComposerFocus: false,
 };
 export type BtwDispatchResult = { ok: true } | { ok: false; error: string };
 interface ObservedBtwThread {
@@ -36,6 +38,8 @@ interface BtwDispatchInput {
 interface BtwConversationStore {
   byParent: Record<string, BtwConversation>;
   edit(key: string, text: string): void;
+  insert(key: string, text: string): boolean;
+  clearComposerFocus(key: string): void;
   observeThread(key: string, thread: ObservedBtwThread): void;
   dispatch(input: BtwDispatchInput): Promise<BtwDispatchResult> | null;
 }
@@ -54,6 +58,18 @@ export const useBtwConversationStore = create<BtwConversationStore>((set, get) =
         ...current,
         draft: reduceBtwDraft(current.draft, { type: "edit", text }),
       }));
+    },
+    insert(key, text) {
+      if (get().byParent[key]?.pending || !text) return false;
+      update(key, (current) => ({
+        ...current,
+        draft: reduceBtwDraft(current.draft, { type: "insert", text }),
+        pendingComposerFocus: true,
+      }));
+      return true;
+    },
+    clearComposerFocus(key) {
+      update(key, (current) => ({ ...current, pendingComposerFocus: false }));
     },
     observeThread(key, thread) {
       update(key, (current) => {

@@ -2014,6 +2014,63 @@ describe("project config RPC authorization", () => {
   });
 });
 
+describe("notification scope", () => {
+  test("keeps scopes per source and resets a missing scope to unrestricted", async () => {
+    const session = createSessionForTest();
+    const a = {};
+    const b = {};
+    const heartbeat = {
+      type: "client_heartbeat" as const,
+      deviceType: "web" as const,
+      focusedAgentId: null,
+      lastActivityAt: "2026-11-14T12:00:00.000Z",
+      appVisible: true,
+    };
+    await session.handleMessage({ ...heartbeat, notificationScope: { projectIds: ["alpha"] } }, a);
+    await session.handleMessage(heartbeat, b);
+    expect(session.getClientActivity(a)?.notificationProjectIds).toEqual(new Set(["alpha"]));
+    expect(session.getClientActivity(b)?.notificationProjectIds).toBeNull();
+    await session.handleMessage(heartbeat, a);
+    expect(session.getClientActivity(a)?.notificationProjectIds).toBeNull();
+  });
+
+  test("stores an empty allowlist as no projects", async () => {
+    const session = createSessionForTest();
+    const source = {};
+    await session.handleMessage(
+      {
+        type: "client_heartbeat",
+        deviceType: "web",
+        focusedAgentId: null,
+        lastActivityAt: "2026-11-14T12:00:00.000Z",
+        appVisible: true,
+        notificationScope: { projectIds: [] },
+      },
+      source,
+    );
+    expect(session.getClientActivity(source)?.notificationProjectIds).toEqual(new Set());
+  });
+
+  test("stores a heartbeat project allowlist for its source", async () => {
+    const session = createSessionForTest();
+    const source = {};
+    await session.handleMessage(
+      {
+        type: "client_heartbeat",
+        deviceType: "web",
+        focusedAgentId: null,
+        lastActivityAt: "2026-11-14T12:00:00.000Z",
+        appVisible: true,
+        notificationScope: { projectIds: ["alpha", "beta", "alpha"] },
+      },
+      source,
+    );
+    expect(session.getClientActivity(source)?.notificationProjectIds).toEqual(
+      new Set(["alpha", "beta"]),
+    );
+  });
+});
+
 test("push token registration can be revoked by the connected client", async () => {
   const renewed: string[] = [];
   const revoked: string[] = [];

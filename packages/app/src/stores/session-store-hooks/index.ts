@@ -10,6 +10,8 @@ import {
   selectWorkspaceDirectoryServerIds,
   selectHasWorkspaces,
   selectProjectOrder,
+  selectProjectViewPlacements,
+  type ProjectViewPlacement,
   selectProjectRootPaths,
   selectRecommendedProjectPaths,
   selectWorkspace,
@@ -85,6 +87,14 @@ export function useWorkspaceDirectoryServerIds(serverIds: string[]): string[] {
   return useStoreWithEqualityFn(
     useSessionStore,
     (state) => selectWorkspaceDirectoryServerIds(state, serverIds),
+    workspaceEqualityFns.deep,
+  );
+}
+
+export function useProjectViewPlacements(serverIds: string[]): ProjectViewPlacement[] {
+  return useStoreWithEqualityFn(
+    useSessionStore,
+    (state) => selectProjectViewPlacements(state, serverIds),
     workspaceEqualityFns.deep,
   );
 }

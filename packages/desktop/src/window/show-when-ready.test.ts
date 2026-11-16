@@ -6,6 +6,10 @@ class Window extends EventEmitter {
   webContents = new EventEmitter();
   shows = 0;
   destroyed = false;
+  inactiveShows = 0;
+  showInactive() {
+    this.inactiveShows += 1;
+  }
   show() {
     this.shows += 1;
   }
@@ -54,4 +58,13 @@ describe("showWindowWhenReady", () => {
     win.emit("ready-to-show");
     expect(win.shows).toBe(0);
   });
+});
+
+it("shows background cold launches inactive on either readiness event", () => {
+  const win = new Window();
+  showWindowWhenReady(win, { showOnLoad: true, showInactive: true });
+  win.webContents.emit("did-finish-load");
+  win.emit("ready-to-show");
+  expect(win.inactiveShows).toBe(1);
+  expect(win.shows).toBe(0);
 });

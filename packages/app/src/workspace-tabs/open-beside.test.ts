@@ -206,6 +206,82 @@ describe("showWorkspaceTargetBeside", () => {
     expect(state.layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBe(focused);
     expect(state.focusRequest).toBeNull();
   });
+  it("consumes only the newly created side pane's synthetic launcher and prunes the pane on close", () => {
+    const store = setup();
+    const before = useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY];
+    const id = show();
+    if (!id) throw new Error("Missing BTW tab");
+    const pane = paneFor(id);
+    expect(pane?.tabIds).toEqual([id]);
+    expect(useWorkspaceLayoutStore.getState().focusRequest).toBeNull();
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBe(
+      before.focusedPaneId,
+    );
+    store.closeTab(WORKSPACE_KEY, id);
+    expect(
+      collectAllPanes(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY].root),
+    ).toHaveLength(1);
+  });
+  it("retains a reused side pane's user launcher", () => {
+    const store = setup();
+    const side = store.ensureSidePane(WORKSPACE_KEY, { focus: false });
+    const before = useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY];
+    const launcher = findPaneById(before.root, side)?.focusedTabId;
+    const id = show();
+    expect(paneFor(id)?.tabIds).toEqual([launcher, id]);
+    expect(useWorkspaceLayoutStore.getState().focusRequest).toBeNull();
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBe(
+      before.focusedPaneId,
+    );
+  });
+  it("keeps suspended focus and its restoration tokens when consuming a fresh synthetic launcher", () => {
+    const store = setup();
+    const token = store.unfocusPane(WORKSPACE_KEY);
+    if (!token) throw new Error("Missing suspended focus token");
+    const before = useWorkspaceLayoutStore.getState();
+    const restoration = before.focusRestorationByWorkspace[WORKSPACE_KEY];
+    const request = before.focusRequest;
+    const id = show();
+    expect(paneFor(id)?.tabIds).toEqual([id]);
+    const after = useWorkspaceLayoutStore.getState();
+    expect(after.layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBeNull();
+    expect(after.focusRestorationByWorkspace[WORKSPACE_KEY]).toBe(restoration);
+    expect(after.focusRequest).toBe(request);
+    store.restorePaneFocus(WORKSPACE_KEY, token);
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBe(
+      "main",
+    );
+  });
+  it.each([false, true])(
+    "keeps current main default focus semantics on explicit new side-pane focus=%s",
+    (focus) => {
+      const store = setup();
+      const token = store.unfocusPane(WORKSPACE_KEY);
+      if (!token) throw new Error("Missing suspended focus token");
+      const previous =
+        useWorkspaceLayoutStore.getState().focusRestorationByWorkspace[WORKSPACE_KEY];
+      const side = store.ensureSidePane(WORKSPACE_KEY, { focus });
+      const after = useWorkspaceLayoutStore.getState();
+      expect(after.focusRestorationByWorkspace[WORKSPACE_KEY]).toBe(focus ? undefined : previous);
+      expect(after.layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBe(focus ? side : null);
+    },
+  );
+  it("reusing the existing side pane keeps parked focus and restores the original main pane", () => {
+    const store = setup();
+    const side = store.ensureSidePane(WORKSPACE_KEY, { focus: false });
+    const token = store.unfocusPane(WORKSPACE_KEY);
+    if (!token) throw new Error("Missing suspended focus token");
+    const previous = useWorkspaceLayoutStore.getState().focusRestorationByWorkspace[WORKSPACE_KEY];
+    show();
+    expect(useWorkspaceLayoutStore.getState().sidePaneIdByWorkspace[WORKSPACE_KEY]).toBe(side);
+    expect(useWorkspaceLayoutStore.getState().focusRestorationByWorkspace[WORKSPACE_KEY]).toBe(
+      previous,
+    );
+    store.restorePaneFocus(WORKSPACE_KEY, token);
+    expect(useWorkspaceLayoutStore.getState().layoutByWorkspace[WORKSPACE_KEY].focusedPaneId).toBe(
+      "main",
+    );
+  });
   it("reuses side pane and selects without focus", () => {
     const store = setup();
     const side = store.ensureSidePane(WORKSPACE_KEY, { focus: false });

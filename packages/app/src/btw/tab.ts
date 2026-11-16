@@ -39,15 +39,20 @@ export function selectBtwTab(
     visible: !!pane && pane.hidden !== true && pane.focusedTabId === tab.tabId && shown,
   };
 }
+export function revealBtwTab(input: {
+  workspaceKey: string | null;
+  agentId: string;
+}): string | null {
+  return openWorkspaceTargetAtLocation({
+    ...input,
+    target: btwTabTarget(input.agentId),
+    location: "side",
+  });
+}
 export function toggleBtwTab(input: { workspaceKey: string | null; agentId: string }): void {
   if (!input.workspaceKey) return;
   const store = useWorkspaceLayoutStore.getState();
   const tab = selectBtwTab(store, input.workspaceKey, input.agentId);
   if (tab?.visible) store.closeTab(input.workspaceKey, tab.tabId);
-  else
-    openWorkspaceTargetAtLocation({
-      ...input,
-      target: btwTabTarget(input.agentId),
-      location: "side",
-    });
+  else revealBtwTab(input);
 }

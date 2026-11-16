@@ -25,10 +25,13 @@ const defaultResolveRequest = config.resolver.resolveRequest ?? resolve;
 // node crawler is the path used when Watchman is absent.
 config.resolver.useWatchman = false;
 
-const escapedAppSrcRoot = appSrcRoot
-  .split(path.sep)
-  .map((segment) => segment.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&"))
-  .join("[\\\\/]");
+const escapePathPattern = (root) =>
+  root
+    .split(path.sep)
+    .map((segment) => segment.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&"))
+    .join("[\\\\/]");
+const escapedAppSrcRoot = escapePathPattern(appSrcRoot);
+const escapedRepositoryRoot = escapePathPattern(path.resolve(projectRoot, "../.."));
 const pathSeparatorPattern = "[\\\\/]";
 
 config.resolver.extraNodeModules = {
@@ -38,9 +41,18 @@ config.resolver.extraNodeModules = {
   "react/jsx-runtime": path.join(appNodeModulesRoot, "react/jsx-runtime"),
   "react/jsx-dev-runtime": path.join(appNodeModulesRoot, "react/jsx-dev-runtime"),
 };
-config.resolver.blockList = new RegExp(
-  `(^${escapedAppSrcRoot}${pathSeparatorPattern}.*\\.(test|spec)\\.(ts|tsx)$|${pathSeparatorPattern}__tests__${pathSeparatorPattern}.*)$`,
-);
+// Preserve Expo's generated-native exclusions. Tool state can contain entire
+// Gradle/JDK distributions and AVDs; it must stay outside Metro's file map.
+const defaultBlockList = config.resolver.blockList;
+config.resolver.blockList = [
+  ...(Array.isArray(defaultBlockList) ? defaultBlockList : [defaultBlockList]),
+  new RegExp(
+    `(^${escapedAppSrcRoot}${pathSeparatorPattern}.*\\.(test|spec)\\.(ts|tsx)$|${pathSeparatorPattern}__tests__${pathSeparatorPattern}.*)$`,
+  ),
+  new RegExp(
+    `^${escapedRepositoryRoot}${pathSeparatorPattern}(?:\\.dev|artifacts)(?:${pathSeparatorPattern}|$)`,
+  ),
+];
 
 function isLocalModuleImport(moduleName) {
   return (

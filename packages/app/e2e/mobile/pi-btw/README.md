@@ -31,7 +31,7 @@ packages/app/e2e/mobile/pi-btw/low-memory.sh emulator --dry-run
 ```
 
 `low-memory.sh` acquires the feature build lock before synchronous qex admission.
-The build uses the root `android-build` declaration (4 CPU / 16 GiB / 60m);
+The build uses the root `android-btw-build` declaration (4 CPU / 16 GiB / 60m);
 the emulator/full runtime uses `android` (4 CPU / 12 GiB / 60m). These are the
 user-requested, reviewed planning estimates for the changed workload, including
 process overhead and headroom. The build covers dependency builds/prebuild and
@@ -73,7 +73,7 @@ and rechecks each module's resolved SDK components. Gradle normally runs offline
 with `android.builder.sdkDownload=false`; npm/Expo tool acquisition is offline too.
 For a cold task cache, `low-memory.sh build --setup-dependencies` explicitly permits
 required Gradle/Maven dependency acquisition while compiling under the full
-`android-build` claim. This is separate from the tool-only `android-setup` job:
+`android-btw-build` claim. This is separate from the tool-only `android-setup` job:
 Gradle plugin configuration can compile included builds, so it cannot use the
 smaller setup claim. SDK auto-install remains disabled. Later builds omit that
 option and fail closed offline. After a native-wrapper or SDK-only repair,

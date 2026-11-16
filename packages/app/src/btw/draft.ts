@@ -15,6 +15,7 @@ export interface BtwDraftState {
 }
 export type BtwDraftAction =
   | { type: "edit"; text: string }
+  | { type: "insert"; text: string }
   | { type: "submit"; command: BtwCommand; after: TimelinePosition | null; submittedAt: number }
   | { type: "accepted"; command: BtwCommand }
   | {
@@ -24,6 +25,13 @@ export type BtwDraftAction =
       updatedAt: string;
       items: readonly StreamItem[];
     };
+
+export function appendBtwDraftSnippet(draft: string, snippet: string): string {
+  if (!draft) return snippet;
+  if (draft.endsWith("\n\n")) return draft + snippet;
+  if (draft.endsWith("\n")) return draft + "\n" + snippet;
+  return draft + "\n\n" + snippet;
+}
 
 export function findBtwSubmittedQuestionIndex(
   submitted: NonNullable<BtwDraftState["submitted"]>,
@@ -60,6 +68,8 @@ export function reduceBtwDraft(state: BtwDraftState, action: BtwDraftAction): Bt
   switch (action.type) {
     case "edit":
       return { ...state, text: action.text };
+    case "insert":
+      return { ...state, text: appendBtwDraftSnippet(state.text, action.text) };
     case "submit":
       return {
         ...state,

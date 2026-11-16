@@ -1,3 +1,4 @@
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useCallback } from "react";
 import { useSessionStore } from "@/stores/session-store";
 
@@ -22,14 +23,20 @@ export function btwCommandText(command: BtwCommand): string {
       return `/btw:${command.kind}`;
   }
 }
+interface BtwCommandInput {
+  client: Pick<DaemonClient, "sendAgentMessage"> | null;
+  agentId: string;
+  command: BtwCommand;
+}
+export async function sendBtwCommand({ client, agentId, command }: BtwCommandInput): Promise<void> {
+  if (!client) throw new Error("Host disconnected");
+  // An empty id explicitly omits the main-chat breadcrumb.
+  await client.sendAgentMessage(agentId, btwCommandText(command), { messageId: "" });
+}
 export function useSendBtwCommand(serverId: string, agentId: string) {
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   return useCallback(
-    async (command: BtwCommand): Promise<void> => {
-      if (!client) throw new Error("Host disconnected");
-      // The client treats an empty id as an explicit request to omit the main-chat breadcrumb.
-      await client.sendAgentMessage(agentId, btwCommandText(command), { messageId: "" });
-    },
+    (command: BtwCommand) => sendBtwCommand({ client, agentId, command }),
     [agentId, client],
   );
 }

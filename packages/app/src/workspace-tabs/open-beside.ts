@@ -9,6 +9,7 @@ import {
   selectSheetTab,
   useWorkspaceLayoutStore,
   type WorkspaceTabPlacement,
+  type WorkspaceLayout,
 } from "@/stores/workspace-layout-store";
 import { getPanelInstanceAttributes } from "@/panels/panel-instance-attributes";
 import { workspaceTabTargetsEqual } from "@/workspace-tabs/identity";
@@ -131,6 +132,18 @@ export function openWorkspaceTargetAtLocation(
   );
 }
 
+function hasNewSidePaneLauncher(input: {
+  before: WorkspaceLayout | undefined;
+  after: WorkspaceLayout | undefined;
+  paneId: string | null;
+}): boolean {
+  if (!input.paneId || !input.after) return false;
+  if (input.before && findPaneById(input.before.root, input.paneId)) return false;
+  const pane = findPaneById(input.after.root, input.paneId);
+  if (!pane || pane.tabIds.length !== 1) return false;
+  return collectAllTabs({ kind: "pane", pane })[0]?.target.kind === "new_tab";
+}
+
 /**
  * Shows supporting content without moving workspace focus. Existing tabs stay where the user
  * placed them; a focused pane keeps its current selection. Compact uses the sheet policy and
@@ -161,10 +174,16 @@ export function showWorkspaceTargetBeside(input: {
     store.layoutMode === "split-panes"
       ? store.ensureSidePane(workspaceKey, { focus: false })
       : null;
+  const allowNewTabReplace = hasNewSidePaneLauncher({
+    before: layout,
+    after: useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey],
+    paneId,
+  });
   const tabId = store.openTab({
     workspaceKey,
     target: input.target,
     intent: "background",
+    allowNewTabReplace,
     placement: paneId ? { mode: "prefer", paneId } : undefined,
   });
   const next = useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];

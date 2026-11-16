@@ -118,9 +118,65 @@ When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: write
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
-Default E2E to the [background headless Playwright workflow](docs/testing.md#background-e2e-workflow), using the existing isolated harness and one targeted spec with one worker. Use real Electron or native tests when the changed behavior requires those platforms; run their UI in a separate display or disposable device environment.
+**Agents run E2E tests only for web and Android.** Before deciding whether E2E is needed or which tests to run for a feature or fix, read [`e2e-paths.yml`](e2e-paths.yml) and match the complete change against it, following [E2E test routing](docs/testing.md#e2e-test-routing). Run affected journeys from every matched group and all of its `required_tests`; record the triggering paths and selected tests, or explain why no E2E applies. Maintain web E2E paths in the `browser` and `website` groups alongside Android coverage. Do not run iOS, real Electron, or standalone daemon, CLI, or relay E2E suites; CI job routing remains separate. Review the map for every feature and update it in the same change when new or moved code, entrypoints, or test coverage changes which journeys must run. Fix routing gaps before delivery. Update `.github/ci-paths.yml` when the corresponding GitHub Actions job coverage changes.
 
-For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. For the [shared profile shortcut journey](docs/features/shared-profile-shortcuts-plan.md#e2e-journey), run `npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/shared-profile-shortcuts.spec.ts --project=browser`. The existing app Playwright harness owns Metro, disposable daemon homes and ports, throwaway workspaces, and cleanup; the spec adds a second isolated host with distinct profiles and seeds legacy browser storage. The spec reuses the desktop bridge fixture to expose Shortcuts settings in Chromium; this covers the desktop renderer, not a real Electron window. Its fake providers cover configuration routing, not live provider behavior. Keep evidence in ignored worktree `artifacts/`; use the [development shell](docs/development.md#nix-and-direnv) for Chromium runtime dependencies. Never touch the main daemon on 6767. See [docs/testing.md](docs/testing.md#running-tests-locally) for targeted execution and [docs/qa.md](docs/qa.md#evidence) for evidence requirements.
+Use the existing isolated harnesses referenced by the map. Run affected web specs with one worker for Playwright and Android journeys in a disposable emulator or dedicated test device. These harnesses may start isolated daemons and other dependencies. Keep evidence in ignored worktree `artifacts/`; see [QA evidence](docs/qa.md#evidence). Never touch the main daemon on 6767.
+
+### E2E resource admission
+
+Every E2E execution requires qex admission before setup starts, retained through teardown. Validate these estimates with `agent-job estimates`, then run the documented entrypoint through `agent-job run --e2e <name> -- <command>`. Do not nest reservations. These conservative cold-start estimates cover Metro, isolated daemons, browsers, fixture agents, and teardown.
+
+For the documented headless app Playwright harness, use the `browser-one-worker` declaration and `--workers=1`.
+
+```qex-e2e browser-one-worker
+{
+  "resources": {
+    "cpu": 4,
+    "mem": "16GiB"
+  },
+  "timeout": "30m"
+}
+```
+
+The desktop browser-tabs harness uses `electron`, including its build, two real windows, isolated Xvfb, and optional window manager. It uses separate ports and state from Playwright; keep both stacks serialized with builds in the tab-focus recipe.
+
+```qex-e2e electron
+{
+  "resources": { "cpu": 4, "mem": "16GiB" },
+  "timeout": "1h"
+}
+```
+
+## Android resource estimates
+
+Use `npm run android:isolated -- setup` to provision the Nix SDK and checkout-local
+API 35 AVD on x86_64 Linux. Commands and measured scope live in
+[docs/android.md](docs/android.md#nix-sdk-and-isolated-emulator-linux).
+
+These are rough, conservative reservations. Build and emulator phases run
+separately. The build estimate covers a ready SDK, one release ABI, two Gradle
+workers, a 2 GiB JVM heap, one native compile/link job per project, and one Metro
+worker with a 2 GiB Node heap. It excludes SDK provisioning, an emulator, and
+source-only F-Droid or unrestricted multi-ABI builds.
+
+```qex-e2e android-build
+{
+  "resources": { "cpu": 2, "mem": "8GiB" },
+  "timeout": "1h"
+}
+```
+
+The emulator estimate covers a 2 GiB guest, two vCPUs, private ADB, software
+rendering, and a lightweight standalone-app command through teardown. It excludes
+builds, Metro, and test daemons. Keep the runner in the foreground for the entire
+reservation; guest RAM and JVM heap limits are not whole-stack memory caps.
+
+```qex-e2e android-emulator
+{
+  "resources": { "cpu": 2, "mem": "4GiB" },
+  "timeout": "10m"
+}
+```
 
 ## E2E resource declarations
 
@@ -160,13 +216,13 @@ user-requested claims below are reviewed planning estimates for the reduced-memo
 workload, including process overhead and headroom; they are not measured peaks or
 guarantees against OOM. Tooling and native baseline validation remain required.
 
-The `android-build` declaration covers app dependency builds, development prebuild
+The `android-btw-build` declaration covers app dependency builds, development prebuild
 and the x86_64 debug APK producer in
 `packages/app/e2e/mobile/pi-btw/low-memory.sh build`: Gradle heap 3 GiB, metaspace
 768 MiB, one worker, in-process Kotlin and native compiler concurrency one. No
 emulator or runtime stack overlaps this stage.
 
-```qex-e2e android-build
+```qex-e2e android-btw-build
 {
   "resources": {
     "cpu": 4,

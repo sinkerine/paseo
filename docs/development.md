@@ -36,7 +36,9 @@ install after Playwright upgrades. Do not point `PLAYWRIGHT_BROWSERS_PATH` at
 Nixpkgs' browser bundle: its Playwright version can differ from the checkout's.
 On Linux, the shell supplies shared libraries through `LD_LIBRARY_PATH`; no
 `playwright install --with-deps` or system package installation is needed for
-Chromium. Native Android and iOS builds still require their platform SDKs.
+Chromium. For Android on x86_64 Linux, use `nix develop .#android` and the
+[checkout-isolated Android runner](android.md#nix-sdk-and-isolated-emulator-linux).
+iOS builds still require Xcode.
 
 ## Running the dev server
 
@@ -666,7 +668,9 @@ npm run cli -- ls -a -g              # List all agents globally
 npm run cli -- ls -a -g --json       # Same, as JSON
 npm run cli -- inspect <id>          # Show detailed agent info
 npm run cli -- logs <id>             # View agent timeline
-npm run cli -- agent open <id>       # Focus an existing agent in Paseo Desktop
+npm run cli -- agent open <id>       # Open an existing agent in Paseo Desktop
+npm run cli -- agent open <id> --no-focus # Add its tab without switching focus
+npm run cli -- agent open <id> --focus    # Explicitly focus its workspace and tab
 npm run cli -- daemon status         # Check daemon status
 npm run cli -- clone owner/repo --dir ~/workspace # Clone GitHub repo and register project
 ```
@@ -683,10 +687,18 @@ selector overrides both environment selectors. With both `PASEO_HOME` and `PASEO
 
 In an SSH URI, the URL port is the SSH server port. The remote daemon defaults to `127.0.0.1:6767`; use `?daemonPort=7777` to override it. The transport runs non-interactively through the local OpenSSH client and never installs, starts, or configures the remote daemon. User-facing setup and troubleshooting live in [public-docs/connectivity.md](../public-docs/connectivity.md#ssh).
 
-Desktop integrations can focus an existing agent without creating one or
-sending a message. Use `paseo://h/<server-id>/agent/<agent-id>`, or run
-`paseo agent open <agent-id>`. The CLI reads the local daemon's server ID by
-default; pass `--server <server-id>` when targeting another server.
+Desktop integrations open an existing agent without creating one or sending a
+message. Use `paseo://h/<server-id>/agent/<agent-id>`, or run
+`paseo agent open <agent-id>`. Human CLI opens focus the agent; a live agent shell
+(`PASEO_AGENT_ID`) defaults to adding its tab without changing window, workspace,
+or tab focus. Workspace terminals keep the human default. Override either with
+`--focus` or `--no-focus`; deep links use `?focus=0` for a non-focusing open.
+In multiple windows, explicit opens prefer a window already viewing the agent's
+workspace. Background opens add the tab to matching windows, or save it under its
+workspace in one window when none currently views it. Entering that workspace through
+the sidebar loads its saved tabs without a page reload. The CLI reads the local
+daemon's server ID by default; pass `--server <server-id>` when targeting another
+server.
 
 ## Agent state
 

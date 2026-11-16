@@ -10,6 +10,7 @@ log.initialize({ spyRendererConsole: true });
 import { inheritLoginShellEnv } from "./login-shell-env.js";
 
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -125,6 +126,42 @@ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
 const pendingBrowserWindowOpenRequests = new PendingBrowserWindowOpenRequests();
 const agentNavigationInbox = new AgentNavigationInbox();
+const readyAgentNavigationWindows = new Set<number>();
+const pendingWorkspaceLookups = new Map<
+  string,
+  { webContentsId: number; resolve: (workspaceId: string | null) => void }
+>();
+
+function resolveAgentWorkspace(
+  target: Pick<AgentDeepLinkTarget, "serverId" | "agentId">,
+): Promise<string | null> {
+  const window = BrowserWindow.getAllWindows().find(
+    (candidate) =>
+      !candidate.isDestroyed() && readyAgentNavigationWindows.has(candidate.webContents.id),
+  );
+  if (!window) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const requestId = randomUUID();
+    const settle = (workspaceId: string | null) => {
+      if (!pendingWorkspaceLookups.delete(requestId)) return;
+      resolve(workspaceId);
+    };
+    setTimeout(() => settle(null), 1_500);
+    pendingWorkspaceLookups.set(requestId, {
+      webContentsId: window.webContents.id,
+      resolve: settle,
+    });
+    try {
+      window.webContents.send(
+        "paseo:agent-navigation:resolve-workspace-request",
+        requestId,
+        target,
+      );
+    } catch {
+      settle(null);
+    }
+  });
+}
 
 // A second-instance launch can arrive before the packaged protocol handler,
 // IPC handlers, and first window exist. Wait for full bootstrap, not just
@@ -277,9 +314,12 @@ function installBrowserWindowOpenHandler(input: {
       mainWindow.webContents.send(BROWSER_NEW_TAB_REQUEST_EVENT, {
         sourceBrowserId,
         url: decision.url,
+        ...(decision.background ? { background: true } : {}),
       });
     } else {
-      pendingBrowserWindowOpenRequests.add(sourceContents.id, decision.url);
+      pendingBrowserWindowOpenRequests.add(sourceContents.id, decision.url, {
+        background: decision.background,
+      });
     }
     return { action: "deny" };
   });
@@ -388,8 +428,48 @@ ipcMain.handle("paseo:get-pending-open-project", (event) => {
 });
 
 ipcMain.handle("paseo:agent-navigation:ready", (event) => {
-  return agentNavigationInbox.windowReady(event.sender.id);
+  readyAgentNavigationWindows.add(event.sender.id);
+  const foreground = agentNavigationInbox.windowReady(event.sender.id);
+  for (const target of agentNavigationInbox.drainBackground(event.sender.id))
+    event.sender.send("paseo:event:open-agent", target);
+  return foreground;
 });
+
+ipcMain.handle("paseo:window:setActiveWorkspace", (event, selection: unknown) => {
+  if (selection === null) {
+    desktopWindowOwner.setActiveWorkspace(event.sender.id, null);
+    return;
+  }
+  if (
+    typeof selection !== "object" ||
+    !selection ||
+    !("serverId" in selection) ||
+    !("workspaceId" in selection) ||
+    typeof selection.serverId !== "string" ||
+    typeof selection.workspaceId !== "string"
+  )
+    return;
+  desktopWindowOwner.setActiveWorkspace(event.sender.id, {
+    serverId: selection.serverId,
+    workspaceId: selection.workspaceId,
+  });
+});
+ipcMain.handle(
+  "paseo:agent-navigation:resolve-workspace-reply",
+  (event, requestId: unknown, response: unknown) => {
+    if (typeof requestId !== "string") return;
+    const pending = pendingWorkspaceLookups.get(requestId);
+    if (!pending || pending.webContentsId !== event.sender.id) return;
+    const workspaceId =
+      response &&
+      typeof response === "object" &&
+      "workspaceId" in response &&
+      typeof response.workspaceId === "string"
+        ? response.workspaceId
+        : null;
+    pending.resolve(workspaceId);
+  },
+);
 
 ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => {
   const input = readAttachedBrowserInput(rawInput);
@@ -415,10 +495,10 @@ ipcMain.handle("paseo:browser:register-attached", (event, rawInput: unknown) => 
     webContentsId: input.webContentsId,
     registeredBrowserIds: listRegisteredPaseoBrowserIds(),
   });
-  for (const url of pendingBrowserWindowOpenRequests.take(input.webContentsId)) {
+  for (const request of pendingBrowserWindowOpenRequests.take(input.webContentsId)) {
     event.sender.send(BROWSER_NEW_TAB_REQUEST_EVENT, {
       sourceBrowserId: input.browserId,
-      url,
+      ...request,
     });
   }
 });
@@ -672,6 +752,7 @@ async function createWindow(
   options: {
     initialRoute?: string | null;
     restoreWindowState?: boolean;
+    showInactive?: boolean;
     onCreated?: (webContentsId: number) => void;
     onClosed?: (webContentsId: number) => void;
   } = {},
@@ -717,11 +798,17 @@ async function createWindow(
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isSameDocument, isMainFrame) => {
     if (isMainFrame && !isSameDocument) {
       agentNavigationInbox.windowLoading(webContentsId);
+      readyAgentNavigationWindows.delete(webContentsId);
+      desktopWindowOwner.setActiveWorkspace(webContentsId, null);
     }
   });
   mainWindow.on("closed", () => {
     options.onClosed?.(webContentsId);
     agentNavigationInbox.removeWindow(webContentsId);
+    readyAgentNavigationWindows.delete(webContentsId);
+    for (const pending of pendingWorkspaceLookups.values()) {
+      if (pending.webContentsId === webContentsId) pending.resolve(null);
+    }
     unregisterPaseoBrowserHost(webContentsId);
     browserKeyboard.detachHost(webContentsId);
   });
@@ -780,6 +867,7 @@ async function createWindow(
 
   showWindowWhenReady(mainWindow, {
     showOnLoad: process.platform === "linux",
+    showInactive: options.showInactive,
   });
 
   if (!app.isPackaged) {
@@ -814,6 +902,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
     const win = await createWindow({
       initialRoute: input.initialRoute,
       restoreWindowState: input.restoreWindowState,
+      showInactive: input.showInactive,
       onCreated: input.onCreated,
       onClosed: input.onClosed,
     });
@@ -826,6 +915,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
     return ownedDesktopWindow(win);
   },
   agentRoute: buildAgentDeepLinkRoute,
+  resolveAgentWorkspace,
   deliverAgent: (webContentsId, target) =>
     agentNavigationInbox.deliverOrQueue(webContentsId, target),
 });
@@ -889,7 +979,8 @@ function setupSingleInstanceLock(): boolean {
     log.info("[open-project] second-instance commandLine:", commandLine);
     const openProjectPath = parseOpenProjectPathFromArgv({
       argv: commandLine,
-      isDefaultApp: false,
+      // Unpackaged Electron includes its app directory in second-instance argv too.
+      isDefaultApp: process.defaultApp,
     });
     log.info("[open-project] second-instance openProjectPath:", openProjectPath);
     // Relaunching the app (CLI `paseo [path]`, double-click, etc.) opens a new
@@ -992,9 +1083,15 @@ async function bootstrap(): Promise<void> {
   const initialAgentNavigation = pendingAgentNavigation;
   pendingAgentNavigation = null;
   await desktopWindowOwner.openPrimary({
-    initialRoute: initialAgentNavigation ? buildAgentDeepLinkRoute(initialAgentNavigation) : null,
+    initialRoute:
+      initialAgentNavigation && initialAgentNavigation.focus !== false
+        ? buildAgentDeepLinkRoute(initialAgentNavigation)
+        : null,
+    showInactive: initialAgentNavigation?.focus === false,
     pendingProjectPath: pendingOpenProjectPath,
   });
+  if (initialAgentNavigation?.focus === false)
+    await desktopWindowOwner.openOrFocusAgent(initialAgentNavigation);
   pendingOpenProjectPath = null;
 
   // Protocol + IPC handlers and the first window now exist: release any

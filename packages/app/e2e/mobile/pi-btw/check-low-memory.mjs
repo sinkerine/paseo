@@ -137,7 +137,7 @@ else if(name === 'agent-job') {
   assert.deepEqual(
     calls.filter((call) => call.name === "agent-job").map((call) => call.args.slice(0, 3)),
     [
-      ["run", "--e2e", "android-build"],
+      ["run", "--e2e", "android-btw-build"],
       ["run", "--e2e", "android"],
     ],
   );
