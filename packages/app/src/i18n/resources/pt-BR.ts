@@ -7,7 +7,7 @@ export const ptBR: TranslationResources = {
     title: "Conversa BTW",
     show: "Mostrar conversa BTW",
     hide: "Ocultar conversa BTW",
-    minimize: "Minimizar",
+    empty: "Faça uma pergunta à parte sobre este chat",
     placeholder: "Faça uma pergunta à parte",
     send: "Enviar",
     stop: "Parar",

@@ -52,3 +52,17 @@ describe("panel manifest", () => {
     );
   });
 });
+
+it("btw is a closeable parent-scoped panel with a keyboard-extending compact sheet", () => {
+  expect(getPanelManifest("btw")).toMatchObject({
+    kind: "btw",
+    supportedHosts: ["main", "explorer"],
+    showCloseButton: true,
+    singleton: false,
+    compactSheet: { openAsTab: false, keyboardBehavior: "extend" },
+  });
+  expect(panelSupportsHost("btw", "sheet")).toBe(true);
+  expect(getPanelManifest("btw").resourceKey({ kind: "btw", agentId: "parent" })).toBe("parent");
+  expect(panelResourceKey({ kind: "btw", agentId: "parent" })).toBe("btw:parent");
+  expect(panelCanLaunchInPane("btw", ["btw"])).toBe(true);
+});

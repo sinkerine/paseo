@@ -125,6 +125,8 @@ function SheetTabSheet({ sheet, isTop, onClose }: SheetTabSheetProps) {
       contextBridge={contextBridge}
       snapPoints={FULL_SHEET_SNAP_POINTS}
       enableDynamicSizing={false}
+      keyboardBehavior={sheet.policy.keyboardBehavior}
+      keyboardBlurBehavior={sheet.policy.keyboardBehavior ? "restore" : undefined}
       enablePanDownToClose
       // The pane scrolls on its own; the sheet drags from its handle and header.
       enableContentPanningGesture={false}

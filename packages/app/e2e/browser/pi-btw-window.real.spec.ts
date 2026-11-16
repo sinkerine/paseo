@@ -26,7 +26,7 @@ test("real Pi and configured provider answer from finished parent context while 
   const tokenB = `RECORD_B_${randomUUID()}`;
   const handle = await launchBtwAgent(page, btwRuntime);
   const client = await connectDaemonClient<DaemonClient>({ clientIdPrefix: "btw-live-proof" });
-  const window = page.getByTestId("btw-window").filter({ visible: true });
+  const window = page.getByTestId("btw-panel").filter({ visible: true });
   try {
     await page.setViewportSize({ width: 1440, height: 900 });
     await submitMessageWithButton(
@@ -103,7 +103,10 @@ test("real Pi and configured provider answer from finished parent context while 
       JSON.stringify({ firstViewport, nextViewport }, null, 2),
     );
     await captureBtw(page, info, "live-btw-compact-repinned");
-    await page.getByTestId("btw-sheet-chip").filter({ visible: true }).click();
+    await page
+      .getByTestId("sheet-tab-header")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
     await expect(window).toBeHidden();
     await page.getByTestId("btw-chip").filter({ visible: true }).click();
     await expect(window).toHaveAttribute("aria-label", `btw:${first?.threadId}`);

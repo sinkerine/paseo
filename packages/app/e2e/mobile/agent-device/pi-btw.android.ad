@@ -1,31 +1,31 @@
 context platform=android timeout=120000 retries=0
 env APP_ID=sh.paseo.debug
 
-# Preconditions: this checkout's Metro; disposable fixture host; a minimized BTW thread in
+# Preconditions: this checkout's Metro; disposable fixture host; a closed BTW tab in
 # the owning chat. Enable the software keyboard. Never attach to the main daemon.
 # Save runner screenshots/bounds with the command's --artifacts-dir. Inspect keyboard-visible
 # composer/send bounds, bottom safe-area clearance, selection and sheet hit targets.
-open "${APP_ID}"
+open "${APP_ID}" --no-test-ime
 wait "id=\"btw-chip\"" 30000
 press "id=\"btw-chip\""
-wait "id=\"btw-sheet-chip\"" 10000
+wait "id=\"sheet-tab-header\"" 10000
 press "id=\"btw-composer\""
-fill "id=\"btw-composer\"" "HOLD_BTW Native keyboard smoke 日本語"
+fill "id=\"btw-composer\"" "HOLD_BTW Native keyboard smoke ASCII"
 is visible "id=\"btw-send\""
-is visible "id=\"btw-sheet-chip\""
+is visible "id=\"sheet-tab-header\""
 longpress "id=\"btw-composer\"" 600
-press "id=\"btw-sheet-chip\""
+press "label=\"Close\""
 wait "id=\"btw-chip\"" 10000
 press "id=\"btw-chip\""
-wait "id=\"btw-sheet-chip\"" 10000
+wait "id=\"sheet-tab-header\"" 10000
 is visible "id=\"btw-composer\""
 press "id=\"btw-send\""
 wait "id=\"btw-stop\"" 10000
-press "id=\"btw-sheet-chip\""
+press "label=\"Close\""
 wait "id=\"btw-chip\"" 10000
 press "id=\"btw-chip\""
-wait "id=\"btw-sheet-chip\"" 10000
+wait "id=\"sheet-tab-header\"" 10000
 back
 wait "id=\"btw-chip\"" 10000
 press "id=\"btw-chip\""
-wait "id=\"btw-sheet-chip\"" 10000
+wait "id=\"sheet-tab-header\"" 10000

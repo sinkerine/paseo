@@ -106,6 +106,8 @@ export interface OpenWorkspaceTabInput {
   workspaceKey: string;
   target: WorkspaceTabTarget;
   intent: WorkspaceTabOpenIntent;
+  /** A supporting open may consume the synthetic launcher in a pane it just created. */
+  allowNewTabReplace?: boolean;
   /** Keeps an explicitly opened agent visible even when it is archived. */
   pin?: boolean;
   placement?: WorkspaceTabPlacement;
@@ -131,7 +133,7 @@ export type WorkspaceTabDestination =
   | { kind: "pane"; paneId: string; host: "main" | "explorer"; tabId: string }
   | { kind: "sheet"; tabId: string };
 
-interface WorkspaceLayoutStore {
+export interface WorkspaceLayoutStore {
   reconciledWorkspaceKeys: Set<string>;
   activeWorkspaceKey: string | null;
   syncingWorkspaceKeys: Set<string>;
@@ -188,7 +190,12 @@ interface WorkspaceLayoutStore {
   closeTab: (workspaceKey: string, tabId: string) => void;
   getTabDestination: (workspaceKey: string, tabId: string) => WorkspaceTabDestination | null;
   focusTab: (workspaceKey: string, tabId: string) => void;
-  selectTabInPane: (workspaceKey: string, paneId: string, tabId: string) => void;
+  selectTabInPane: (
+    workspaceKey: string,
+    paneId: string,
+    tabId: string,
+    options?: { focus: boolean },
+  ) => void;
   replaceTab: (
     workspaceKey: string,
     tabId: string,
@@ -1372,6 +1379,7 @@ export function createWorkspaceLayoutStore(
           } else if (input.intent === "background") {
             result = openTabInLayoutBackground({
               ...placement,
+              allowNewTabReplace: input.allowNewTabReplace,
               insertionPosition: input.insertionPosition,
               target: normalizedTarget,
               now: Date.now(),
@@ -1573,7 +1581,9 @@ export function createWorkspaceLayoutStore(
             return null;
           }
           set((state) => ({
-            ...withoutFocusRestoration(state, normalizedWorkspaceKey),
+            ...(options?.focus === false
+              ? {}
+              : withoutFocusRestoration(state, normalizedWorkspaceKey)),
             layoutByWorkspace: {
               ...state.layoutByWorkspace,
               [normalizedWorkspaceKey]:
@@ -1734,7 +1744,7 @@ export function createWorkspaceLayoutStore(
             };
           });
         },
-        selectTabInPane: (workspaceKey, paneId, tabId) => {
+        selectTabInPane: (workspaceKey, paneId, tabId, options) => {
           const normalizedWorkspaceKey = trimNonEmpty(workspaceKey);
           const normalizedPaneId = trimNonEmpty(paneId);
           const normalizedTabId = trimNonEmpty(tabId);
@@ -1751,10 +1761,17 @@ export function createWorkspaceLayoutStore(
             const pane = findPaneById(layout.root, normalizedPaneId);
             return pane?.tabIds.includes(normalizedTabId)
               ? {
-                  ...withoutPendingOpen(state, normalizedWorkspaceKey),
-                  focusRequest: { workspaceKey: normalizedWorkspaceKey, tabId: normalizedTabId },
-                  // Choosing a tab dismisses the sheets that cover it.
-                  ...dismissSheets(state, normalizedWorkspaceKey),
+                  ...(options?.focus === false
+                    ? {}
+                    : {
+                        ...withoutPendingOpen(state, normalizedWorkspaceKey),
+                        focusRequest: {
+                          workspaceKey: normalizedWorkspaceKey,
+                          tabId: normalizedTabId,
+                        },
+                        // Choosing a tab dismisses the sheets that cover it.
+                        ...dismissSheets(state, normalizedWorkspaceKey),
+                      }),
                   layoutByWorkspace: {
                     ...state.layoutByWorkspace,
                     [normalizedWorkspaceKey]: nextLayout ?? layout,

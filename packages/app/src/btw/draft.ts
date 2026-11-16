@@ -3,6 +3,7 @@ import type { StreamItem, TimelinePosition } from "@/types/stream";
 import type { BtwCommand } from "./send";
 
 export interface BtwDraftState {
+  threadId: string | null;
   text: string;
   submitted: {
     text: string;
@@ -19,6 +20,7 @@ export type BtwDraftAction =
   | { type: "accepted"; command: BtwCommand }
   | {
       type: "thread";
+      threadId: string;
       status: ProviderSubagentDescriptorPayload["status"];
       updatedAt: string;
       items: readonly StreamItem[];
@@ -71,6 +73,7 @@ export function reduceBtwDraft(state: BtwDraftState, action: BtwDraftAction): Bt
     case "submit":
       return {
         ...state,
+        failed: action.command.kind === "ask" ? false : state.failed,
         submitted:
           action.command.kind === "ask"
             ? {
@@ -88,8 +91,19 @@ export function reduceBtwDraft(state: BtwDraftState, action: BtwDraftAction): Bt
       const text = state.failed ? state.text || submitted.text : "";
       return { ...state, submitted, text };
     }
-    case "thread":
-      return reduceThreadDraft(state, action);
+    case "thread": {
+      // A cursor bound to a replaced thread cannot reconcile against the new thread's epoch.
+      const current =
+        state.threadId === action.threadId
+          ? state
+          : {
+              ...state,
+              threadId: action.threadId,
+              failed: false,
+              submitted: state.submitted?.after === null ? state.submitted : null,
+            };
+      return reduceThreadDraft(current, action);
+    }
   }
 }
 

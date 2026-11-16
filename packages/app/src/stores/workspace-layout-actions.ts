@@ -1532,7 +1532,7 @@ function revealExistingTab(input: {
 }
 
 export function openTabInLayoutBackground(
-  input: OpenTabInLayoutInput,
+  input: OpenTabInLayoutInput & { allowNewTabReplace?: boolean },
 ): OpenTabInLayoutResult | null {
   const layout = asInternalLayout(input.layout);
   const existingTab = findExistingTabForTarget(layout.root, input.target);

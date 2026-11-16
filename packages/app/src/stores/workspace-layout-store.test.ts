@@ -5414,3 +5414,107 @@ describe("background tab focus ownership", () => {
     },
   );
 });
+
+describe("selectTabInPane focus option", () => {
+  it.each([false, true])(
+    "focus=%s preserves the non-focusing contract and default behavior",
+    (focus) => {
+      const store = createWorkspaceLayoutStore();
+      const workspaceKey = "host:btw-test";
+      const parent = store
+        .getState()
+        .openTab({ workspaceKey, target: { kind: "agent", agentId: "parent" }, intent: "reveal" });
+      const side = store.getState().ensureSidePane(workspaceKey, { focus: false });
+      if (!side) throw new Error("Missing Side pane");
+      const other = store.getState().openTab({
+        workspaceKey,
+        target: { kind: "file", path: "side.md" },
+        placement: { mode: "prefer", paneId: side },
+        intent: "background",
+      });
+      if (!parent || !other) throw new Error("Missing tabs");
+      store.setState({ focusRequest: null });
+      store.getState().setLayoutMode("compact");
+      store
+        .getState()
+        .openTab({ workspaceKey, target: { kind: "file", path: "sheet.md" }, intent: "reveal" });
+      store.setState({ focusRequest: null });
+      const sheets = store.getState().sheetsByWorkspace[workspaceKey];
+      const before = store.getState().layoutByWorkspace[workspaceKey];
+      if (focus) store.getState().selectTabInPane(workspaceKey, side, other);
+      else store.getState().selectTabInPane(workspaceKey, side, other, { focus: false });
+      const after = store.getState();
+      expect(findPaneById(after.layoutByWorkspace[workspaceKey].root, side)?.focusedTabId).toBe(
+        other,
+      );
+      // Existing callers request tab focus without changing the layout's focused pane here.
+      expect(after.layoutByWorkspace[workspaceKey].focusedPaneId).toBe(before.focusedPaneId);
+      expect(after.focusRequest).toEqual(focus ? { workspaceKey, tabId: other } : null);
+      if (!focus) expect(after.sheetsByWorkspace[workspaceKey]).toBe(sheets);
+      else expect(after.sheetsByWorkspace[workspaceKey] ?? []).toHaveLength(0);
+    },
+  );
+});
+
+describe("deferred explicit open during tab selection", () => {
+  function prepare() {
+    const store = createWorkspaceLayoutStore(undefined, {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    const workspaceKey = "host:deferred-btw-selection";
+    store
+      .getState()
+      .openTab({ workspaceKey, target: { kind: "agent", agentId: "parent" }, intent: "reveal" });
+    const side = store.getState().ensureSidePane(workspaceKey, { focus: false });
+    if (!side) throw new Error("Missing Side pane");
+    const tabId = store.getState().openTab({
+      workspaceKey,
+      target: { kind: "file", path: "side.md" },
+      intent: "background",
+      placement: { mode: "pane", paneId: side },
+    });
+    if (!tabId) throw new Error("Missing side tab");
+    store.getState().unfocusPane(workspaceKey);
+    const request = {
+      workspaceKey,
+      target: { kind: "file", path: "deferred.md" },
+      intent: "reveal",
+    } as const;
+    store.getState().deferOpenTab(request);
+    return { store, workspaceKey, side, tabId, request };
+  }
+  it("quiet selection preserves and fulfills the original deferred explicit open", () => {
+    const { store, workspaceKey, side, tabId, request } = prepare();
+    const before = store.getState();
+    store.getState().selectTabInPane(workspaceKey, side, tabId, { focus: false });
+    expect(store.getState().pendingOpenByWorkspace[workspaceKey]).toBe(
+      before.pendingOpenByWorkspace[workspaceKey],
+    );
+    expect(store.getState().focusRequest).toBe(before.focusRequest);
+    expect(store.getState().focusRestorationByWorkspace[workspaceKey]).toBe(
+      before.focusRestorationByWorkspace[workspaceKey],
+    );
+    const opened = store.getState().consumePendingOpen(workspaceKey);
+    expect(
+      collectAllTabs(store.getState().layoutByWorkspace[workspaceKey].root).find(
+        (tab) => tab.tabId === opened,
+      )?.target,
+    ).toEqual(request.target);
+  });
+  it("default selection cancels the deferred explicit open as current main does", () => {
+    const { store, workspaceKey, side, tabId } = prepare();
+    store.getState().selectTabInPane(workspaceKey, side, tabId);
+    expect(store.getState().pendingOpenByWorkspace[workspaceKey]).toBeUndefined();
+    expect(store.getState().consumePendingOpen(workspaceKey)).toBeNull();
+    expect(store.getState().focusRequest).toEqual({ workspaceKey, tabId });
+  });
+  it("explicit focus true cancels the deferred explicit open as current main does", () => {
+    const { store, workspaceKey, side, tabId } = prepare();
+    store.getState().selectTabInPane(workspaceKey, side, tabId, { focus: true });
+    expect(store.getState().pendingOpenByWorkspace[workspaceKey]).toBeUndefined();
+    expect(store.getState().consumePendingOpen(workspaceKey)).toBeNull();
+    expect(store.getState().focusRequest).toEqual({ workspaceKey, tabId });
+  });
+});

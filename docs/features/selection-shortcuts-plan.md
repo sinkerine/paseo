@@ -16,6 +16,14 @@ Feature id: `selection-shortcuts` (mission `fa41fa88-17ec-49db-9532-50670778de03
 
 ## 1. Goal and acceptance criteria
 
+Current host placement and cross-pane composer ownership follow the
+[BTW Side-pane integration contract](btw-side-pane-plan.md).
+The floating-card references below record this feature's original implementation. The current
+paired producer uses the unchanged sealed built-install variant of commit
+`7f1573052f916fe576bd2516449a9b5f25461fca`; generated-entry and Tasks witnesses, the two ownership
+roles, failure routing and current 9-case real consumer proof are owned by that integration contract.
+SDK_READY is a producer handoff, not independent acceptance or a merge.
+
 **Goal.** On web and Electron desktop, selecting text in a Better Paseo timeline card or preview gutter, or selecting cells in a Better Paseo Markdown table, offers **Add to BTW** immediately after **Add to chat** when and only when that chat pane currently owns a BTW thread. Activating **Add to BTW** appends the quoted snippet to that pane's BTW draft, focuses the pane, opens the BTW floating card (wide) or sheet (compact), and focuses the BTW composer with the caret at the end. Copy, Add to chat, the main composer, and existing BTW thread/draft/send behavior remain unchanged.
 
 ### Acceptance criteria

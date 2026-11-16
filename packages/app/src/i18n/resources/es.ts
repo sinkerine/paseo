@@ -7,7 +7,7 @@ export const es: TranslationResources = {
     title: "Conversación BTW",
     show: "Mostrar conversación BTW",
     hide: "Ocultar conversación BTW",
-    minimize: "Minimizar",
+    empty: "Haz una pregunta aparte sobre este chat",
     placeholder: "Haz una pregunta aparte",
     send: "Enviar",
     stop: "Detener",

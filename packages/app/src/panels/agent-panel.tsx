@@ -1,4 +1,5 @@
-import { BtwWindow } from "@/btw/window";
+import { btwConversationKey } from "@/btw/conversation-store";
+import { BtwAutoOpen } from "@/btw/auto-open";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -340,7 +341,7 @@ function resolveConversationAgentId(target: ConversationTarget): string | undefi
  */
 export function AgentConversationPanel() {
   const { serverId, workspaceId, target, openFileInWorkspace } = usePaneContext();
-  const { isInteractive, focusPane } = usePaneFocus();
+  const { isInteractive } = usePaneFocus();
   invariant(
     target.kind === "agent" || target.kind === "draft",
     "AgentConversationPanel requires an agent or draft target",
@@ -353,7 +354,6 @@ export function AgentConversationPanel() {
         workspaceId={workspaceId}
         target={target}
         isPaneFocused={isInteractive}
-        onFocusPane={focusPane}
         onOpenWorkspaceFile={openFileInWorkspace}
       />
     </RetainedChatContent>
@@ -436,14 +436,12 @@ function AgentPanelContent({
   workspaceId,
   target,
   isPaneFocused,
-  onFocusPane,
   onOpenWorkspaceFile,
 }: {
   serverId: string;
   workspaceId: string;
   target: ConversationTarget;
   isPaneFocused: boolean;
-  onFocusPane: () => void;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
 }) {
   const { t } = useTranslation();
@@ -494,7 +492,6 @@ function AgentPanelContent({
       workspaceId={workspaceId}
       target={target}
       isPaneFocused={isPaneFocused}
-      onFocusPane={onFocusPane}
       client={runtimeClient}
       isConnected={runtimeIsConnected}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -507,7 +504,6 @@ function AgentPanelBody({
   workspaceId,
   target,
   isPaneFocused,
-  onFocusPane,
   client,
   isConnected,
   onOpenWorkspaceFile,
@@ -516,7 +512,6 @@ function AgentPanelBody({
   workspaceId: string;
   target: ConversationTarget;
   isPaneFocused: boolean;
-  onFocusPane: () => void;
   client: ReturnType<typeof useHostRuntimeClient>;
   isConnected: boolean;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
@@ -653,7 +648,6 @@ function AgentPanelBody({
       workspaceId={workspaceId}
       target={target}
       isPaneFocused={isPaneFocused}
-      onFocusPane={onFocusPane}
       client={client}
       isConnected={isConnected}
       onOpenWorkspaceFile={onOpenWorkspaceFile}
@@ -666,7 +660,6 @@ function ChatAgentContent({
   workspaceId,
   target,
   isPaneFocused,
-  onFocusPane,
   client,
   isConnected,
   onOpenWorkspaceFile,
@@ -675,7 +668,6 @@ function ChatAgentContent({
   workspaceId: string;
   target: ConversationTarget;
   isPaneFocused: boolean;
-  onFocusPane: () => void;
   client: ReturnType<typeof useHostRuntimeClient>;
   isConnected: boolean;
   onOpenWorkspaceFile?: (request: WorkspaceFileOpenRequest) => void;
@@ -1017,7 +1009,6 @@ function ChatAgentContent({
       agentId={agentId ?? tabId}
       draft={draft}
       isPaneFocused={isPaneFocused}
-      onFocusPane={onFocusPane}
       isArchivingCurrentAgent={isArchivingCurrentAgent}
       agentState={agentState}
       effectiveAgent={effectiveAgent}
@@ -1050,7 +1041,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   agentId,
   draft,
   isPaneFocused,
-  onFocusPane,
   isArchivingCurrentAgent,
   agentState,
   effectiveAgent,
@@ -1080,7 +1070,6 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   agentId: string;
   draft: DraftConversation | null;
   isPaneFocused: boolean;
-  onFocusPane: () => void;
   isArchivingCurrentAgent: boolean;
   agentState: ChatAgentSelectedState;
   effectiveAgent: AgentScreenAgent | null;
@@ -1229,13 +1218,12 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       </RenderProfile>
       {hasActiveComposer && !draft ? (
         <>
-          <BtwWindow
+          <BtwAutoOpen
+            key={JSON.stringify([serverId, agentId])}
             selectionTarget={streamContentRef}
-            onFocusPane={onFocusPane}
             serverId={serverId}
+            workspaceId={workspaceId}
             agentId={agentId}
-            isPaneFocused={isPaneFocused}
-            isComposerFullscreen={isComposerFullscreen}
           />
           <AgentTracks
             serverId={serverId}
@@ -1278,13 +1266,18 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
     </ChatSurface>
   );
 
+  const composerOwnership = useMemo(() => {
+    const owner = draft ? undefined : btwConversationKey(serverId, agentId);
+    const ownsMainComposer = showsComposer && hasActiveComposer && !draft;
+    return { chatComposerOwner: owner, chatComposerRoot: ownsMainComposer ? owner : undefined };
+  }, [serverId, agentId, draft, showsComposer, hasActiveComposer]);
   const content = (
     <RewindComposerRestoreProvider
       textSource={agentInputDraft.textSource}
       setText={agentInputDraft.replaceText}
       onRewindComplete={handleRewindComplete}
     >
-      <View style={styles.root}>
+      <View style={styles.root} dataSet={composerOwnership}>
         {dock}
 
         {isArchivingCurrentAgent ? (

@@ -1,3 +1,4 @@
+import { btwPanelRegistration } from "@/btw/panel";
 import { agentPanelRegistration } from "@/panels/agent-panel";
 import { browserPanelRegistration } from "@/desktop/browser/panel";
 import {
@@ -26,6 +27,7 @@ export function ensurePanelsRegistered(): void {
   registerPanel(newTabPanelRegistration);
   registerPanel(agentPanelRegistration);
   registerPanel(providerSubagentPanelRegistration);
+  registerPanel(btwPanelRegistration);
   registerPanel(setupPanelRegistration);
   registerPanel(terminalPanelRegistration);
   registerPanel(browserPanelRegistration);

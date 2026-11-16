@@ -22,6 +22,10 @@ export function normalizeWorkspaceTabTarget(
     const agentId = trimNonEmpty(value.agentId);
     return agentId ? { kind: "agent", agentId } : null;
   }
+  if (value.kind === "btw") {
+    const agentId = trimNonEmpty(value.agentId);
+    return agentId ? { kind: "btw", agentId } : null;
+  }
   if (value.kind === "provider_subagent") {
     const parentAgentId = trimNonEmpty(value.parentAgentId);
     const subagentId = trimNonEmpty(value.subagentId);
@@ -131,6 +135,9 @@ function secondaryWorkspaceTabTargetsEqual(
   left: WorkspaceTabTarget,
   right: WorkspaceTabTarget,
 ): boolean {
+  if (left.kind === "btw" && right.kind === "btw") {
+    return left.agentId === right.agentId;
+  }
   if (left.kind === "browser" && right.kind === "browser") {
     return left.browserId === right.browserId;
   }
@@ -200,6 +207,9 @@ export function buildDeterministicWorkspaceTabId(target: WorkspaceTabTarget): st
   }
   if (target.kind === "agent") {
     return `agent_${target.agentId}`;
+  }
+  if (target.kind === "btw") {
+    return `btw_${target.agentId}`;
   }
   if (target.kind === "provider_subagent") {
     return `provider_subagent_${target.parentAgentId.length}_${target.parentAgentId}_${target.subagentId.length}_${target.subagentId}`;

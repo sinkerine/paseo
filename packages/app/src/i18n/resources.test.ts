@@ -842,3 +842,13 @@ describe("translation resources", () => {
     expect(en.startup.logs.loadFailed).toBe("Unable to load daemon logs: {{message}}");
   });
 });
+
+it.each([en, ar, es, fr, ja, ko, ptBR, ru, zhCN])(
+  "provides the BTW empty-tab prompt and removes popup-only minimize",
+  (resource) => {
+    const strings = flattenStrings(resource);
+    expect(strings["btw.empty"]).toEqual(expect.any(String));
+    expect(strings["btw.empty"].length).toBeGreaterThan(0);
+    expect(strings).not.toHaveProperty("btw.minimize");
+  },
+);

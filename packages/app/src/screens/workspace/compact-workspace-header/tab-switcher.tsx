@@ -37,8 +37,10 @@ function getFallbackTabOptionLabel(
     changes: string;
     files: string;
     pullRequest: string;
+    btw: string;
   },
 ): string {
+  if (tab.target.kind === "btw") return labels.btw;
   if (tab.target.kind === "new_tab") {
     return labels.newTab;
   }
@@ -84,8 +86,10 @@ function getFallbackTabOptionDescription(
     changes: string;
     files: string;
     pullRequest: string;
+    btw: string;
   },
 ): string {
+  if (tab.target.kind === "btw") return labels.btw;
   if (tab.target.kind === "new_tab") {
     return labels.newTab;
   }
@@ -240,6 +244,7 @@ function MobileWorkspaceTabOption({
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
+      btw: t("btw.label"),
     }),
     [t],
   );
@@ -318,6 +323,7 @@ export const MobileWorkspaceTabSwitcher = memo(function MobileWorkspaceTabSwitch
       changes: t("panels.diff.changesLabel"),
       files: t("panels.files.label"),
       pullRequest: t("panels.pullRequest.label"),
+      btw: t("btw.label"),
     }),
     [t],
   );

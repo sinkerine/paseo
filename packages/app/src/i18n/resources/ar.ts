@@ -7,7 +7,7 @@ export const ar: TranslationResources = {
     title: "محادثة BTW",
     show: "إظهار محادثة BTW",
     hide: "إخفاء محادثة BTW",
-    minimize: "تصغير",
+    empty: "اطرح سؤالًا جانبيًا حول هذه المحادثة",
     placeholder: "اطرح سؤالًا جانبيًا",
     send: "إرسال",
     stop: "إيقاف",

@@ -7,7 +7,7 @@ export const ko: TranslationResources = {
     title: "BTW 대화",
     show: "BTW 대화 표시",
     hide: "BTW 대화 숨기기",
-    minimize: "최소화",
+    empty: "이 채팅에 관한 별도의 질문을 하세요",
     placeholder: "곁가지 질문하기",
     send: "보내기",
     stop: "중지",

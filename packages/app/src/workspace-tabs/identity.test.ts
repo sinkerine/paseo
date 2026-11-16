@@ -196,3 +196,15 @@ describe("plugin panel tab identity", () => {
     expect(agent).toBe("plugin_agent_6_review_7_details_7_agent-1");
   });
 });
+
+test("btw targets are parent-scoped", () => {
+  const target = { kind: "btw", agentId: "parent-a" } as const;
+  expect(normalizeWorkspaceTabTarget({ kind: "btw", agentId: " parent-a " })).toEqual(target);
+  expect(normalizeWorkspaceTabTarget({ kind: "btw", agentId: "   " })).toBeNull();
+  expect(buildDeterministicWorkspaceTabId(target)).toBe("btw_parent-a");
+  expect(workspaceTabTargetsEqual(target, { ...target })).toBe(true);
+  expect(workspaceTabTargetsEqual(target, { kind: "btw", agentId: "parent-b" })).toBe(false);
+  expect(buildDeterministicWorkspaceTabId({ kind: "btw", agentId: "parent-b" })).not.toBe(
+    buildDeterministicWorkspaceTabId(target),
+  );
+});
