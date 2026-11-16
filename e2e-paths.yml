@@ -89,6 +89,7 @@ groups:
       - "packages/highlight/**"
       - "packages/plugin/**"
       - "scripts/android-isolated.*"
+      - "scripts/android-*.gradle"
       - "scripts/build-apk.mjs"
       - "scripts/test-mobile-agent-device.sh"
       - "nix/android-shell.nix"

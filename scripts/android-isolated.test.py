@@ -39,9 +39,21 @@ class AndroidIsolationTest(unittest.TestCase):
                 self.assertNotIn("ANDROID_ADB_SERVER_ADDRESS", env)
                 for key in ("HOME", "ANDROID_AVD_HOME", "GRADLE_USER_HOME", "AGENT_DEVICE_STATE_DIR", "npm_config_cache"):
                     self.assertTrue(Path(env[key]).is_relative_to(root / ".dev/android"), key)
+                init_script = Path(env["GRADLE_USER_HOME"]) / "init.d/paseo-resources.gradle"
+                self.assertTrue(init_script.is_symlink())
+                self.assertEqual(init_script.readlink(), root / "scripts/android-gradle-resources.gradle")
                 self.assertEqual(console % 2, 0)
                 self.assertTrue(5554 <= console <= 5682)
                 self.assertEqual((port, console), android.environment()[1:])
+
+    def test_cli_rejects_ram_that_the_emulator_would_silently_increase(self):
+        result = subprocess.run([
+            android.sys.executable, str(Path(__file__).with_name("android-isolated.py")),
+            "--memory-mib", "1024", "doctor"
+        ], env={}, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("raises smaller requests to 2048", result.stderr)
+        self.assertNotIn("Enter nix develop", result.stderr)
 
     def test_busy_port_refuses_instead_of_reusing_server(self):
         with socket.socket() as occupied:
@@ -96,6 +108,9 @@ class AndroidIsolationTest(unittest.TestCase):
                 self.assertIn("hw.keyboard=no\n", first)
                 self.assertIn("hw.ramSize=2048\n", first)
                 self.assertIn("other=kept\n", first)
+                android.setup({"PASEO_ANDROID_MEMORY_MIB": "3072"})
+                self.assertIn("hw.ramSize=3072\n", config.read_text())
+                self.assertNotIn("hw.ramSize=2048", config.read_text())
                 run.assert_not_called()
 
 
