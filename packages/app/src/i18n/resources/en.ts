@@ -4,7 +4,7 @@ export const en = {
     title: "BTW conversation",
     show: "Show BTW conversation",
     hide: "Hide BTW conversation",
-    minimize: "Minimize",
+    empty: "Ask a side question about this chat",
     placeholder: "Ask a side question",
     send: "Send",
     stop: "Stop",

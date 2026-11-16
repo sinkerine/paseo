@@ -7,7 +7,7 @@ export const zhCN: TranslationResources = {
     title: "BTW 对话",
     show: "显示 BTW 对话",
     hide: "隐藏 BTW 对话",
-    minimize: "最小化",
+    empty: "围绕此对话提出一个支线问题",
     placeholder: "提出旁支问题",
     send: "发送",
     stop: "停止",

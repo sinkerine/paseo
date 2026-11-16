@@ -122,6 +122,81 @@ Default E2E to the [background headless Playwright workflow](docs/testing.md#bac
 
 For Pi workflow changes, run `packages/server/src/server/daemon-e2e/pi-workflow-subagents.local.e2e.test.ts` and `packages/app/e2e/browser/pi-workflow-subagent-tree.real.spec.ts` with the current Pi and pi-subagents versions. For the [shared profile shortcut journey](docs/features/shared-profile-shortcuts-plan.md#e2e-journey), run `npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/shared-profile-shortcuts.spec.ts --project=browser`. The existing app Playwright harness owns Metro, disposable daemon homes and ports, throwaway workspaces, and cleanup; the spec adds a second isolated host with distinct profiles and seeds legacy browser storage. The spec reuses the desktop bridge fixture to expose Shortcuts settings in Chromium; this covers the desktop renderer, not a real Electron window. Its fake providers cover configuration routing, not live provider behavior. Keep evidence in ignored worktree `artifacts/`; use the [development shell](docs/development.md#nix-and-direnv) for Chromium runtime dependencies. Never touch the main daemon on 6767. See [docs/testing.md](docs/testing.md#running-tests-locally) for targeted execution and [docs/qa.md](docs/qa.md#evidence) for evidence requirements.
 
+## E2E resource declarations
+
+Run E2E when a feature is first added, including its repairs and reruns. Future pushes
+and deployments of that feature do not require rerunning E2E. Existing unit tests still run.
+
+The browser declaration covers one headless Playwright worker, cold Metro setup,
+Chromium, disposable daemons, test-launched agents, and teardown. Use the targeted
+spec and isolated harness in [docs/testing.md](docs/testing.md#background-e2e-workflow).
+Obtain shared qex admission before starting the stack.
+
+```qex-e2e browser
+{
+  "resources": {
+    "cpu": 4,
+    "mem": "16GiB"
+  },
+  "timeout": "30m"
+}
+```
+
+Android BTW setup installs only task-owned tools and SDK packages, with no build,
+emulator or runtime stack. It uses the same feature build lock as the native stages.
+
+```qex-e2e android-setup
+{
+  "resources": {
+    "cpu": 2,
+    "mem": "8GiB"
+  },
+  "timeout": "60m"
+}
+```
+
+Android BTW uses two serialized stages under the same feature build lock. The
+user-requested claims below are reviewed planning estimates for the reduced-memory
+workload, including process overhead and headroom; they are not measured peaks or
+guarantees against OOM. Tooling and native baseline validation remain required.
+
+The `android-build` declaration covers app dependency builds, development prebuild
+and the x86_64 debug APK producer in
+`packages/app/e2e/mobile/pi-btw/low-memory.sh build`: Gradle heap 3 GiB, metaspace
+768 MiB, one worker, in-process Kotlin and native compiler concurrency one. No
+emulator or runtime stack overlaps this stage.
+
+```qex-e2e android-build
+{
+  "resources": {
+    "cpu": 4,
+    "mem": "16GiB"
+  },
+  "timeout": "60m"
+}
+```
+
+The `android` declaration covers one task-owned headless emulator (2 GiB guest,
+two cores), host emulator overhead, this checkout's Metro with one worker, one disposable daemon,
+real Pi test agents, automation and teardown. The full journey harness is
+`python3 packages/app/e2e/mobile/pi-btw/measure.py <evidence-directory>
+bash packages/app/e2e/mobile/pi-btw/android.sh` inside the locked admission;
+`android.sh` requires that measured task cgroup before starting tools.
+`low-memory.sh emulator` is its
+preparatory emulator-only stage. No Gradle build overlaps runtime. The BTW fixture
+requires `PASEO_PI_BINARY` (Pi 1.4.0) and `PASEO_PI_BTW_PACKAGE` (a local pi-btw
+checkout). See the [harness settings](packages/app/e2e/mobile/pi-btw/README.md).
+
+```qex-e2e android
+{
+  "resources": {
+    "cpu": 4,
+    "mem": "12GiB"
+  },
+  "timeout": "60m"
+}
+```
+
 ## Release branches
 
 Merge normal PRs into `main`, including while a beta soaks or a release is being finalized. Each

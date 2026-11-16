@@ -5277,3 +5277,44 @@ it("reentering a workspace restores its suspended pane without choosing another 
   expect(store.getState().layoutByWorkspace[workspaceKey]!.focusedPaneId).toBe(paneId);
   expect(store.getState().focusRequest).toEqual({ workspaceKey, tabId });
 });
+
+describe("selectTabInPane focus option", () => {
+  it.each([false, true])(
+    "focus=%s preserves the non-focusing contract and default behavior",
+    (focus) => {
+      const store = createWorkspaceLayoutStore();
+      const workspaceKey = "host:btw-test";
+      const parent = store
+        .getState()
+        .openTab({ workspaceKey, target: { kind: "agent", agentId: "parent" }, intent: "reveal" });
+      const side = store.getState().ensureSidePane(workspaceKey, { focus: false });
+      if (!side) throw new Error("Missing Side pane");
+      const other = store.getState().openTab({
+        workspaceKey,
+        target: { kind: "file", path: "side.md" },
+        placement: { mode: "prefer", paneId: side },
+        intent: "background",
+      });
+      if (!parent || !other) throw new Error("Missing tabs");
+      store.setState({ focusRequest: null });
+      store.getState().setLayoutMode("compact");
+      store
+        .getState()
+        .openTab({ workspaceKey, target: { kind: "file", path: "sheet.md" }, intent: "reveal" });
+      store.setState({ focusRequest: null });
+      const sheets = store.getState().sheetsByWorkspace[workspaceKey];
+      const before = store.getState().layoutByWorkspace[workspaceKey];
+      if (focus) store.getState().selectTabInPane(workspaceKey, side, other);
+      else store.getState().selectTabInPane(workspaceKey, side, other, { focus: false });
+      const after = store.getState();
+      expect(findPaneById(after.layoutByWorkspace[workspaceKey].root, side)?.focusedTabId).toBe(
+        other,
+      );
+      // Existing callers request tab focus without changing the layout's focused pane here.
+      expect(after.layoutByWorkspace[workspaceKey].focusedPaneId).toBe(before.focusedPaneId);
+      expect(after.focusRequest).toEqual(focus ? { workspaceKey, tabId: other } : null);
+      if (!focus) expect(after.sheetsByWorkspace[workspaceKey]).toBe(sheets);
+      else expect(after.sheetsByWorkspace[workspaceKey] ?? []).toHaveLength(0);
+    },
+  );
+});

@@ -151,3 +151,43 @@ it.each([1, 2])(
     expect(visible).toEqual(["agent-a"]);
   },
 );
+
+it("round-trips a parent-scoped BTW tab and retains it through descriptor absence", async () => {
+  const values = new Map<string, string>();
+  const storage: StateStorage = {
+    getItem: (name) => values.get(name) ?? null,
+    setItem: (name, value) => {
+      values.set(name, value);
+    },
+    removeItem: (name) => {
+      values.delete(name);
+    },
+  };
+  const store = createWorkspaceLayoutStore(undefined, storage);
+  await store.persist.rehydrate();
+  const workspaceKey = "host:workspace";
+  store
+    .getState()
+    .openTab({ workspaceKey, target: { kind: "agent", agentId: "parent" }, intent: "reveal" });
+  const tabId = store
+    .getState()
+    .openTab({ workspaceKey, target: { kind: "btw", agentId: "parent" }, intent: "reveal" });
+  const restored = createWorkspaceLayoutStore(undefined, storage);
+  await restored.persist.rehydrate();
+  expect(collectAllTabs(restored.getState().layoutByWorkspace[workspaceKey].root)).toContainEqual(
+    expect.objectContaining({ tabId, target: { kind: "btw", agentId: "parent" } }),
+  );
+  restored.getState().reconcileTabs(workspaceKey, {
+    agentsHydrated: true,
+    terminalsHydrated: true,
+    activeAgentIds: ["parent"],
+    autoOpenAgentIds: [],
+    knownTerminalIds: [],
+    standaloneTerminalIds: [],
+  });
+  expect(
+    collectAllTabs(restored.getState().layoutByWorkspace[workspaceKey].root).some(
+      (tab) => tab.tabId === tabId,
+    ),
+  ).toBe(true);
+});

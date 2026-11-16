@@ -1026,6 +1026,41 @@ describe("resyncing after the update feed resubscribes", () => {
     expect(status(PARENT_ID, "child-1")).toBe("completed");
   });
 
+  test("reported list errors reject shared waiters, preserve cached rows and allow same-client retry", async () => {
+    const cached = child("cached", PARENT_ID, "running");
+    useProviderSubagentStore.getState().replaceList(SERVER_ID, PARENT_ID, [cached]);
+    const listProviderSubagents = vi.fn().mockResolvedValueOnce({
+      requestId: "failed",
+      parentAgentId: PARENT_ID,
+      subagents: [],
+      error: "Provider list unavailable",
+    });
+    const client = { listProviderSubagents };
+    const first = refreshProviderSubagents(client, SERVER_ID, PARENT_ID);
+    const second = refreshProviderSubagents(client, SERVER_ID, PARENT_ID);
+    expect(first).toBe(second);
+    const results = await Promise.allSettled([first, second]);
+    expect(results.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    for (const result of results)
+      if (result.status === "rejected")
+        expect(result.reason.message).toBe("Provider list unavailable");
+    expect(listProviderSubagents).toHaveBeenCalledTimes(1);
+    expect([...useProviderSubagentStore.getState().descriptors.values()]).toEqual([cached]);
+    expect(
+      useProviderSubagentStore.getState().trackedParents.has(`${SERVER_ID}\0${PARENT_ID}\0`),
+    ).toBe(true);
+    const fresh = child("fresh", PARENT_ID, "completed");
+    listProviderSubagents.mockResolvedValueOnce({
+      requestId: "success",
+      parentAgentId: PARENT_ID,
+      subagents: [fresh],
+      error: null,
+    });
+    await refreshProviderSubagents(client, SERVER_ID, PARENT_ID);
+    expect(listProviderSubagents).toHaveBeenCalledTimes(2);
+    expect([...useProviderSubagentStore.getState().descriptors.values()]).toEqual([fresh]);
+  });
+
   test("lists again only the parents this server was showing", async () => {
     const daemon = fakeDaemon({});
     await refreshProviderSubagents(daemon.client, SERVER_ID, PARENT_ID);

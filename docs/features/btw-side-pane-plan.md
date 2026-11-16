@@ -8,12 +8,10 @@ workspace `wks_a1e0afde2e6a527d`, project `prj_fd25e9856e774463`, orchestrator
 `727c86fe-8ee5-4729-aaab-0d95ce7049dd`, mission `06278da1-6904-4755-b06f-24b6f365da28`, run dir
 `/home/sinkerine/dev/paseo/.git/worktrees/feat-btw-side-pane/e2e-feature/btw-side-pane`.
 
-Status: **design final, finalized autonomously (revision 2 after orchestrator audit).** Human
-input or approval is not required for the design (see [Gates](#gates)). Android has an open
-capacity and scope gate (G1) that the orchestrator resolves. Until G1 resolves, T1 may do only
-the browser capability probe and preparatory work: red tests, spec and harness authoring. Broad
-implementation waits for a passing native baseline probe or an explicit user scope exemption
-(§3 Order).
+Status: **design final, finalized autonomously (revision 2 after orchestrator audit).** G1 is
+resolved for native observation capability. The user subsequently exempted Android E2E for
+this feature: AC11 is user-exempt, not passed. ASCII-only feature test inputs remain required.
+Browser wide/compact proof, native JS export and the pre-E2E host inspection remain mandatory.
 
 ## 0. Findings (established from the code before design)
 
@@ -65,8 +63,10 @@ D12).
 Unless stated otherwise, "E2E" below means `packages/app/e2e/browser/pi-btw-window.spec.ts`. It
 runs on the existing isolated harness with the deterministic HTTP model stub, the real Pi 1.4.0
 binary and the real pi-btw package (§5). "Unit" tests use the real store, open-beside and panel
-code. Only the daemon transport (`useSendBtwCommand`) and `AgentStreamView` rendering may be
-substituted, and only where named.
+code. Only daemon transport and `AgentStreamView` rendering may be substituted where named:
+`useSendBtwCommand` in panel dispatch cases, fake list/read client methods in the panel's
+`fresh history clears a disconnected read error without resending` regression, and the list
+client in auto-open cases. Timeline observation, layout, status and conversation stores remain real.
 
 - **AC1 — Wide auto-open beside without taking focus (EP1, wide).** At 1440×900, the parent runs
   `HOLD_PARENT` and the user submits `/btw HOLD_BTW` from the running main composer. Then:
@@ -87,7 +87,8 @@ substituted, and only where named.
     W0–W2), plus `packages/app/src/workspace-tabs/open-beside.test.ts` cases
     `showWorkspaceTargetBeside: new side pane without focus`, `…reuses side pane and selects
 without focus`, `…leaves an existing tab in its pane`, `…does not select over the focused
-pane`.
+pane`. The real main-composer entry matrix below additionally covers every EP1 spelling with
+    both idle and held-running parents on wide layouts.
 - **AC2 — Compact auto-open as a workspace sheet (EP1, compact).** At 390×844 the same action
   presents a workspace sheet:
   - `sheet-tab-header` contains `BTW`, `sheet-tab-body` contains `btw-panel`, and
@@ -95,7 +96,8 @@ pane`.
   - The main composer keeps the text typed after submission.
   - Evidence: E2E `BTW compact sheet toggles during generation, retries and restores` (steps
     C1–C2), plus unit `open-beside.test.ts` `showWorkspaceTargetBeside: compact reveals the sheet
-and keeps an existing pane tab`.
+and keeps an existing pane tab`. The real main-composer entry matrix repeats every EP1 spelling
+    with both idle and held-running parents on compact layouts.
 - **AC3 — Discovery baseline (EP1, EP5).** A mounted parent pane auto-opens a BTW thread only if
   its id differs from the thread present when that pane's first successful provider-subagent list
   completed. After a reload with the BTW tab closed, the existing thread does not reopen:
@@ -134,16 +136,19 @@ remount without a second send`, `explicit delivery is disabled for an empty thre
 generation`. `send.test.ts` covers the command texts. E2E W7 exercises the real transport.
 - **AC6 — Draft, error and streaming continuity across surfaces (EP3, EP4, EP5).**
   - Unsent draft text survives tab close→chip reopen, remount, and wide→compact→wide resize. The
-    test uses multiline text with `日本語`.
+    test uses the ASCII sample `draft line 1\nASCII line 2`.
   - A dispatch error (`btw-action-feedback` matching `/connect|socket|offline/i`) and its
     preserved draft also survive close→reopen, with `stub.requests` unchanged.
+  - A locally rejected ask retires its optimistic tracking; deleting that draft stays deleted
+    after later provider failures. Rejected non-ask commands keep the accepted ask's recovery
+    tracking, while authoritative completion or replacement during dispatch remains final.
   - A late provider failure restores the accepted question into `btw-composer` and shows
     `btw-provider-error`. One retry sends exactly once and clears the composer.
   - Streaming output continues while the tab is closed and is shown on reopen.
   - Evidence: `packages/app/src/btw/conversation-store.test.ts`, `panel.test.tsx` `dispatch failure
 preserves the draft and error across remount and never resends`, `late Pi command rejection
-recovers the accepted question locally without resending`, `draft.test.ts` thread-replacement
-    cases, plus E2E W5–W8 and L1–L3.
+recovers the accepted question locally without resending`, `fresh history clears a disconnected
+read error without resending`, `draft.test.ts` thread-replacement cases, plus E2E W5–W8 and L1–L3.
 - **AC7 — Scroll stability in the BTW tab (EP3).** The existing scenario runs in the BTW tab, wide
   and compact:
   - An explicit send lands once when the submitted question enters the transcript.
@@ -152,10 +157,16 @@ recovers the accepted question locally without resending`, `draft.test.ts` threa
   - Opening, closing and reopening the tab triggers no landing beyond the stream's normal entry
     position.
   - Evidence: E2E `BTW wide explicit sends land once and output preserves the reader` and the
-    compact variant, with selectors moved from `btw-window` to `btw-panel`.
+    compact variant. Each now closes and reopens the real surface during generation and before
+    held question admission, waits for a fresh authoritative history response and settled entry,
+    then measures frames through admission/output/completion. The reopened baseline is allowed to
+    differ from the closed viewport; later scroll/visible-row movement must stay within1px.
 - **AC8 — Parent isolation (EP1–EP4).**
   - BTW sends, chip toggles, tab closes and sheet dismissals add no main-chat user messages
-    (`mainUserCount` unchanged).
+    (`mainUserCount` unchanged). EP1 commands typed in the main composer intentionally retain
+    exactly one user breadcrumb equal to the typed command; their generated message id differs
+    from panel commands' empty id. The entry matrix asserts that exact row and no extra rows,
+    no parent model request and no parent lifecycle interruption (host-confirmed oracle).
   - Pressing Escape in `btw-composer` while the parent runs leaves the parent running
     (`fetchAgentTimeline(...).agent.status === "running"`, `stub.pending("parent") === 1`).
   - Send to main and Summarize to main each add exactly one main user message, including while the
@@ -166,10 +177,15 @@ recovers the accepted question locally without resending`, `draft.test.ts` threa
 - **AC9 — Thread replacement, clear and absent extension (EP3, EP6).**
   - New thread keeps the same BTW tab (`workspace-tab-btw_<agentId>` unchanged), changes
     `btw-panel` `aria-label` to the new id, keeps the unsent draft text, disables delivery and
-    shows no `turn-footer`.
+    shows no `turn-footer`. The composer keeps its input identity, focus and selection across
+    empty-to-thread, New and Clear; only thread-specific stream and pagination state reset.
   - Clear keeps the tab open with `btw-empty` visible and removes `btw-chip`. Sending `AFTER_CLEAR`
-    from the empty tab creates a thread: the chip reappears, `aria-label` is a new id, and
-    `BTW_REPLY AFTER_CLEAR` is shown.
+    from the empty tab creates a thread: the chip reappears, `aria-label` is a fresh nonempty id,
+    and `BTW_REPLY CONTEXT_A` is shown in that thread. Its authoritative user timeline is exactly
+    `["AFTER_CLEAR"]`; exactly one new captured BTW model request contains `AFTER_CLEAR` as its
+    last question. The orchestrator corrected the original impossible response literal after
+    inspecting the unchanged fixture: only `AFTER_B` gets a special reply; all other asks return
+    `CONTEXT_A`. This changes the oracle and strengthens correlation, preserving the behavior.
   - Without the pi-btw extension, no `btw-panel` or `btw-chip` appears on wide or compact, and
     `/btw no extension` reaches the main agent.
   - Evidence: E2E W9–W10, E2E `BTW absent extension {wide|compact} keeps the main fallback without
@@ -180,24 +196,12 @@ a tab or pill`, plus unit `draft.test.ts`, `panel.test.tsx` `empty tab asks a ne
   - After agent refresh, page reload and isolated daemon restart, `fetchProviderSubagentTimeline`
     rows equal the pre-refresh rows and the tab shows the same thread id with no duplicate rows.
   - Evidence: E2E W5 and L3–L5.
-- **AC11 — Android native compact (EP2–EP4, compact native).** Gated by G1. On an Android phone,
-  the flow `packages/app/e2e/mobile/agent-device/pi-btw.android.ad` (updated):
-  - The chip presents the workspace sheet (`sheet-tab-header`).
-  - The composer is focused with the software keyboard visible, and the composer and `btw-send`
-    bounds lie above the keyboard.
-  - `HOLD_BTW Native keyboard smoke 日本語` is filled, and Send shows `btw-stop`.
-  - Header Close returns to `btw-chip`, and the chip reopens the sheet. Android Back closes the
-    sheet and returns to `btw-chip`.
-  - Measured as follows:
-    - The IME top comes from `adb shell dumpsys window` (`type=ime frame=[0,<top>]…visible=true`).
-    - `btw-composer` and `btw-send` rects come from `agent-device snapshot --json`, with
-      `rect.y + rect.height ≤ imeTop + 1`.
-    - Back is observed as `wait id="btw-chip"` with `sheet-tab-header` absent.
-  - Evidence: the harness and flow in §4.5, run on this branch's APK, with screenshots, snapshot
-    JSON, dumpsys excerpts and the qex receipt.
-  - G1 decides whether this runs. The orchestrator does not silently downgrade AC11. If the user
-    explicitly exempts Android, acceptance records **Android unverified – user exemption** with
-    the rejection or tooling receipt. That is never a pass.
+- **AC11 — Android native compact: user-exempt.** The user explicitly said "skip android e2e
+  test for this feature". Do not start further emulator/device journeys or APK builds solely for
+  acceptance. Preserve the earlier hard-probe success and failed full old-popup replay as
+  historical evidence (§G1); neither establishes a passing branch journey. The prepared
+  close/reopen real-Gboard geometry regression and flow remain archived in §4.5. Report Android
+  E2E skipped by explicit user instruction. The Android JavaScript export in AC12 is still required.
 - **AC12 — Repository and consumer gates.**
   - `npm run typecheck`, `npm run lint` and `npm run format:check` pass at the repository root.
   - The consumer builds in §4.3 succeed: `build:app-deps`, the browser web export, the
@@ -206,22 +210,23 @@ a tab or pill`, plus unit `draft.test.ts`, `panel.test.tsx` `empty tab asks a ne
 
 ### Introduced state, lifecycle and concurrency transitions
 
-| #   | Transition                                                                  | Expected outcome                                                                  | Criterion / named test                                                            |
-| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| S1  | Parent pane mounts → first successful list → baseline set                   | No open for the thread present in the list                                        | AC3; `auto-open.test.tsx` `existing thread at baseline does not open`             |
-| S2  | Baseline set → new thread id                                                | `showWorkspaceTargetBeside` once; no focus change                                 | AC1, AC2; `auto-open.test.tsx` `new thread after baseline opens once`             |
-| S3  | Thread A → removed → A again (transient)                                    | No reopen                                                                         | AC3; `auto-open.test.tsx` `same id after removal does not reopen`                 |
-| S4  | List fails → later list succeeds                                            | No open before success; baseline from the successful list                         | AC3; `auto-open.test.tsx` `failed list establishes no baseline`                   |
-| S5  | Reconnect after baseline                                                    | Baseline kept; a thread created while disconnected opens once                     | AC3; `auto-open.test.tsx` `reconnect keeps the baseline`                          |
-| S6  | Tab absent ↔ present (chip, tab close, sheet close, Back)                   | Present = visible; absent = hidden; the thread keeps running                      | AC4, AC11; `pill.test.tsx`                                                        |
-| S7  | Dispatch idle → pending → accepted \| rejected                              | One send; draft cleared on accept unless failed; error kept on reject             | AC5, AC6; `conversation-store.test.ts` `accept`, `reject`                         |
-| S8  | Pending dispatch + panel unmount/mount                                      | Pending kept; second dispatch ignored; settles into the store                     | AC5; `panel.test.tsx` `pending dispatch survives remount without a second send`   |
-| S9  | Accepted ask → provider `failed`                                            | Question restored into the composer; error banner shown                           | AC6; `panel.test.tsx` `late Pi command rejection…`; `draft.test.ts`               |
-| S10 | Thread id change (New thread, Clear then ask, external `/btw:new`)          | Text kept; `failed` reset; `submitted` kept only when `after === null`            | AC9; `draft.test.ts` `thread replacement keeps text and drops a bound submission` |
-| S11 | Thread removed (Clear)                                                      | Tab stays and shows the empty state; chip hidden                                  | AC9; `panel.test.tsx` `empty tab asks a new thread`                               |
-| S12 | Wide → compact → wide with the BTW tab in the Side pane                     | Tab stays in the layout; the chip reveals it as a pane tab on compact; draft kept | AC6; E2E L1–L2                                                                    |
-| S13 | Explicit ask → question admitted \| user scrolls first \| dispatch rejected | Lands once \| landing cancelled \| landing cancelled                              | AC7; E2E land-once tests                                                          |
-| S14 | Reload / daemon restart                                                     | Persisted tab restored; closed tab not reopened; rows unchanged                   | AC3, AC10; E2E L3–L5                                                              |
+| #   | Transition                                                                  | Expected outcome                                                                  | Criterion / named test                                                                   |
+| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| S1  | Parent pane mounts → first successful list → baseline set                   | No open for the thread present in the list                                        | AC3; `auto-open.test.tsx` `existing thread at baseline does not open`                    |
+| S2  | Baseline set → new thread id                                                | `showWorkspaceTargetBeside` once; no focus change                                 | AC1, AC2; `auto-open.test.tsx` `new thread after baseline opens once`                    |
+| S3  | Thread A → removed → A again (transient)                                    | No reopen                                                                         | AC3; `auto-open.test.tsx` `same id after removal does not reopen`                        |
+| S4  | List fails → later list succeeds                                            | No open before success; baseline from the successful list                         | AC3; `auto-open.test.tsx` `failed list establishes no baseline`                          |
+| S5  | Reconnect after baseline                                                    | Baseline kept; a thread created while disconnected opens once                     | AC3; `auto-open.test.tsx` `reconnect keeps the baseline`                                 |
+| S6  | Tab absent ↔ present (chip, tab close, sheet close, Back)                   | Present = visible; absent = hidden; the thread keeps running                      | AC4, AC11; `pill.test.tsx`                                                               |
+| S7  | Dispatch idle → pending → accepted \| rejected                              | One send; draft cleared on accept unless failed; error kept on reject             | AC5, AC6; `conversation-store.test.ts` `accept`, `reject`                                |
+| S8  | Pending dispatch + panel unmount/mount                                      | Pending kept; second dispatch ignored; settles into the store                     | AC5; `panel.test.tsx` `pending dispatch survives remount without a second send`          |
+| S9  | Accepted ask → provider `failed`                                            | Question restored into the composer; error banner shown                           | AC6; `panel.test.tsx` `late Pi command rejection…`; `draft.test.ts`                      |
+| S10 | Thread id change (New thread, Clear then ask, external `/btw:new`)          | Text kept; `failed` reset; `submitted` kept only when `after === null`            | AC9; `draft.test.ts` `thread replacement keeps text and drops a bound submission`        |
+| S11 | Thread removed (Clear)                                                      | Tab stays and shows the empty state; chip hidden                                  | AC9; `panel.test.tsx` `empty tab asks a new thread`                                      |
+| S12 | Wide → compact → wide with the BTW tab in the Side pane                     | Tab stays in the layout; the chip reveals it as a pane tab on compact; draft kept | AC6; E2E L1–L2                                                                           |
+| S13 | Explicit ask → question admitted \| user scrolls first \| dispatch rejected | Lands once \| landing cancelled \| landing cancelled                              | AC7; E2E land-once tests                                                                 |
+| S14 | Reload / daemon restart                                                     | Persisted tab restored; closed tab not reopened; rows unchanged                   | AC3, AC10; E2E L3–L5                                                                     |
+| S15 | Disconnected history read → fresh caught-up history                         | Stale read error cleared; draft kept; no command resent                           | AC6; `panel.test.tsx` `fresh history clears a disconnected read error without resending` |
 
 ### Decisions
 
@@ -294,14 +299,14 @@ location: "side" })`, which reveals and focuses the tab where it lives or opens 
   rule), and the live spec copies `auth.json` (F12), which this run is not authorized to use. Cost
   if wrong: the filenames keep the stale word "window".
 - **D12 — Platform scope.**
-  - Ruling: required evidence is browser wide (split-panes) and browser compact, plus Android phone
-    compact (AC11, gate G1).
+  - Ruling: required journey evidence is browser wide (split-panes) and browser compact. Android
+    phone E2E is user-exempt (AC11); its JavaScript consumer export remains required.
   - Real Electron is not required, because the renderer path is identical and no `.electron.*`
     module or bridge is touched (F10).
   - Native tablet single-pane and iOS are explicit gaps, covered by the unit placement tests
     `open-beside.test.ts` `single-pane opens in the background in the main pane`.
-  - Why: evidence follows the changed platform behavior. Compact native changes from `BtwSheet` to
-    the workspace sheet (keyboard, Back, header).
+  - Compact native changes from `BtwSheet` to the workspace sheet (keyboard, Back, header), but
+    those interactions remain unverified on the branch under the explicit exemption.
   - Cost if wrong: an Electron-only regression would go unobserved. If the orchestrator's merge
     policy requires Electron evidence regardless, add a `qex-e2e electron` declaration and run the
     existing real-Electron runner on a separate Xvfb display.
@@ -319,29 +324,30 @@ paneId, tabId, options?: { focus: boolean })`. With `focus: false` it sets no `f
   Every remaining choice is a routine ruling above, with a stated cost. There is no destructive,
   security-sensitive, external or scope-expanding action. The user did not ask to review the
   design. Resolution: finalized autonomously.
-- **G1 — Android native capacity: open; owner orchestrator; resolve before acceptance.**
-  - AC11 needs an emulator or device with Agent Device, plus a debug APK built from this checkout.
-  - The repository's `qex-e2e android` declaration (added by T1, 8 CPU / 24 GiB, the initial native
-    estimate) exceeds kazuki's 16 GiB claim budget. adb and the emulator are not on PATH, and Nix
-    shell availability is unknown.
-  - Tooling also has to be available: an Android SDK, emulator and AVD, Agent Device, and Gradle
-    for the APK. Installs and SDK licenses are not authorized.
-  - Resolution options for the user: authorize an already capable host such as sachi, authorize a
-    measured host-policy change, or explicitly exempt Android from this run's scope.
-  - Do not lower the estimate or change the budget.
-  - **Staged footprint (being investigated by the orchestrator; not an exemption or budget
-    authorization).** The workload may be restructured into two jobs that never overlap:
-    - a build-only job: Gradle with a single ABI and bounded `--max-workers`, emulator off;
-    - a run-only job: emulator plus Metro, fixture daemon and test agent, no Gradle.
-  - A smaller claim for either job requires whole-stack measured evidence (cgroup `memory.peak`
-    for the complete job), or a documented change in what the job runs. Without that evidence,
-    the conservative claims stay as they are.
-  - The historical directory
-    `/home/sinkerine/.paseo/worktrees/28vpgp2p/recovery-stable-scroll-return-20261112/.dev/android-e2e`
-    is a reference to read only. Never use or mutate it.
-  - While G1 is open, T1 runs the browser probe and preparatory work only. Broad implementation
-    (§3 Order step 5 onward) starts after the native baseline probe passes, or after the
-    orchestrator relays an explicit user exemption.
+- **G1 — Android capability resolved; subsequent user exemption controls acceptance.**
+  - The orchestrator resolved observation capability from ASCII hard-probe job
+    `213d6f31-f9b1-41f7-a7b9-da46ae0c4941`: exact ASCII text, selected and visible real Gboard,
+    composer/Send above IME1111px, Send/Stop and Android Back. The additional full old-surface
+    replay remained **FAILED** after long-press/minimize/reopen: Gboard covered Send
+    (`artifacts/btw-side-pane/continuation/native-baseline-ascii-3/failure.png`). Preserve both
+    receipts; this was never a complete baseline or branch pass.
+  - The user subsequently said **"skip android e2e test for this feature"**. AC11 and further
+    acceptance-only APK builds are user-exempt. Do not repeat tool setup, native builds or
+    emulator/device E2E. Browser wide/compact journeys, targeted units, root checks and all three
+    JavaScript consumer exports remain required.
+  - Earlier task-only tool/license installation and build dependencies were authorized under
+    `.dev/pi-btw-android`. Setup and a warm resumed development APK build passed; the build
+    cgroup peak was 5,154,045,952 bytes with no OOM events/survivors. This is not a cold-build
+    peak. Ten CMake/Ninja builders used x86_64 and compile/link pools of one. Keep those artifacts
+    and the reviewed root declarations unchanged; no shared SDK, AVD, global policy or daemon
+    changes are authorized.
+  - **ASCII-only feature test inputs** remain mandatory. Draft retention uses
+    `draft line 1\nASCII line 2`; archived native input is
+    `HOLD_BTW Native keyboard smoke ASCII`. The temporary Unicode helper-IME module and
+    dependency are removed. Unrelated repository Unicode coverage and historical failed
+    receipts are preserved.
+  - Before branch browser E2E, the orchestrator still inspects the three interfaces at
+    **T1_CHECKPOINT_PRE_E2E** and must issue **RELEASE_E2E**.
 - **G2 — Overlapping branches: note, not a blocker.**
   - rural-flamingo's full-pane expand targets the floating card that D7 removes. The Side pane
     already provides resize and split behavior, so merging both would conflict and duplicate the
@@ -366,17 +372,17 @@ paneId, tabId, options?: { focus: boolean })`. With `focus: false` it sets no `f
   - The orchestrator's preflight hunk, the "E2E resource declarations" section with the initial-
     feature-only scope prose and the `qex-e2e browser` block (4 CPU / 16 GiB / 30m, one worker),
     is preserved verbatim.
-  - T1 adds a `qex-e2e android` block in the same section. Its default value is
-    `{"resources":{"cpu":8,"mem":"24GiB"},"timeout":"60m"}`, unless the orchestrator's G1
-    resolution supplies measured, staged values. In that case the APK build is a separate profile
-    job or declaration that never overlaps the emulator run, and the prose cites the evidence.
-  - The block's prose says it covers one emulator or device session, this checkout's Metro, one
-    disposable daemon and test-launched agents through teardown. The APK build is a separate job
-    (`native` profile by default). The prose also names the harness
-    `packages/app/e2e/mobile/pi-btw/android.sh`.
+  - Keep the `android-build` and `android` blocks and their workload/estimate rationale in the
+    [root declarations](../../CLAUDE.md#e2e-resource-declarations), following the user's staged
+    claim update. The build wrapper consumes `android-build`; the full runtime consumes
+    `android`. They share the feature build lock and never overlap.
+  - The runtime prose covers host emulator overhead, this checkout's Metro, one disposable daemon,
+    real Pi test agents, automation and teardown, and names
+    `packages/app/e2e/mobile/pi-btw/android.sh`. The serial development x86_64 APK producer is
+    `packages/app/e2e/mobile/pi-btw/low-memory.sh build`.
   - It also records the BTW E2E environment: `PASEO_PI_BINARY` (Pi 1.4.0) and
     `PASEO_PI_BTW_PACKAGE` (a local pi-btw checkout).
-  - Validate both with `agent-job estimates --cwd <worktree>`.
+  - Validate all declarations with `agent-job estimates --cwd <worktree>`.
 
 ## 2. Design
 
@@ -400,8 +406,11 @@ paneId, tabId, options?: { focus: boolean })`. With `focus: false` it sets no `f
 | `panels/register-panels.ts`, `agent-panel.tsx`, `agent-tracks.tsx` | Registration and mounting                                                                                          |
 | Tab label switches                                                 | `compact-workspace-header/tab-switcher.tsx`, `workspace-tab-menu.ts` close test id `workspace-btw-close-<agentId>` |
 
-Unchanged: `btw/send.ts`, `btw/select.ts`, `subagents/provider-store.ts`, server, protocol and
-pi-btw.
+Unchanged: `btw/send.ts`, `btw/select.ts`, server, protocol and pi-btw.
+Review round 1 approved the narrow `subagents/provider-store.ts` / existing test seam:
+reported descriptor-list errors must reject before replacing cached descriptors, so BTW
+reconnect can establish a baseline and clear local read errors only after a valid list.
+The public API and coalesced-request retry contract stay unchanged.
 
 ### Data flow
 
@@ -553,11 +562,14 @@ Test ids: `btw-panel` (`accessibilityLabel` = thread id or `""`), `btw-subtitle`
 - A dispatch with no client rejects with `Host disconnected` (existing `send.ts`). The message goes
   to `conversation.error`, the draft is kept, and there is no retry or resend.
 - Timeline fetch errors set the panel-local history error, shown in `btw-action-feedback`. A later
-  stream update or remount retries (existing `observeProviderSubagentTimeline`).
+  stream update or remount retries (existing `observeProviderSubagentTimeline`). Standalone tabs
+  also refresh descriptors on same-client reconnect. A successful empty or non-timeline list
+  retires only the local read error, preserving stored command errors and drafts.
 - A provider failure arrives as `thread.status === "failed"` and shows `btw-provider-error` with
   `thread.description`.
 - A failed `refreshProviderSubagents` in `BtwAutoOpen` is caught. No baseline is set, and the hook
-  retries when the client changes while it still has no baseline.
+  retries on the public client's connected status, including reconnects of the same client.
+  Only the first successful list establishes the baseline; later reconnects preserve it.
 
 ### Conventions
 
@@ -579,6 +591,8 @@ parallel writer.
 
 - **Depends on:** nothing. The base build artifacts exist; their freshness is unverified.
 - **Owned files (create/modify/delete):**
+  - `packages/app/src/subagents/provider-store.ts` and `provider-store.test.ts`: parent-approved
+    review repair only, reject reported list errors before replacing cached rows.
   - `packages/app/src/btw/`: create `conversation-store.ts`, `conversation-store.test.ts`,
     `tab.ts`, `auto-open.tsx`, `auto-open.test.tsx`, `panel.tsx` and `panel.test.tsx`. Rename
     `window-content.tsx` to `panel-content.tsx`. Modify `draft.ts`, `draft.test.ts`, `pill.tsx` and
@@ -598,6 +612,10 @@ parallel writer.
   - `packages/app/src/i18n/resources/{en,ar,es,fr,ja,ko,pt-BR,ru,zh-CN}.ts`.
   - `packages/app/test-stubs/lucide-react-native.ts`: add `MessagesSquare`. The unit project
     aliases lucide to this stub (`packages/app/vitest.config.ts:313`).
+  - `packages/app/vitest.setup.ts` (orchestrator-approved environment seam): add only a guarded
+    jsdom shim for absent `Element.animate`, returning independent writable-startTime/cancel
+    objects for the real status ring. Preserve real browser implementations and all real chip,
+    layout and status components. Chromium remains authoritative for animation/visibility.
   - `packages/app/e2e/browser/pi-btw-window.spec.ts`, `pi-btw-window.real.spec.ts` (selectors
     only), `packages/app/e2e/support/helpers/pi-btw.ts`, and
     `packages/app/e2e/mobile/agent-device/pi-btw.android.ad` (and `pi-btw.ios.ad` selectors).
@@ -633,7 +651,7 @@ parallel writer.
      `workspace-layout-store.ts` and `conversation-store.ts`. Wait for the orchestrator's
      `RELEASE_E2E` reply.
   8. Browser E2E (§4.4).
-  9. Android E2E on this branch (§4.5), unless exempt.
+  9. Android E2E is user-exempt (§4.5); retain historical evidence without another native run.
   10. Docs (DOC1–DOC4). Run `npm run format`, then commit.
 - **Exact unit command** (from `packages/app`):
   `agent-job submit medium --cwd /home/sinkerine/.paseo/worktrees/28vpgp2p/feat-btw-side-pane/packages/app --timeout 15m -- npx vitest run --project unit src/btw src/workspace-tabs/open-beside.test.ts src/workspace-tabs/identity.test.ts src/stores/workspace-layout-store.test.ts src/stores/workspace-layout-persistence.test.ts src/panels/panel-manifest.test.ts src/i18n --bail=1 --maxWorkers=1`
@@ -643,8 +661,8 @@ parallel writer.
     preflight hunk, so T1 appends below it and commits it with T1.
   - `build:app-deps` rewrites the `dist` of highlight, client, plugin and expo-two-way-audio,
     which Metro and the E2E daemons read. Never run it concurrently with an E2E job or an export.
-  - Exports write only to distinct `artifacts/btw-side-pane/build/*` directories, never to
-    `packages/app/dist` (the source for `build:daemon-web-ui`).
+  - Exports write only to distinct `artifacts/btw-side-pane/<attempt>/build/*` directories, never
+    to `packages/app/dist` (the source for `build:daemon-web-ui`).
   - Never patch types to silence stale declarations.
 - **Early interface check (orchestrator host-only inspection, not a model review):** at the step 7
   checkpoint, the orchestrator inspects the unit evidence and diffs for three properties:
@@ -664,14 +682,18 @@ remount without a second send`).
 ## 4. Test and verification
 
 All expensive commands run under shared qex admission. E2E uses the root `CLAUDE.md` declarations.
-Heavy jobs are serialized: one browser E2E, Android and build at a time, never in parallel.
-Evidence goes in the ignored worktree `artifacts/`. No installs, no SDK license acceptance, and no
-shared daemon changes.
+Heavy jobs are serialized: one browser E2E or consumer build at a time. Android E2E and further
+acceptance-only APK builds are user-exempt. Evidence goes in ignored worktree `artifacts/`.
+Existing native tool/build/probe artifacts are historical; shared state and daemon changes remain
+prohibited.
 
-### 4.1 Prerequisites and capability probes (before substantial implementation)
+### 4.1 Prerequisites and completed capability probes
+
+The baseline probes below are retained for provenance and must not be repeated without changed
+relevant inputs. Native steps are archived under the subsequent user exemption (G1).
 
 1. `agent-job estimates --cwd /home/sinkerine/.paseo/worktrees/28vpgp2p/feat-btw-side-pane` lists
-   `browser` as valid, and `android` as valid after T1 adds it.
+   `browser`, `android-build` and `android` as valid.
 2. Environment for the BTW fixture: `export PASEO_PI_BINARY="$(command -v pi)"` (`pi --version`
    must print `1.4.0`) and `export PASEO_PI_BTW_PACKAGE=/home/sinkerine/dev/pi-btw` (record
    `git -C … rev-parse HEAD`, currently `7ea4f10`). Run inside the development shell
@@ -684,25 +706,29 @@ shared daemon changes.
    - Observation: the base floating card is visible and the stub records the BTW request.
    - Expected: pass on base. Record the qex job id, exit code, `run.log` and trace.
    - Harness, Metro, Pi or fixture errors mean "cannot observe" and block step 6 until fixed.
-4. **Native baseline probe (base code, hardest native path).** This is a real BTW sheet keyboard
-   and Back journey on the unchanged `pi-btw.android.ad` (base selectors: `btw-sheet-chip`).
+4. **Archived native baseline probe (do not rerun).** This was a real BTW sheet keyboard
+   and Back journey on captured base selectors with the ASCII prompt correction
+   (`btw-sheet-chip`, not the branch's workspace-sheet selectors).
    - Pre-check (trivial, not E2E): `command -v adb emulator agent-device`, plus
-     `agent-job estimates`. Missing tooling or a missing AVD is a G1 tooling blocker. Do not
-     install anything.
-   - Build the base APK: `agent-job run native --cwd <worktree> --timeout 60m -- npm run
-build:apk:arm64`, or the x86_64 equivalent per `docs/android.md` for an x86_64 emulator. On
-     kazuki, qex rejects 24 GiB against the 16 GiB budget. That rejection is the G1 capacity
-     receipt.
-   - Run: `agent-job run --e2e android --cwd <worktree> -- packages/app/e2e/mobile/pi-btw/android.sh
---flow packages/app/e2e/mobile/agent-device/pi-btw.android.ad --artifacts
-artifacts/btw-native-baseline`.
+     `agent-job estimates`. Missing tooling or a missing AVD is a G1 tooling blocker.
+     Provision missing tools only through `packages/app/e2e/mobile/pi-btw/setup.sh`, under
+     the task-owned G1 setup declaration.
+   - Build the base APK from the worktree root with
+     `packages/app/e2e/mobile/pi-btw/low-memory.sh build`. The wrapper acquires the feature
+     build lock before `agent-job run --e2e android-build` and produces the development
+     x86_64 debug APK (`sh.paseo.debug`) for the matching AVD. The old 24 GiB rejection remains
+     historical evidence; current claims are owned by the root declarations.
+   - After the build exits, run the baseline with the same lock:
+     `flock --close <feature-build-lock> agent-job run --e2e android --cwd <worktree> --
+python3 packages/app/e2e/mobile/pi-btw/measure.py <evidence-directory> bash packages/app/e2e/mobile/pi-btw/android.sh --baseline --flow <captured-base-flow-with-ascii-input>
+--artifacts artifacts/btw-native-baseline`.
    - Entry: one cold VIEW launch of the dev client at this checkout's Metro. The app is connected
      to the isolated fixture host, then a deep link opens `paseo://h/<serverId>/agent/<agentId>`
      (§4.5).
    - Authoritative readiness: `wait id="message-input-root"`, then `wait id="btw-chip"` (the
      fixture seeded a completed BTW thread). Transport or Metro readiness alone does not count.
    - Representative action: press `btw-chip`, then press and fill `btw-composer` with
-     `HOLD_BTW Native keyboard smoke 日本語`.
+     `HOLD_BTW Native keyboard smoke ASCII`.
    - Observation:
      - Poll the IME top from `adb shell dumpsys window` every 250 ms until two consecutive reads
        match (10 s limit).
@@ -744,16 +770,18 @@ consumer. No server, protocol or client consumer changes. The daemon contract
 
 ### 4.3 Repository and consumer gates (after implementation, serialized, producers first)
 
-Run from the worktree root unless a different `--cwd` is shown. Run one heavy job at a time. Rerun
-from step 1 after any source repair, because receipts are tied to the input tree.
+Run from the worktree root unless a different `--cwd` is shown. Run one heavy job at a time.
+Receipts are tied to their relevant source, generated artifacts and environment. Reuse a producer
+receipt only after validating that closure; rebuild changed producers before their consumers.
+The resumed run records identities and unique outputs under `artifacts/btw-side-pane/resumed-1/`.
 
 1. Generated inputs (producer): `agent-job run heavy --cwd <worktree> --timeout 30m -- npm run
 build:app-deps`. This writes the `dist` of highlight, client, plugin and expo-two-way-audio,
    which app typecheck, Metro and the exports consume.
 2. `agent-job run medium --cwd <worktree> --timeout 20m -- npm run typecheck`
 3. `agent-job run medium --cwd <worktree> --timeout 15m -- npm run lint`
-4. `agent-job run small --cwd <worktree> --timeout 10m -- npm run format`. Inspect the diff, then
-   run `agent-job run small -- npm run format:check`.
+4. Worker: `agent-job run small -- npm run format:files -- <owned files>`. Inspect the diff, then
+   run `agent-job run small -- npm run format:check`. The parent owns full formatting before commit.
 5. Browser web consumer build: `agent-job run heavy --cwd <worktree>/packages/app --timeout 30m --
 npx expo export --platform web --output-dir ../../artifacts/btw-side-pane/build/web`
 6. Electron renderer consumer build (same as `build:desktop`'s export step, without
@@ -788,10 +816,11 @@ Classification:
 - Metro readiness, `NEEDS_CONTEXT`, Pi version or fixture-port failures are inability to observe.
   Fix the environment and do not count them as test results.
 
-### 4.5 Android (AC11, gated by G1)
+### 4.5 Archived Android preparation (AC11 user-exempt)
 
-The harness is used by both the base probe (§4.1 step 4) and the branch run. It runs only on a
-G1-authorized host or once G1 resolves, and is never skipped silently.
+The user explicitly exempted Android E2E and further acceptance-only APK builds. Do not execute
+this harness for this feature. The following records the prepared harness and historical baseline
+method; branch keyboard/Back/close-reopen behavior has no passing native journey receipt.
 
 - **`packages/app/e2e/mobile/pi-btw/fixture-host.ts`** (run with `npx tsx`):
   - Calls `createBtwRuntime(false)` and `startIsolatedHostDaemon(serverId, { config:
@@ -809,21 +838,25 @@ runtime.daemonConfig, environment: runtime.environment })` (`e2e/support/helpers
   2. Run `agent-device metro prepare` for this checkout on a free port.
   3. Start `fixture-host.ts` and `adb reverse` the daemon and Metro ports.
   4. Install the APK. Do one cold VIEW launch
-     (`exp+voice-mobile://expo-development-client/?url=…`).
-  5. Add the host with `add-host-method-direct`, `direct-host-input` `127.0.0.1`,
-     `direct-port-input <port>` and `direct-host-submit`.
+     (`exp+voice-mobile://expo-development-client/?url=…`). On a wiped debug app,
+     press the Expo development-menu introduction's Continue, then Close.
+  5. A wiped app starts at Welcome. Add the host with `welcome-direct-connection`,
+     `direct-host-input` `127.0.0.1`, `direct-port-input <port>` and `direct-host-submit`.
+     The method chooser's `add-host-method-direct` is not present on a fresh install.
+     Accept the fresh app's Android notification prompt and wait for `open-project-submit`
+     before delivering the agent link, so Add host's success navigation has settled.
   6. Deliver `paseo://h/<serverId>/agent/<agentId>`. Deliver it again only after the root
      navigator is live, following the existing script's documented gotcha.
-  7. Run `agent-device test <flow> --metro-port <port> --timeout 120000 --fail-fast
---artifacts-dir <artifacts>`.
+  7. Run the complete `.ad` flow in the same owned session with `agent-device replay <flow>
+--no-test-ime --metro-port <port> --timeout 120000 --json`, saving `flow-result.json`.
+     `test` creates a derived attempt session that cannot take this session's device claim.
   8. Take the IME, snapshot and Back measurements (§4.1 step 4).
   9. Tear down: stop the agent-device daemon, the emulator and the fixture host, and kill Metro if
      the harness started it.
-- **Branch run:** build the branch APK (`agent-job run native -- npm run build:apk:arm64` or the
-  x86_64 equivalent). Then run `agent-job run --e2e android --cwd <worktree> --
-packages/app/e2e/mobile/pi-btw/android.sh --flow
-packages/app/e2e/mobile/agent-device/pi-btw.android.ad --artifacts artifacts/btw-side-pane-android`.
-  The flow is updated per §5.
+- The prepared branch flow includes `BTW compact reopen keeps controls above real IME`: retain
+  an ASCII draft, long-press, close/reopen with real Gboard, measure both controls above the IME,
+  then use an ordinary safe Send. It is **not executed** under the user exemption. Historical
+  failure images and complete flow files remain intact.
 - iOS is an explicit gap (no runner on Linux).
 
 ### 4.6 Independent gates after T1
@@ -841,6 +874,26 @@ Future pushes and deploys of this feature rerun existing unit tests only, not E2
 Harness: the existing isolated headless Playwright harness, Chromium, one worker, disposable
 daemon homes and ports, the deterministic HTTP model stub with the real Pi 1.4.0 and pi-btw
 (§4.1). Test names below are the exact titles to keep or create in `pi-btw-window.spec.ts`.
+
+**`BTW {wide|compact} main composer aliases and empty entry preserve routing`**
+
+Two table-driven cases reuse one real Pi agent/fixture per layout. Each executes this matrix
+with an idle parent, then with a held `HOLD_PARENT` turn (16 real main-composer submissions total):
+
+| Main command                 | Precondition                                     | Thread and model oracle                                                                     |
+| ---------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| empty `/btw`                 | No BTW thread/tab                                | Fresh idle descriptor and tab/sheet, no model request, no delivery                          |
+| `/btw ENTRY_BTW_<state>`     | Previous empty thread cleared through real UI    | Fresh descriptor, one BTW model request and matching authoritative last question            |
+| `/side ENTRY_SIDE_<state>`   | Previous thread cleared through real UI          | Fresh descriptor, one BTW model request and matching authoritative last question            |
+| `/btw:new ENTRY_NEW_<state>` | Existing `/side` thread, surface closed normally | Existing descriptor replaced by a different fresh id; one BTW request and matching question |
+
+Every row checks actual Side-pane geometry/selection or compact sheet placement, main-composer
+focus/post-submit typing, exactly one intended main-composer command breadcrumb and no other
+new authoritative main user rows, unchanged parent model-request count and parent status/pending
+state. Empty `/btw` has zero authoritative question/answer rows and zero model calls; its
+`hasTimeline` metadata only says that the backing file exists. Fresh ids must differ from prior ids. Reset uses
+actual Clear/Close controls rather than descriptor injection; the parent stack is not restarted.
+Evidence is `btw-main-entry-matrix` for each layout, alongside focused/full-file receipts.
 
 **`BTW wide side pane toggles during generation, retries and restores`** (1440×900; replaces
 "wide docked card…")
@@ -892,7 +945,10 @@ scroll-before`.
     `turn-footer`. A draft typed before New is kept.
 - W10. Clear.
   - Expect `btw-empty`, `btw-chip` count 0, and the tab still present.
-  - Send `AFTER_CLEAR`. Expect the chip back, a new `aria-label` and `BTW_REPLY AFTER_CLEAR`.
+  - Send `AFTER_CLEAR`. Expect the chip back and a fresh nonempty `aria-label` different from the
+    thread cleared. Its visible question is `AFTER_CLEAR`, its reply is `BTW_REPLY CONTEXT_A`,
+    its authoritative user rows are exactly `["AFTER_CLEAR"]`, and the one newly captured BTW
+    model request has `AFTER_CLEAR` in its last question. Save `btw-after-clear-correlation`.
 
 **`BTW compact sheet toggles during generation, retries and restores`** (390×844)
 
@@ -908,9 +964,11 @@ scroll-before`.
 
 **`BTW wide side pane lifecycle survives resize, reload and restart`** (new)
 
-- L1. With the BTW tab open in the Side pane, type `draft line 1\n日本語`. Resize to 390×844 and
-  click the chip.
-  - Expect the BTW tab revealed as a pane tab (no sheet) with the draft.
+- L1. With the BTW tab open in the Side pane, type `draft line 1\nASCII line 2`. Resize to 390×844.
+  - The focused BTW tab stays visible as a pane tab (no sheet) with the draft.
+  - Return to 1440×900, click the parent composer to focus it, resize to 390×844 and click its
+    visible BTW chip. Expect the existing BTW pane tab revealed with the same draft and no sheet.
+    The parent chip belongs to the parent's tab; it is absent while compact shows BTW itself.
 - L2. Resize to 1440×900.
   - Expect the BTW tab in the Side pane with the same draft.
 - L3. `client.refreshAgent`.
@@ -924,15 +982,22 @@ scroll-before`.
 
 **Kept and updated:**
 
-- `BTW {wide|compact} explicit sends land once and output preserves the reader` (AC7).
+- `BTW {wide|compact} explicit sends land once and output preserves the reader` (AC7). Existing
+  send/gesture/output checks remain. Added reopen phases use normal tab/sheet Close and chip,
+  a new `agent.provider_subagents.timeline.get.response`, settled sheet and eight stable viewport
+  frames, then record the normal-entry baseline and30 quiet frames. Releasing held output or a
+  pre-admission transport request is observed over60 frames plus settled completion frames;
+  scrollTop and the visible row anchor stay within1px of that new baseline. No gesture after
+  reopen cancels a stale pending landing and no old reader position is required. JSON phases
+  `reopen-*` in `btw-scroll-geometry` preserve the measurements.
 - `BTW compact sheet backdrop dismissal preserves generation and reopens the same thread` (AC4,
   workspace-sheet backdrop).
 - `BTW absent extension {wide|compact} keeps the main fallback without a tab or pill` (AC9).
 - `BTW wide Send shortcut follows the existing preference`.
 - `BTW compact Send shortcut keeps editing ({enter|mod-enter})`.
 
-**Android (AC11, G1):** run `pi-btw.android.ad` through `pi-btw/android.sh` (§4.5), updated
-as follows. The keyboard bounds and Back observations are made by the harness as in §4.1 step 4.
+**Android (AC11): user-exempt, not passed.** The prepared `pi-btw.android.ad` flow is archived
+below for provenance; do not execute it. Historical keyboard/Back observations are in G1.
 
 - `wait btw-chip`, press it, then `wait sheet-tab-header`.
 - Press and fill `btw-composer` with the software keyboard up. Assert `btw-send` is visible above

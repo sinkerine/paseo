@@ -7,7 +7,7 @@ export const ja: TranslationResources = {
     title: "BTW 会話",
     show: "BTW 会話を表示",
     hide: "BTW 会話を隠す",
-    minimize: "最小化",
+    empty: "このチャットについて別の質問をする",
     placeholder: "別の質問をする",
     send: "送信",
     stop: "停止",

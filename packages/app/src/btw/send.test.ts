@@ -5,9 +5,9 @@ import { useSessionStore } from "@/stores/session-store";
 import { renderHook } from "@testing-library/react";
 
 vi.mock("@/stores/session-store", () => ({ useSessionStore: vi.fn() }));
-test("every window action encodes exactly one command, preserving multiline Unicode questions", () => {
+test("every BTW action encodes exactly one command, preserving multiline ASCII questions", () => {
   expect([
-    btwCommandText({ kind: "ask", text: "Why 日本語?\nsecond line" }),
+    btwCommandText({ kind: "ask", text: "Why ASCII?\nsecond line" }),
     btwCommandText({ kind: "abort" }),
     btwCommandText({ kind: "inject" }),
     btwCommandText({ kind: "summarize", instructions: "Be brief" }),
@@ -15,7 +15,7 @@ test("every window action encodes exactly one command, preserving multiline Unic
     btwCommandText({ kind: "new", text: "Next" }),
     btwCommandText({ kind: "clear" }),
   ]).toEqual([
-    "/btw Why 日本語?\nsecond line",
+    "/btw Why ASCII?\nsecond line",
     "/btw:abort",
     "/btw:inject",
     "/btw:summarize Be brief",

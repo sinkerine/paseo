@@ -28,13 +28,15 @@ can remount. Native retained content stays live, while web chat uses its existin
 
 ## Sheets
 
-On compact layouts, files and subagents open in a sheet over the workspace, so the tab switcher
-keeps only agents and terminals. A panel kind opts in with `compactSheet` in its manifest
+On compact layouts, file/subagent look-ups and BTW conversations open in a sheet over the
+workspace. A panel kind opts in with `compactSheet` in its manifest
 (`packages/app/src/panels/panel-manifest.ts`), and the layout store's `openTab` decides between
 sheet and tab, so callers open targets the same way on every layout. Each such sheet holds one
 ordinary `WorkspaceTab` (`SheetTab` in the store) and is an `IsolatedBottomSheetModal` like every
 other sheet in the app, so it sits on the one app-wide stack: a sheet opened from any sheet lands on
 top of it, and closing the top sheet (drag, Close, backdrop, or Android Back) uncovers the one below.
+Set `CompactSheetPolicy.keyboardBehavior` to `extend` for a sheet with a text input, matching the
+app's other input sheets.
 
 A subagent chosen from the subagents list is the exception. It opens as a page of the list's own
 sheet and replaces the list in place: Back returns to the list, Close ends both, and Open parent
@@ -139,8 +141,12 @@ Discovery uses ordinary PR tabs and their existing once-per-workspace close opt-
 `packages/app/src/workspace-tabs/open-beside.ts` owns content opened beside the user's work. The
 layout store remembers one ordinary pane per workspace. The first side open creates a full-height
 right split around the workspace root; later side opens reuse it. Only the `split-panes` layout
-mode opens beside. Compact and single-pane layouts (touch tablets) open the same target in the main
-pane, so callers never check whether splits render.
+mode opens beside. Compact layouts follow the target's sheet policy; single-pane layouts (touch
+tablets) open it in the main pane. Callers never check whether splits render.
+
+BTW discovery uses `showWorkspaceTargetBeside`, following PR discovery's rule of keeping focus on
+the user's current work. It can select the supporting tab in another pane while leaving the
+focused pane's selection and keyboard focus intact. Existing tabs stay where the user placed them.
 
 Removing a pane clears its remembered id; a later side open creates a new pane. The last visible
 ordinary pane stays when its final tab closes and shows the New launcher. An empty workspace does

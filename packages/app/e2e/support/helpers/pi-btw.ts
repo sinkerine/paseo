@@ -78,9 +78,80 @@ export async function launchBtwAgent(page: Page, runtime: BtwRuntime) {
     providerConfig: { model: runtime.model },
   });
 }
+export async function closeBtwSurface(page: Page, agentId: string, compact: boolean) {
+  if (compact) {
+    await page
+      .getByTestId("sheet-tab-header")
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+  } else {
+    await page.getByTestId(`workspace-tab-btw_${agentId}`).hover();
+    await page.getByTestId(`workspace-btw-close-${agentId}`).click();
+  }
+  await expect(page.getByTestId("btw-panel").filter({ visible: true })).toHaveCount(0);
+}
+
+export async function btwScrollFrames(scroller: Locator, frames = 60) {
+  return scroller.evaluate(async (element, count) => {
+    const samples = [];
+    for (let frame = 0; frame < count; frame++) {
+      await new Promise<number>(requestAnimationFrame);
+      const viewport = element.getBoundingClientRect();
+      samples.push({
+        frame,
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        rows: Array.from(element.querySelectorAll("[data-history-row-id]"), (row) => {
+          const box = row.getBoundingClientRect();
+          return {
+            id: row.getAttribute("data-history-row-id"),
+            top: box.top,
+            bottom: box.bottom,
+            inViewport: box.bottom > viewport.top && box.top < viewport.bottom,
+          };
+        }),
+      });
+    }
+    return samples;
+  }, frames);
+}
+
+export async function waitForBtwViewportSettled(scroller: Locator) {
+  await expect
+    .poll(async () => {
+      const frames = await btwScrollFrames(scroller, 8);
+      const first = frames[0];
+      return (
+        first !== undefined &&
+        frames.every(
+          (frame) =>
+            Math.abs(frame.scrollTop - first.scrollTop) <= 1 &&
+            frame.scrollHeight === first.scrollHeight &&
+            frame.clientHeight === first.clientHeight,
+        )
+      );
+    })
+    .toBe(true);
+}
+
+export function expectBtwViewportHeld(
+  baseline: Awaited<ReturnType<typeof btwScrollFrames>>[number],
+  frames: Awaited<ReturnType<typeof btwScrollFrames>>,
+) {
+  const anchor = baseline.rows.find((row) => row.inViewport);
+  if (!anchor?.id) throw new Error("Missing visible history row after entry settlement");
+  for (const frame of frames) {
+    expect(Math.abs(frame.scrollTop - baseline.scrollTop)).toBeLessThanOrEqual(1);
+    const row = frame.rows.find((candidate) => candidate.id === anchor.id);
+    if (!row) throw new Error("Settled history anchor disappeared");
+    expect(Math.abs(row.top - anchor.top)).toBeLessThanOrEqual(1);
+  }
+}
+
 export async function btwViewportGeometry(target: Locator) {
   return target.evaluate((element) => {
-    const window = element.closest('[data-testid="btw-window"]');
+    const window = element.closest('[data-testid="btw-panel"]');
     const scroller = window?.querySelector('[data-testid="agent-chat-scroll"]');
     if (!(scroller instanceof HTMLElement)) throw new Error("Missing BTW scroll viewport");
     const viewport = scroller.getBoundingClientRect();
@@ -114,7 +185,7 @@ export async function expectBtwTextInViewport(target: Locator) {
 }
 export async function revealBtwText(page: Page, target: Locator) {
   await expect(target).toBeVisible();
-  const window = page.getByTestId("btw-window").filter({ visible: true });
+  const window = page.getByTestId("btw-panel").filter({ visible: true });
   await expect(window).toHaveCount(1);
   await expect(window.getByTestId("btw-stop")).toHaveCount(0);
   await waitForSettledPosition(window);
@@ -133,6 +204,8 @@ export async function revealBtwText(page: Page, target: Locator) {
   await expectBtwTextInViewport(target);
 }
 export async function captureBtw(page: Page, info: TestInfo, name: string) {
+  const panel = page.getByTestId("btw-panel").filter({ visible: true });
+  if ((await panel.count()) > 0) await waitForSettledPosition(panel);
   const screenshot = info.outputPath(`${name}.png`);
   await page.screenshot({ path: screenshot });
   await info.attach(name, { path: screenshot, contentType: "image/png" });

@@ -131,6 +131,50 @@ export function openWorkspaceTargetAtLocation(
   );
 }
 
+/**
+ * Shows supporting content without moving workspace focus. Existing tabs stay where the user
+ * placed them; a focused pane keeps its current selection. Compact uses the sheet policy and
+ * single-pane layouts keep a new tab in the background.
+ */
+export function showWorkspaceTargetBeside(input: {
+  workspaceKey: string | null;
+  target: WorkspaceTabTarget;
+}): string | null {
+  const workspaceKey = input.workspaceKey;
+  if (!workspaceKey) return null;
+  const store = useWorkspaceLayoutStore.getState();
+  const layout = store.layoutByWorkspace[workspaceKey];
+  const existing =
+    layout &&
+    collectAllTabs(layout.root).find((tab) => workspaceTabTargetsEqual(tab.target, input.target));
+  if (existing) {
+    const pane = findPaneContainingTab(layout.root, existing.tabId);
+    if (store.layoutMode === "split-panes" && pane && pane.id !== layout.focusedPaneId) {
+      store.selectTabInPane(workspaceKey, pane.id, existing.tabId, { focus: false });
+    }
+    return existing.tabId;
+  }
+  if (store.layoutMode === "compact") {
+    return store.openTab({ workspaceKey, target: input.target, intent: "reveal" });
+  }
+  const paneId =
+    store.layoutMode === "split-panes"
+      ? store.ensureSidePane(workspaceKey, { focus: false })
+      : null;
+  const tabId = store.openTab({
+    workspaceKey,
+    target: input.target,
+    intent: "background",
+    placement: paneId ? { mode: "prefer", paneId } : undefined,
+  });
+  const next = useWorkspaceLayoutStore.getState().layoutByWorkspace[workspaceKey];
+  const pane = tabId && next ? findPaneContainingTab(next.root, tabId) : null;
+  if (store.layoutMode === "split-panes" && pane && pane.id !== next.focusedPaneId && tabId) {
+    store.selectTabInPane(workspaceKey, pane.id, tabId, { focus: false });
+  }
+  return tabId;
+}
+
 /** Opens a tree selection while reusing an unmodified preview in its destination pane. */
 export function openPreferredWorkspacePreview(
   input: OpenPreferredWorkspacePreviewInput,

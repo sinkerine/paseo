@@ -7,6 +7,8 @@ export type PaneHost = "main" | "explorer" | "sheet";
 export interface CompactSheetPolicy {
   /** The sheet offers Open as tab, which moves the same tab into the focused pane. */
   openAsTab: boolean;
+  /** Input sheets extend with the keyboard, like the app's other input surfaces. */
+  keyboardBehavior?: "extend";
 }
 
 /** Facts about a target that live outside the layout, resolved lazily by the workspace. */
@@ -64,6 +66,14 @@ const manifests = {
     singleton: false,
     compactSheet: (target, facts) =>
       facts.isWorkspaceRootAgent(target.agentId) ? null : { openAsTab: true },
+    resourceKey: (target) => target.agentId,
+  },
+  btw: {
+    kind: "btw",
+    supportedHosts: ["main", "explorer"],
+    showCloseButton: true,
+    singleton: false,
+    compactSheet: { openAsTab: false, keyboardBehavior: "extend" },
     resourceKey: (target) => target.agentId,
   },
   provider_subagent: {

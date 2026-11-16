@@ -1,0 +1,46 @@
+// Apply before AGP creates native variants, including libraries with their own CMake builds.
+allprojects { project ->
+    ["com.android.application", "com.android.library"].each { pluginId ->
+        project.pluginManager.withPlugin(pluginId) {
+            project.extensions.getByName("androidComponents").finalizeDsl { android ->
+                def jobs = System.getenv("PASEO_BTW_NATIVE_JOBS")
+                def ninja = System.getenv("PASEO_BTW_NINJA_WRAPPER")
+                if (!jobs || !ninja) {
+                    throw new GradleException("BTW native limits require the build-android.mjs wrapper")
+                }
+                def sdk = new File(System.getenv("ANDROID_HOME"))
+                def components = [
+                    "platforms/android-${android.compileSdk}/android.jar",
+                    "build-tools/${android.buildToolsVersion}/aapt2",
+                    "cmake/3.30.5/bin/ninja"
+                ]
+                // Java-only modules retain AGP's unused default NDK version.
+                if (android.externalNativeBuild.cmake.path != null || android.externalNativeBuild.ndkBuild.path != null) {
+                    components.add("ndk/${android.ndkVersion}/source.properties")
+                }
+                components.each { component ->
+                    if (!new File(sdk, component).exists()) {
+                        throw new GradleException("Missing installed SDK component ${component}; no auto-install permitted")
+                    }
+                }
+                android.defaultConfig.ndk.abiFilters.clear()
+                android.defaultConfig.ndk.abiFilters.add("x86_64")
+                android.defaultConfig.externalNativeBuild.cmake.abiFilters.clear()
+                android.defaultConfig.externalNativeBuild.cmake.abiFilters.add("x86_64")
+                android.productFlavors.configureEach { flavor ->
+                    flavor.ndk.abiFilters.clear()
+                    flavor.ndk.abiFilters.add("x86_64")
+                    flavor.externalNativeBuild.cmake.abiFilters.clear()
+                    flavor.externalNativeBuild.cmake.abiFilters.add("x86_64")
+                }
+                android.externalNativeBuild.cmake.version = "3.30.5"
+                android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
+                    "-DCMAKE_JOB_POOLS=btw_compile=${jobs};btw_link=${jobs}",
+                    "-DCMAKE_JOB_POOL_COMPILE=btw_compile",
+                    "-DCMAKE_JOB_POOL_LINK=btw_link",
+                    "-DCMAKE_MAKE_PROGRAM=${ninja}"
+                ].collect { it.toString() })
+            }
+        }
+    }
+}

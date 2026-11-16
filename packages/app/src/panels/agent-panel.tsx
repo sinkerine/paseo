@@ -1,4 +1,4 @@
-import { BtwWindow } from "@/btw/window";
+import { BtwAutoOpen } from "@/btw/auto-open";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -1215,11 +1215,11 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       </RenderProfile>
       {hasActiveComposer && !draft ? (
         <>
-          <BtwWindow
+          <BtwAutoOpen
+            key={JSON.stringify([serverId, agentId])}
             serverId={serverId}
+            workspaceId={workspaceId}
             agentId={agentId}
-            isPaneFocused={isPaneFocused}
-            isComposerFullscreen={isComposerFullscreen}
           />
           <AgentTracks
             serverId={serverId}

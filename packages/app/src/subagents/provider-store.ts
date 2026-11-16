@@ -93,6 +93,7 @@ export function refreshProviderSubagents(
   const request = client
     .listProviderSubagents(parentAgentId)
     .then((payload) => {
+      if (payload.error) throw new Error(payload.error);
       useProviderSubagentStore.getState().replaceList(serverId, parentAgentId, payload.subagents);
       return undefined;
     })

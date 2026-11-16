@@ -23,6 +23,27 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
     });
 }
 
+// JSDOM cannot animate the real status ring; Chromium exercises its actual clock/visibility.
+if (
+  typeof Element !== "undefined" &&
+  typeof navigator !== "undefined" &&
+  navigator.userAgent.includes("jsdom") &&
+  typeof Element.prototype.animate !== "function"
+) {
+  Object.defineProperty(Element.prototype, "animate", {
+    configurable: true,
+    writable: true,
+    value() {
+      return {
+        startTime: null,
+        cancel() {
+          this.startTime = null;
+        },
+      };
+    },
+  });
+}
+
 if (typeof globalThis.self === "undefined") {
   globalWithTestShims.self = globalThis;
 }

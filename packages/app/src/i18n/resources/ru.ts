@@ -7,7 +7,7 @@ export const ru: TranslationResources = {
     title: "Разговор BTW",
     show: "Показать разговор BTW",
     hide: "Скрыть разговор BTW",
-    minimize: "Свернуть",
+    empty: "Задайте дополнительный вопрос об этом чате",
     placeholder: "Задать побочный вопрос",
     send: "Отправить",
     stop: "Остановить",

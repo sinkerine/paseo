@@ -7,9 +7,15 @@ import {
   type BtwDraftState,
 } from "./draft";
 
-const question = { kind: "ask", text: "Question 日本語" } as const;
+const question = { kind: "ask", text: "Question ASCII" } as const;
 function apply(...actions: BtwDraftAction[]) {
-  const initial: BtwDraftState = { text: question.text, submitted: null, failed: false };
+  // These recovery cases start after the mounted panel has observed its existing thread.
+  const initial: BtwDraftState = {
+    threadId: "thread",
+    text: question.text,
+    submitted: null,
+    failed: false,
+  };
   return actions.reduce(reduceBtwDraft, initial);
 }
 test.each([false, true])(
@@ -17,6 +23,7 @@ test.each([false, true])(
   (failureFirst) => {
     const failure: BtwDraftAction = {
       type: "thread",
+      threadId: "thread",
       status: "failed",
       updatedAt: "2026-01-01",
       items: [],
@@ -31,7 +38,7 @@ test.each([false, true])(
     expect(state.failed).toBe(true);
   },
 );
-test("an accepted question clears; a retry clears recovery only after the thread recovers", () => {
+test("an accepted question clears and a retry reconciles with its own result", () => {
   const accepted = apply(
     { type: "submit", after: { epoch: "epoch", seq: 2 }, submittedAt: 0, command: question },
     { type: "accepted", command: question },
@@ -40,20 +47,40 @@ test("an accepted question clears; a retry clears recovery only after the thread
   const retried = apply(
     { type: "submit", after: { epoch: "epoch", seq: 2 }, submittedAt: 0, command: question },
     { type: "accepted", command: question },
-    { type: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
+    { type: "thread", threadId: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
     { type: "submit", after: { epoch: "epoch", seq: 2 }, submittedAt: 0, command: question },
     { type: "accepted", command: question },
-    { type: "thread", status: "completed", updatedAt: "2026-01-03", items: [user, answer] },
+    {
+      type: "thread",
+      threadId: "thread",
+      status: "completed",
+      updatedAt: "2026-01-03",
+      items: [user, answer],
+    },
   );
   expect(retried.text).toBe("");
   expect(retried.failed).toBe(false);
 });
+test("an explicit retry starts a new failure marker and clears on acknowledgement", () => {
+  const failed = apply(submit, accepted, failure);
+  const retrying = reduceBtwDraft(failed, {
+    type: "submit",
+    command: question,
+    after: { epoch: "epoch", seq: 2 },
+    submittedAt: Date.parse("2026-01-05"),
+  });
+  const acknowledged = reduceBtwDraft(retrying, accepted);
+  expect(acknowledged.text).toBe("");
+  expect(acknowledged.failed).toBe(false);
+  expect(acknowledged.submitted?.accepted).toBe(true);
+});
+
 test("a late failure never replaces a newer draft or resurrects text for an unrelated action", () => {
   const edited = apply(
     { type: "submit", after: { epoch: "epoch", seq: 2 }, submittedAt: 0, command: question },
     { type: "accepted", command: question },
     { type: "edit", text: "New unsent draft" },
-    { type: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
+    { type: "thread", threadId: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
   );
   expect(edited.text).toBe("New unsent draft");
   const unrelated = apply(
@@ -65,7 +92,7 @@ test("a late failure never replaces a newer draft or resurrects text for an unre
       submittedAt: 0,
       command: { kind: "inject" },
     },
-    { type: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
+    { type: "thread", threadId: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
   );
   expect(unrelated.text).toBe("");
 });
@@ -74,9 +101,9 @@ test("later failed-state metadata does not undo an intentional draft clear", () 
   const state = apply(
     { type: "submit", after: { epoch: "epoch", seq: 2 }, submittedAt: 0, command: question },
     { type: "accepted", command: question },
-    { type: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
+    { type: "thread", threadId: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
     { type: "edit", text: "" },
-    { type: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
+    { type: "thread", threadId: "thread", status: "failed", updatedAt: "2026-01-01", items: [] },
   );
   expect(state.text).toBe("");
 });
@@ -104,6 +131,7 @@ const submit: BtwDraftAction = {
 const accepted: BtwDraftAction = { type: "accepted", command: question };
 const failure: BtwDraftAction = {
   type: "thread",
+  threadId: "thread",
   status: "failed",
   updatedAt: "2026-01-04",
   items: [],
@@ -115,7 +143,13 @@ test.each(["completed", "canceled"] as const)(
     const state = apply(
       submit,
       accepted,
-      { type: "thread", status, updatedAt: "2026-01-03", items: [user, answer] },
+      {
+        type: "thread",
+        threadId: "thread",
+        status,
+        updatedAt: "2026-01-03",
+        items: [user, answer],
+      },
       failure,
     );
     expect(state.submitted).toBeNull();
@@ -127,7 +161,13 @@ test("terminal metadata for an older identical question does not discard recover
   const state = apply(
     submit,
     accepted,
-    { type: "thread", status: "completed", updatedAt: "2026-01-03", items: [oldUser, answer] },
+    {
+      type: "thread",
+      threadId: "thread",
+      status: "completed",
+      updatedAt: "2026-01-03",
+      items: [oldUser, answer],
+    },
     failure,
   );
   expect(state.text).toBe(question.text);
@@ -137,7 +177,7 @@ test("unrelated success, stale idle metadata, and an unanswered matching questio
     const state = apply(
       submit,
       accepted,
-      { type: "thread", status: "completed", updatedAt: "2026-01-03", items },
+      { type: "thread", threadId: "thread", status: "completed", updatedAt: "2026-01-03", items },
       failure,
     );
     expect(state.text).toBe(question.text);
@@ -145,7 +185,13 @@ test("unrelated success, stale idle metadata, and an unanswered matching questio
   const stale = apply(
     submit,
     accepted,
-    { type: "thread", status: "completed", updatedAt: "2026-01-01", items: [user, answer] },
+    {
+      type: "thread",
+      threadId: "thread",
+      status: "completed",
+      updatedAt: "2026-01-01",
+      items: [user, answer],
+    },
     failure,
   );
   expect(stale.text).toBe(question.text);
@@ -153,7 +199,13 @@ test("unrelated success, stale idle metadata, and an unanswered matching questio
 test("a matching completion before acknowledgement stays cleared when the acknowledgement arrives", () => {
   const state = apply(
     submit,
-    { type: "thread", status: "completed", updatedAt: "2026-01-03", items: [user, answer] },
+    {
+      type: "thread",
+      threadId: "thread",
+      status: "completed",
+      updatedAt: "2026-01-03",
+      items: [user, answer],
+    },
     accepted,
     failure,
   );
@@ -165,14 +217,20 @@ test("reconciliation keeps newer edits and canceled questions from other clients
     submit,
     accepted,
     { type: "edit", text: "Next draft" },
-    { type: "thread", status: "completed", updatedAt: "2026-01-03", items: [user, answer] },
+    {
+      type: "thread",
+      threadId: "thread",
+      status: "completed",
+      updatedAt: "2026-01-03",
+      items: [user, answer],
+    },
     failure,
   );
   expect(state.text).toBe("Next draft");
   const canceled = apply(
     submit,
     accepted,
-    { type: "thread", status: "canceled", updatedAt: "2026-01-03", items: [] },
+    { type: "thread", threadId: "thread", status: "canceled", updatedAt: "2026-01-03", items: [] },
     failure,
   );
   expect(canceled.text).toBe(question.text);
@@ -182,7 +240,7 @@ test("unrelated idle metadata between failure and acknowledgement preserves reco
   const state = apply(
     submit,
     failure,
-    { type: "thread", status: "completed", updatedAt: "2026-01-03", items: [] },
+    { type: "thread", threadId: "thread", status: "completed", updatedAt: "2026-01-03", items: [] },
     accepted,
   );
   expect(state.text).toBe(question.text);
@@ -204,4 +262,40 @@ test("canonical ask matching excludes older repeats, other epochs and other clie
   expect(
     findBtwSubmittedQuestionIndex(withoutCursor, [{ ...user, timestamp: new Date(0) }, user]),
   ).toBe(1);
+});
+
+test("thread replacement keeps text and drops a bound submission", () => {
+  const submitted = apply(
+    { type: "thread", threadId: "old", status: "running", updatedAt: "2026-01-01", items: [] },
+    submit,
+    { type: "edit", text: "draft line 1\nASCII line 2" },
+  );
+  const replaced = reduceBtwDraft(submitted, {
+    type: "thread",
+    threadId: "new",
+    status: "completed",
+    updatedAt: "2026-01-02",
+    items: [],
+  });
+  expect(replaced.threadId).toBe("new");
+  expect(replaced.text).toBe("draft line 1\nASCII line 2");
+  expect(replaced.submitted).toBeNull();
+  expect(replaced.failed).toBe(false);
+});
+
+test("thread replacement keeps a timestamp-bound ask and resets the old failure", () => {
+  const submitted = apply(
+    { type: "thread", threadId: "old", status: "failed", updatedAt: "2026-01-01", items: [] },
+    { ...submit, after: null },
+  );
+  const replaced = reduceBtwDraft(submitted, {
+    type: "thread",
+    threadId: "new",
+    status: "running",
+    updatedAt: "2026-01-02",
+    items: [],
+  });
+  expect(replaced.threadId).toBe("new");
+  expect(replaced.submitted).toEqual(submitted.submitted);
+  expect(replaced.failed).toBe(false);
 });

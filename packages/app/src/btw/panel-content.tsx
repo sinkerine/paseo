@@ -9,13 +9,11 @@ import { useMutation } from "@tanstack/react-query";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
 import { useCallback, useMemo, type RefObject } from "react";
 import { Text, View } from "react-native";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
-import { Minus } from "lucide-react-native";
 import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
 import { AgentStreamView, type AgentStreamViewHandle } from "@/agent-stream/view";
 import { Button } from "@/components/ui/button";
-import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
 import { SheetAwareTextInput } from "@/components/ui/text-input/sheet-aware";
 import { useSessionStore } from "@/stores/session-store";
 import {
@@ -27,27 +25,23 @@ import {
 } from "@/subagents/provider-store";
 import type { AgentScreenAgent } from "@/hooks/use-agent-screen-state-machine";
 import type { TurnPresentation } from "@/timeline/turn-liveness";
-import type { Theme } from "@/styles/theme";
 import type { PendingPermission } from "@/types/shared";
 import type { StreamItem } from "@/types/stream";
-import { BtwPill } from "./pill";
+import { PaneSubtitle } from "@/panels/pane-subtitle";
 import type { BtwCommand } from "./send";
 
-const iconColor = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
-const ThemedMinus = withUnistyles(Minus);
 const EMPTY_PERMISSIONS = new Map<string, PendingPermission>();
 const EMPTY_ITEMS: StreamItem[] = [];
 const EMPTY_STREAM = { tail: EMPTY_ITEMS, head: EMPTY_ITEMS };
-export interface BtwContentProps {
+export interface BtwPanelContentProps {
   serverId: string;
   agentId: string;
-  thread: ProviderSubagentDescriptorPayload;
+  thread: ProviderSubagentDescriptorPayload | null;
   streamViewRef: RefObject<AgentStreamViewHandle | null>;
   onUserScrollIntent(): void;
   compact: boolean;
   draft: string;
   onDraft(text: string): void;
-  onHide(): void;
   onCommand(command: BtwCommand): void;
   pending: boolean;
   feedback: string | null;
@@ -68,30 +62,18 @@ function canDeliverToMain({
   if (pending || status === "running" || !timeline) return false;
   return timeline.tail.some(hasConversationText) || timeline.head.some(hasConversationText);
 }
-export function BtwWindowContent({
-  serverId,
-  agentId,
-  thread,
-  streamViewRef,
-  onUserScrollIntent,
-  compact,
-  draft,
-  onDraft,
-  onHide,
-  onCommand,
-  pending,
-  feedback,
-  error,
-}: BtwContentProps) {
-  const { t } = useTranslation();
-  const { settings } = useAppSettings();
-  const key = providerSubagentKey(serverId, agentId, thread.id);
-  const timeline = useProviderSubagentStore((state) => state.timelines.get(key));
+type BtwThreadProps = Pick<BtwPanelContentProps, "serverId" | "agentId" | "thread">;
+function useBtwTimeline({ serverId, agentId, thread }: BtwThreadProps) {
+  const key = thread ? providerSubagentKey(serverId, agentId, thread.id) : null;
+  const timeline = useProviderSubagentStore((state) =>
+    key ? state.timelines.get(key) : undefined,
+  );
   const stream = timeline ?? EMPTY_STREAM;
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const older = useMutation({
+    mutationKey: ["btw-history", serverId, agentId, thread?.id ?? null],
     mutationFn: () =>
-      client
+      client && thread
         ? loadOlderProviderSubagentTimeline({
             client,
             serverId,
@@ -113,35 +95,71 @@ export function BtwWindowContent({
     }),
     [timeline?.hasOlder, older.isPending, older.mutateAsync, progressKey],
   );
-  const visibleError = error ?? older.error?.message ?? null;
+  return { timeline, stream, historyPagination, olderError: older.error?.message ?? null };
+}
+function useBtwStream({ serverId, agentId, thread }: BtwThreadProps) {
   const parent = useSessionStore(
     (state) =>
       state.sessions[serverId]?.agents.get(agentId) ??
       state.sessions[serverId]?.agentDetails.get(agentId),
   );
-  const streamId = `provider:${encodeURIComponent(agentId)}:${encodeURIComponent(thread.id)}`;
-  const context = useMemo<AgentScreenAgent>(
-    () => ({
-      serverId,
-      id: streamId,
-      provider: thread.provider,
-      status: providerSubagentLifecycleStatus(thread.status),
-      cwd: parent?.cwd ?? "",
-      workspaceId: parent?.workspaceId,
-      projectPlacement: parent?.projectPlacement,
-    }),
-    [serverId, streamId, thread.provider, thread.status, parent],
+  const streamId = thread
+    ? `provider:${encodeURIComponent(agentId)}:${encodeURIComponent(thread.id)}`
+    : "";
+  const provider = thread?.provider;
+  const status = thread?.status;
+  const context = useMemo<AgentScreenAgent | null>(
+    () =>
+      provider !== undefined && status !== undefined
+        ? {
+            serverId,
+            id: streamId,
+            provider,
+            status: providerSubagentLifecycleStatus(status),
+            cwd: parent?.cwd ?? "",
+            workspaceId: parent?.workspaceId,
+            projectPlacement: parent?.projectPlacement,
+          }
+        : null,
+    [serverId, streamId, provider, status, parent],
   );
   const turnPresentation = useMemo<TurnPresentation>(
     () => ({
-      isActive: thread.status === "running",
+      isActive: thread?.status === "running",
       isCancelling: false,
       startedAt: null,
       turnId: null,
     }),
-    [thread.status],
+    [thread?.status],
   );
-  const deliveryDisabled = !canDeliverToMain({ pending, status: thread.status, timeline });
+  return { streamId, context, turnPresentation };
+}
+
+export function BtwPanelContent({
+  serverId,
+  agentId,
+  thread,
+  streamViewRef,
+  onUserScrollIntent,
+  compact,
+  draft,
+  onDraft,
+  onCommand,
+  pending,
+  feedback,
+  error,
+}: BtwPanelContentProps) {
+  const { t } = useTranslation();
+  const { settings } = useAppSettings();
+  const { timeline, stream, historyPagination, olderError } = useBtwTimeline({
+    serverId,
+    agentId,
+    thread,
+  });
+  const { streamId, context, turnPresentation } = useBtwStream({ serverId, agentId, thread });
+  const visibleError = error ?? olderError;
+  const deliveryDisabled =
+    !thread || !canDeliverToMain({ pending, status: thread.status, timeline });
   const ask = useCallback(() => onCommand({ kind: "ask", text: draft }), [draft, onCommand]);
   const canAsk = !pending && draft.trim() !== "";
   const handleComposerKeyPress = useCallback(
@@ -165,41 +183,33 @@ export function BtwWindowContent({
   const newThread = useCallback(() => onCommand({ kind: "new" }), [onCommand]);
   const clear = useCallback(() => onCommand({ kind: "clear" }), [onCommand]);
   return (
-    <View style={styles.content} testID="btw-window" accessibilityLabel={thread.id}>
-      <View style={styles.header}>
-        {compact ? (
-          <BtwPill serverId={serverId} agentId={agentId} header />
-        ) : (
-          <Text style={styles.title}>{t("btw.title")}</Text>
-        )}
-        <Text style={styles.question} numberOfLines={1}>
-          {thread.title}
-        </Text>
-        <ToolbarButton label={t("btw.minimize")} testID="btw-minimize" onPress={onHide}>
-          <ThemedMinus size={18} uniProps={iconColor} />
-        </ToolbarButton>
-      </View>
-      <Text style={styles.subtitle} testID="btw-subtitle">
-        {thread.subtitle}
-      </Text>
+    <View style={styles.content} testID="btw-panel" accessibilityLabel={thread?.id ?? ""}>
+      {thread?.subtitle ? <PaneSubtitle text={thread.subtitle} testID="btw-subtitle" /> : null}
       <View style={styles.timeline}>
-        <AgentStreamView
-          ref={streamViewRef}
-          onUserScrollIntent={onUserScrollIntent}
-          agentId={streamId}
-          serverId={serverId}
-          context={context}
-          streamItems={stream.tail}
-          streamHead={stream.head}
-          turnPresentation={turnPresentation}
-          pendingPermissions={EMPTY_PERMISSIONS}
-          isAuthoritativeHistoryReady
-          readOnly
-          reserveTurnFooterSpace={!!timeline && timeline.tail.length + timeline.head.length > 0}
-          historyPagination={historyPagination}
-        />
+        {thread && context ? (
+          <AgentStreamView
+            key={streamId}
+            ref={streamViewRef}
+            onUserScrollIntent={onUserScrollIntent}
+            agentId={streamId}
+            serverId={serverId}
+            context={context}
+            streamItems={stream.tail}
+            streamHead={stream.head}
+            turnPresentation={turnPresentation}
+            pendingPermissions={EMPTY_PERMISSIONS}
+            isAuthoritativeHistoryReady
+            readOnly
+            reserveTurnFooterSpace={!!timeline && timeline.tail.length + timeline.head.length > 0}
+            historyPagination={historyPagination}
+          />
+        ) : (
+          <Text style={styles.empty} testID="btw-empty">
+            {t("btw.empty")}
+          </Text>
+        )}
       </View>
-      {thread.status === "failed" ? (
+      {thread?.status === "failed" ? (
         <Text style={styles.error} testID="btw-provider-error">
           {thread.description}
         </Text>
@@ -220,28 +230,37 @@ export function BtwWindowContent({
           <Button testID="btw-send" disabled={!canAsk} loading={pending} onPress={ask}>
             {t("btw.send")}
           </Button>
-          {thread.status === "running" ? (
-            <Button testID="btw-stop" variant="outline" disabled={pending} onPress={abort}>
-              {t("btw.stop")}
-            </Button>
+          {thread ? (
+            <>
+              {thread.status === "running" ? (
+                <Button testID="btw-stop" variant="outline" disabled={pending} onPress={abort}>
+                  {t("btw.stop")}
+                </Button>
+              ) : null}
+              <Button
+                testID="btw-inject"
+                variant="ghost"
+                disabled={deliveryDisabled}
+                onPress={inject}
+              >
+                {t("btw.inject")}
+              </Button>
+              <Button
+                testID="btw-summarize"
+                variant="ghost"
+                disabled={deliveryDisabled}
+                onPress={summarize}
+              >
+                {t("btw.summarize")}
+              </Button>
+              <Button testID="btw-new" variant="ghost" disabled={pending} onPress={newThread}>
+                {t("btw.newThread")}
+              </Button>
+              <Button testID="btw-clear" variant="ghost" disabled={pending} onPress={clear}>
+                {t("btw.clear")}
+              </Button>
+            </>
           ) : null}
-          <Button testID="btw-inject" variant="ghost" disabled={deliveryDisabled} onPress={inject}>
-            {t("btw.inject")}
-          </Button>
-          <Button
-            testID="btw-summarize"
-            variant="ghost"
-            disabled={deliveryDisabled}
-            onPress={summarize}
-          >
-            {t("btw.summarize")}
-          </Button>
-          <Button testID="btw-new" variant="ghost" disabled={pending} onPress={newThread}>
-            {t("btw.newThread")}
-          </Button>
-          <Button testID="btw-clear" variant="ghost" disabled={pending} onPress={clear}>
-            {t("btw.clear")}
-          </Button>
         </View>
         <Text
           style={visibleError ? styles.error : styles.feedback}
@@ -256,23 +275,10 @@ export function BtwWindowContent({
 }
 const styles = StyleSheet.create((theme) => ({
   content: { flex: 1, minHeight: 0, backgroundColor: theme.colors.surface0 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    paddingHorizontal: theme.spacing[3],
-    paddingTop: theme.spacing[2],
-  },
-  title: {
-    color: theme.colors.foreground,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.medium,
-  },
-  question: { flex: 1, color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
-  subtitle: {
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+  empty: {
     padding: theme.spacing[3],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.content,
   },
   timeline: { flex: 1, minHeight: 0 },
   footer: { padding: theme.spacing[3], gap: theme.spacing[2] },

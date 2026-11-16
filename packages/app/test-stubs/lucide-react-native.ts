@@ -64,6 +64,7 @@ export const Layers = StubIcon;
 export const Link = StubIcon;
 export const Link2 = StubIcon;
 export const MessageSquare = StubIcon;
+export const MessagesSquare = StubIcon;
 export const MessageSquarePlus = StubIcon;
 export const Mic = StubIcon;
 export const MicOff = StubIcon;
