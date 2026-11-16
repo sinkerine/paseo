@@ -1169,6 +1169,7 @@ describe("project command-center RPCs", () => {
             directoryPath,
             project: {
               projectId: "prj_created_directory",
+              projectDefaultIsolation: null,
               projectDisplayName: "new-project",
               projectCustomName: null,
               projectCustomIconRevision: null,
@@ -5783,6 +5784,7 @@ test("project.list returns every active project descriptor", async () => {
             projectKey: "remote:github.com/acme/app",
             projectDisplayName: "acme/app",
             projectCustomName: null,
+            projectDefaultIsolation: null,
             projectCustomIconRevision: null,
             projectIconRevision: "automatic:none:v1",
             projectRootPath: "/tmp/project-active",

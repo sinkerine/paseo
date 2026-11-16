@@ -1,7 +1,14 @@
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import equal from "fast-deep-equal";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import {
+  normalizeProjectPlacement,
+  normalizeWorkspaceGitHubRuntime,
+  type DaemonClient,
+  type NormalizedProjectPlacement,
+  type NormalizedWorkspaceGitHubRuntime,
+} from "@getpaseo/client/internal/daemon-client";
 import type { ViewedTimelineOwner } from "@/timeline/viewed-timeline-sync";
 import type { AgentDirectoryEntry } from "@/types/agent-directory";
 import {
@@ -35,7 +42,6 @@ import type {
 } from "@getpaseo/protocol/agent-types";
 import type {
   ServerInfoStatusPayload,
-  ProjectPlacementPayload,
   ServerCapabilities,
   WorkspaceDescriptorPayload,
   WorkspaceProjectDescriptorPayload,
@@ -102,7 +108,7 @@ export interface Agent {
   background?: boolean;
   parentAgentId: string | null;
   labels: Record<string, string>;
-  projectPlacement?: ProjectPlacementPayload | null;
+  projectPlacement?: NormalizedProjectPlacement | null;
 }
 
 export interface WorkspaceDescriptor {
@@ -113,6 +119,7 @@ export interface WorkspaceDescriptor {
   projectId: string;
   projectDisplayName: string;
   projectCustomName?: string | null;
+  projectDefaultIsolation?: ProjectIsolation | null;
   projectCustomIconRevision?: string | null;
   projectRootPath: string;
   workspaceDirectory: string;
@@ -131,9 +138,9 @@ export interface WorkspaceDescriptor {
   diffStat: { additions: number; deletions: number } | null;
   scripts: WorkspaceDescriptorPayload["scripts"];
   gitRuntime?: WorkspaceDescriptorPayload["gitRuntime"];
-  githubRuntime?: WorkspaceDescriptorPayload["githubRuntime"];
+  githubRuntime?: NormalizedWorkspaceGitHubRuntime;
   forge?: WorkspaceDescriptorPayload["forge"];
-  project?: ProjectPlacementPayload;
+  project?: NormalizedProjectPlacement;
 }
 
 export function normalizeWorkspaceDescriptor(
@@ -152,6 +159,7 @@ export function normalizeWorkspaceDescriptor(
     projectId: payload.projectId,
     projectDisplayName: payload.projectDisplayName,
     projectCustomName: payload.projectCustomName ?? null,
+    projectDefaultIsolation: payload.projectDefaultIsolation ?? null,
     projectCustomIconRevision: payload.projectCustomIconRevision ?? null,
     projectRootPath: payload.projectRootPath,
     // Canonicalize the workspace directory once, at the store boundary, so every
@@ -176,9 +184,9 @@ export function normalizeWorkspaceDescriptor(
     diffStat: payload.diffStat ?? null,
     scripts: (payload.scripts ?? []).map((s) => Object.assign({}, s)),
     gitRuntime: payload.gitRuntime,
-    githubRuntime: payload.githubRuntime,
+    githubRuntime: normalizeWorkspaceGitHubRuntime(payload.githubRuntime),
     forge: payload.forge,
-    project: payload.project,
+    project: payload.project === undefined ? undefined : normalizeProjectPlacement(payload.project),
   };
 }
 
@@ -187,6 +195,7 @@ export interface ProjectDescriptor {
   projectKey?: string | null;
   projectDisplayName: string;
   projectCustomName: string | null;
+  projectDefaultIsolation: ProjectIsolation | null;
   projectCustomIconRevision?: string | null;
   projectIconRevision?: string;
   projectRootPath: string;
@@ -201,6 +210,7 @@ export function normalizeProjectDescriptor(
     projectKey: payload.projectKey ?? null,
     projectDisplayName: payload.projectDisplayName,
     projectCustomName: payload.projectCustomName ?? null,
+    projectDefaultIsolation: payload.projectDefaultIsolation ?? null,
     projectCustomIconRevision: payload.projectCustomIconRevision ?? null,
     projectIconRevision: payload.projectIconRevision,
     projectRootPath: payload.projectRootPath,

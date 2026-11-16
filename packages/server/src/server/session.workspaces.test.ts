@@ -86,6 +86,7 @@ import {
   FileBackedWorkspaceRegistry,
   createPersistedProjectRecord,
   createPersistedWorkspaceRecord,
+  type ProjectRegistry,
   type PersistedProjectRecord,
   type PersistedWorkspaceRecord,
   type WorkspaceMutation,
@@ -712,6 +713,13 @@ function createSessionForWorkspaceTests(
             updatedAt: input.timestamp,
           }),
         upsert: async () => {},
+        async update(this: ProjectRegistry, projectId, updater) {
+          const current = await this.get(projectId);
+          if (!current) return null;
+          const updated = updater(current);
+          await this.upsert(updated);
+          return updated;
+        },
         archive: async () => {},
         remove: async () => {},
       },
@@ -3996,6 +4004,7 @@ test("archiving the last workspace emits a remove carrying the now-empty project
     id: archivedWorkspace.workspaceId,
     emptyProject: {
       projectId: project.projectId,
+      projectDefaultIsolation: null,
       projectDisplayName: "repo",
       projectCustomName: null,
       projectCustomIconRevision: null,
@@ -10214,6 +10223,92 @@ test("path archive of an archived exact child leaves its active parent untouched
     expect(archivedWorkspaces).toEqual([]);
     expect(parent.archivedAt).toBeNull();
     expect(existsSync(root)).toBe(true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("project.isolation.set.request updates, resets and rejects invalid targets without registry writes", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "project-isolation-session-"));
+  const emitted: SessionOutboundMessage[] = [];
+  const registry = new FileBackedProjectRegistry(
+    path.join(root, "projects.json"),
+    createTestLogger(),
+  );
+  const project = createPersistedProjectRecord({
+    projectId: "git",
+    rootPath: root,
+    kind: "git",
+    displayName: "Git",
+    createdAt: "2026-03-01",
+    updatedAt: "2026-03-01",
+  });
+  await registry.upsert(project);
+  await registry.upsert({ ...project, projectId: "notes", kind: "non_git" });
+  await registry.upsert({ ...project, projectId: "archived", archivedAt: "2026-03-02" });
+  const mutations: string[] = [];
+  registry.subscribeToMutations((event) => {
+    mutations.push(event.projectId);
+  });
+  const session = createSessionForWorkspaceTests({
+    projectRegistry: registry,
+    onMessage: (message) => emitted.push(message),
+  });
+  session.updateClientCapabilities({ [CLIENT_CAPS.projectUpdates]: true });
+  try {
+    for (const defaultIsolation of ["worktree", "local", null] as const) {
+      emitted.length = 0;
+      await session.handleMessage({
+        type: "project.isolation.set.request",
+        projectId: "git",
+        requestId: "set",
+        defaultIsolation,
+      });
+      expect(findByType(emitted, "project.isolation.set.response")?.payload).toEqual({
+        requestId: "set",
+        projectId: "git",
+        accepted: true,
+        defaultIsolation,
+        error: null,
+      });
+      expect(await registry.get("git")).toMatchObject({ defaultIsolation });
+      expect(findByType(emitted, "project.update")?.payload).toMatchObject({
+        kind: "upsert",
+        project: { projectId: "git", projectDefaultIsolation: defaultIsolation },
+      });
+    }
+    for (const [projectId, error] of [
+      ["missing", "Project not found"],
+      ["archived", "Project not found"],
+      ["notes", "Worktree isolation requires a Git project"],
+    ]) {
+      mutations.length = 0;
+      emitted.length = 0;
+      await session.handleMessage({
+        type: "project.isolation.set.request",
+        projectId: projectId!,
+        defaultIsolation: "worktree",
+        requestId: "invalid",
+      });
+      expect(findByType(emitted, "project.isolation.set.response")?.payload).toEqual({
+        requestId: "invalid",
+        projectId,
+        accepted: false,
+        defaultIsolation: null,
+        error,
+      });
+      expect(mutations).toEqual([]);
+      expect(findByType(emitted, "project.update")).toBeUndefined();
+    }
+    for (const defaultIsolation of ["local", null] as const) {
+      await session.handleMessage({
+        type: "project.isolation.set.request",
+        projectId: "notes",
+        defaultIsolation,
+        requestId: "notes",
+      });
+      expect(await registry.get("notes")).toMatchObject({ defaultIsolation });
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -10,6 +10,37 @@ import {
 } from "./messages.js";
 
 describe("workspace message schemas", () => {
+  test("parses project isolation mutations and rejects invalid modes", () => {
+    for (const defaultIsolation of [null, "local", "worktree"]) {
+      const request = {
+        type: "project.isolation.set.request",
+        projectId: "prj_1",
+        defaultIsolation,
+        requestId: "isolation",
+      };
+      expect(SessionInboundMessageSchema.parse(request)).toEqual(request);
+      const response = {
+        type: "project.isolation.set.response",
+        payload: {
+          projectId: "prj_1",
+          requestId: "isolation",
+          accepted: true,
+          defaultIsolation,
+          error: null,
+        },
+      };
+      expect(SessionOutboundMessageSchema.parse(response)).toEqual(response);
+    }
+    expect(
+      SessionInboundMessageSchema.safeParse({
+        type: "project.isolation.set.request",
+        projectId: "prj_1",
+        defaultIsolation: "invalid",
+        requestId: "isolation",
+      }).success,
+    ).toBe(false);
+  });
+
   test("parses mark-unread request and response", () => {
     expect(
       SessionInboundMessageSchema.parse({
@@ -654,7 +685,7 @@ describe("workspace message schemas", () => {
     ).toBeUndefined();
   });
 
-  test("parses legacy workspace descriptors without workspaceDirectory", () => {
+  test("accepts legacy workspace descriptors without normalizing workspaceDirectory", () => {
     const parsed = SessionOutboundMessageSchema.parse({
       type: "workspace_update",
       payload: {
@@ -678,7 +709,7 @@ describe("workspace message schemas", () => {
     if (parsed.type !== "workspace_update" || parsed.payload.kind !== "upsert") {
       throw new Error("Expected workspace_update upsert payload");
     }
-    expect(parsed.payload.workspace.workspaceDirectory).toBe("/repo");
+    expect(parsed.payload.workspace.workspaceDirectory).toBeUndefined();
     expect(parsed.payload.workspace.worktreeSlug).toBeUndefined();
   });
 
@@ -1162,7 +1193,7 @@ describe("workspace message schemas", () => {
     });
   });
 
-  test("parses legacy fetch_agents_response checkout payloads without worktreeRoot", () => {
+  test("accepts legacy fetch_agents_response checkout payloads without normalizing worktreeRoot", () => {
     const result = SessionOutboundMessageSchema.safeParse({
       type: "fetch_agents_response",
       payload: {
@@ -1226,7 +1257,7 @@ describe("workspace message schemas", () => {
     }
 
     const checkout = result.data.payload.entries[0]?.project.checkout;
-    expect(checkout?.worktreeRoot).toBe("C:\\repo");
+    expect(checkout?.worktreeRoot).toBeUndefined();
   });
 
   test("workspace summary parses without forge and round-trips forge when present", () => {

@@ -1,3 +1,4 @@
+import type { NormalizedSessionOutboundMessage as SessionOutboundMessage } from "../workspace-descriptors.js";
 export { OwnedSubscriptions, type OwnedSubscription, type SubscriptionObserver } from "./owned.js";
 import {
   OwnedSubscriptions,
@@ -7,7 +8,6 @@ import {
 import { LegacySubscriptions, type ObservationRequest } from "./legacy.js";
 import {
   type SessionInboundMessage,
-  type SessionOutboundMessage,
   type ServerInfoStatusPayload,
 } from "@getpaseo/protocol/messages";
 import { CLIENT_CAPS, type ClientCapability } from "@getpaseo/protocol/client-capabilities";

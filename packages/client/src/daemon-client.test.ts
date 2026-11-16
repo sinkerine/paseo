@@ -9545,3 +9545,319 @@ test("forkAgentSession sends native boundaries, waits for the worker, and preser
     vi.useRealTimers();
   }
 });
+
+test("normalizes omitted legacy workspace fields before correlated responses and live listeners", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "workspace-defaults",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connected = client.connect();
+  mock.triggerOpen();
+  await connected;
+  const workspace = {
+    id: "workspace",
+    projectId: "project",
+    projectDisplayName: "Project",
+    projectRootPath: "/repo",
+    projectKind: "git",
+    workspaceKind: "local_checkout",
+    name: "main",
+    status: "done",
+    activityAt: null,
+    scripts: [],
+  };
+  const result = client.fetchWorkspaces();
+  const request = parseSentFrame(mock.sent.at(-1));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "fetch_workspaces_response",
+      payload: {
+        requestId: request.requestId,
+        entries: [workspace],
+        pageInfo: { nextCursor: null, prevCursor: null, hasMore: false },
+      },
+    }),
+  );
+  await expect(result).resolves.toMatchObject({
+    entries: [{ workspaceDirectory: "/repo", statusEnteredAt: null }],
+  });
+  const received: unknown[] = [];
+  client.subscribeRawMessages((message) => {
+    if (message.type === "workspace_update") received.push(message.payload);
+  });
+  mock.triggerMessage(
+    wrapSessionMessage({ type: "workspace_update", payload: { kind: "upsert", workspace } }),
+  );
+  expect(received).toEqual([
+    expect.objectContaining({
+      workspace: expect.objectContaining({ workspaceDirectory: "/repo", statusEnteredAt: null }),
+    }),
+  ]);
+});
+
+function legacyDescriptorFixtures() {
+  const project = {
+    projectKey: "project",
+    projectName: "Project",
+    extraPlacement: true,
+    checkout: {
+      cwd: "/repo/sub",
+      isGit: true,
+      currentBranch: null,
+      remoteUrl: null,
+      isPaseoOwnedWorktree: false,
+      extraCheckout: true,
+    },
+  };
+  const agent = {
+    id: "agent",
+    provider: "codex",
+    cwd: "/repo/sub",
+    model: null,
+    createdAt: "now",
+    updatedAt: "now",
+    lastUserMessageAt: null,
+    status: "idle",
+    currentModeId: null,
+    capabilities: {
+      supportsStreaming: false,
+      supportsSessionPersistence: false,
+      supportsDynamicModes: false,
+      supportsMcpServers: false,
+      supportsReasoningStream: false,
+      supportsToolInvocations: false,
+    },
+    availableModes: [],
+    pendingPermissions: [],
+    persistence: null,
+    title: null,
+  };
+  const workspace = {
+    id: "workspace",
+    projectId: "project",
+    projectDisplayName: "Project",
+    projectRootPath: "/repo",
+    projectKind: "git",
+    workspaceKind: "local_checkout",
+    name: "main",
+    status: "done",
+    activityAt: null,
+    project,
+    githubRuntime: {
+      pullRequest: {
+        url: "https://forge/pull/1",
+        title: "Change",
+        state: "OPEN",
+        baseRefName: "main",
+        headRefName: "branch",
+        isMerged: false,
+        mergeable: { future: true },
+        extraPullRequest: true,
+      },
+    },
+  };
+  const snapshot = {
+    kind: "workspace",
+    idempotencyKey: "key",
+    revision: 1,
+    phase: "workspace_ready",
+    workspaceId: "workspace",
+    agentId: null,
+    workspace,
+    error: null,
+  };
+  return { project, agent, workspace, snapshot };
+}
+
+test("driver decodes nested descriptors on every workspace, creation and agent placement entry", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "nested-decode",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connected = client.connect();
+  mock.triggerOpen();
+  await connected;
+  const { project, agent, workspace, snapshot } = legacyDescriptorFixtures();
+  const pageInfo = { nextCursor: null, prevCursor: null, hasMore: false };
+  const messages = [
+    {
+      type: "fetch_workspaces_response",
+      payload: { requestId: "list", entries: [workspace], pageInfo },
+    },
+    { type: "workspace_update", payload: { kind: "upsert", workspace } },
+    {
+      type: "open_project_response",
+      payload: { requestId: "open", workspace, error: null, errorCode: null },
+    },
+    {
+      type: "create_paseo_worktree_response",
+      payload: { requestId: "legacy", workspace, error: null, setupTerminalId: null },
+    },
+    {
+      type: "workspace.create.response",
+      payload: {
+        requestId: "create",
+        workspace,
+        error: null,
+        setupTerminalId: null,
+        creation: snapshot,
+      },
+    },
+    {
+      type: "agent.create.response",
+      payload: { requestId: "agent", agent, error: null, creation: { ...snapshot, kind: "agent" } },
+    },
+    { type: "workspace.create.update", payload: snapshot },
+    { type: "agent.create.update", payload: { ...snapshot, kind: "agent" } },
+    {
+      type: "creation.subscribe.response",
+      payload: { requestId: "subscribe", snapshot, error: null },
+    },
+    { type: "agent_update", payload: { kind: "upsert", agent, project } },
+    {
+      type: "fetch_agents_response",
+      payload: { requestId: "agents", entries: [{ agent, project }], pageInfo },
+    },
+    {
+      type: "fetch_agent_history_response",
+      payload: { requestId: "history", entries: [{ agent, project }], pageInfo },
+    },
+    { type: "fetch_agent_response", payload: { requestId: "fetch", agent, project, error: null } },
+  ];
+  const received: unknown[] = [];
+  client.subscribeRawMessages((message) => received.push(message));
+  for (const message of messages) {
+    mock.triggerMessage(wrapSessionMessage(message));
+    expect(received).toHaveLength(messages.indexOf(message) + 1);
+    const encoded = JSON.stringify(received.at(-1));
+    expect(encoded).toContain('"worktreeRoot":"/repo/sub"');
+    expect(encoded).toContain('"extraPlacement":true');
+    expect(encoded).toContain('"extraCheckout":true');
+  }
+  for (const message of received.slice(0, 9)) {
+    expect(JSON.stringify(message)).toContain('"mergeable":"UNKNOWN"');
+    expect(JSON.stringify(message)).toContain('"extraPullRequest":true');
+  }
+  for (const absentProject of [undefined, null]) {
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "agent_update",
+        payload: { kind: "upsert", agent, project: absentProject },
+      }),
+    );
+    expect(received.at(-1)).toMatchObject({ payload: { project: absentProject } });
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "fetch_agent_response",
+        payload: { requestId: "none", agent: null, project: absentProject, error: null },
+      }),
+    );
+    expect(received.at(-1)).toMatchObject({ payload: { project: absentProject } });
+  }
+});
+
+test("correlated fetch, owned directory subscription and create consumers receive normalized nested descriptors", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "nested-consumers",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connected = client.connect();
+  mock.triggerOpen();
+  await connected;
+  const { project, agent, workspace } = legacyDescriptorFixtures();
+  const pageInfo = { nextCursor: null, prevCursor: null, hasMore: false };
+  const expected = {
+    checkout: { worktreeRoot: "/repo/sub", isGit: true, isPaseoOwnedWorktree: false },
+  };
+  const list = client.fetchAgents({ subscribe: {} });
+  const listRequest = parseSentFrame(mock.sent.at(-1));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "fetch_agents_response",
+      payload: {
+        requestId: listRequest.requestId,
+        subscriptionId: "directory",
+        entries: [{ agent, project }],
+        pageInfo,
+      },
+    }),
+  );
+  const directory = await list;
+  expect(directory.entries[0]?.project).toMatchObject(expected);
+  const updates: unknown[] = [];
+  directory.subscription!.subscribe({
+    snapshot: () => {},
+    update: (message) => updates.push(message),
+  });
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent_update",
+      payload: {
+        subscriptionId: "directory",
+        kind: "upsert",
+        agent,
+        project,
+      },
+    }),
+  );
+  expect(updates).toMatchObject([{ payload: { project: expected } }]);
+  const history = client.fetchAgentHistory();
+  const historyRequest = parseSentFrame(mock.sent.at(-1));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "fetch_agent_history_response",
+      payload: {
+        requestId: historyRequest.requestId,
+        entries: [{ agent, project }],
+        pageInfo,
+      },
+    }),
+  );
+  expect((await history).entries[0]?.project).toMatchObject(expected);
+  const fetched = client.fetchAgent("agent");
+  const fetchRequest = parseSentFrame(mock.sent.at(-1));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "fetch_agent_response",
+      payload: {
+        requestId: fetchRequest.requestId,
+        agent,
+        project,
+        error: null,
+      },
+    }),
+  );
+  expect((await fetched)?.project).toMatchObject(expected);
+  const created = client.createWorkspace({ source: { kind: "directory", path: "/repo" } });
+  const createRequest = parseSentFrame(mock.sent.at(-1));
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "workspace.create.response",
+      payload: {
+        requestId: createRequest.requestId,
+        workspace,
+        error: null,
+        setupTerminalId: null,
+      },
+    }),
+  );
+  expect((await created).workspace).toMatchObject({
+    project: expected,
+    githubRuntime: { pullRequest: { mergeable: "UNKNOWN" } },
+  });
+});

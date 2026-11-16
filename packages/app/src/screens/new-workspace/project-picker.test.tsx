@@ -21,6 +21,7 @@ function project(input: {
         projectId: input.projectId,
         iconWorkingDir: `/work/${input.projectId}`,
         worktreeSupport: "supported",
+        defaultIsolation: null,
       },
     ],
     workspaceKeys: [],

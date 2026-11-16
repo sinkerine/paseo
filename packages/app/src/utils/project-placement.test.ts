@@ -42,3 +42,30 @@ describe("project-placement", () => {
     expect(resolved).toBe(existing);
   });
 });
+
+it("normalizes an older placement through the shared client boundary", () => {
+  const placement = resolveProjectPlacement({
+    cwd: "/repo/sub",
+    projectPlacement: {
+      projectKey: "key",
+      projectName: "Project",
+      checkout: {
+        cwd: "/repo/sub",
+        isGit: true,
+        currentBranch: null,
+        remoteUrl: null,
+        isPaseoOwnedWorktree: false,
+        mainRepoRoot: null,
+      },
+    },
+  });
+  expect(placement.checkout).toEqual({
+    cwd: "/repo/sub",
+    isGit: true,
+    currentBranch: null,
+    remoteUrl: null,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
+    worktreeRoot: "/repo/sub",
+  });
+});

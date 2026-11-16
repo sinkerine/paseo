@@ -24,6 +24,7 @@ function project(projectKey: string, serverId = "host"): HostProjectListItem {
         projectId: projectKey,
         iconWorkingDir: `/work/${projectKey}`,
         worktreeSupport: "supported" as const,
+        defaultIsolation: null,
       },
     ],
     workspaceKeys: [],
@@ -128,6 +129,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "local-project-id",
           iconWorkingDir: "/work/project",
           worktreeSupport: "supported" as const,
+          defaultIsolation: null,
         },
       ],
     };
@@ -139,6 +141,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "local-project-id",
           iconWorkingDir: "/work/project",
           worktreeSupport: "unsupported" as const,
+          defaultIsolation: null,
         },
       ],
     };
@@ -302,6 +305,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "prj_a",
           iconWorkingDir: "/work/a",
           worktreeSupport: "supported" as const,
+          defaultIsolation: null,
         },
       ],
     };
@@ -339,6 +343,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "prj_b",
           iconWorkingDir: "/work/selected",
           worktreeSupport: "supported" as const,
+          defaultIsolation: null,
         },
       ],
     };
@@ -422,6 +427,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "prj_b",
           iconWorkingDir: "/work/selected",
           worktreeSupport: "supported" as const,
+          defaultIsolation: null,
         },
       ],
     };
@@ -467,6 +473,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "shared",
           iconWorkingDir: "/work/shared",
           worktreeSupport: "unsupported" as const,
+          defaultIsolation: null,
         },
       ],
     };
@@ -620,6 +627,7 @@ describe("reconcileProjectSelection", () => {
           projectId: "sibling",
           iconWorkingDir: "/work/sibling",
           worktreeSupport: "supported" as const,
+          defaultIsolation: null,
         },
       ],
     };

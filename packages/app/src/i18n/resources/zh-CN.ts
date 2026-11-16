@@ -3068,6 +3068,14 @@ export const zhCN: TranslationResources = {
       },
     },
     project: {
+      workspaces: {
+        title: "工作区",
+        info: "此主机上新工作区的默认隔离方式",
+        defaultIsolation: "新工作区隔离方式",
+        defaultIsolationHint: "记住上次选择会使用最近选择的工作区隔离方式",
+        savedToast: "工作区隔离方式已更新",
+        options: { rememberLast: "记住上次选择" },
+      },
       noEditableTarget: "此项目无法在这个 Host 上编辑。",
       backToProjects: "返回 Projects",
       edit: {

@@ -58,6 +58,7 @@ function makeProject(
         projectId: viewKey,
         iconWorkingDir: `/repo/${viewKey}`,
         worktreeSupport: "supported" as const,
+        defaultIsolation: null,
       },
     ],
     workspaces,

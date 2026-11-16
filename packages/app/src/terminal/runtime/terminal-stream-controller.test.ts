@@ -1,5 +1,5 @@
 import { resolveTerminalRestoreOptions } from "./terminal-restore-options";
-import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
+import type { NormalizedSessionOutboundMessage as SessionOutboundMessage } from "@getpaseo/client/internal/daemon-client";
 import { describe, expect, it } from "vitest";
 
 import {

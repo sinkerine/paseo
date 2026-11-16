@@ -1,4 +1,4 @@
-import type { WorkspaceDescriptorPayload } from "@getpaseo/protocol/messages";
+import type { PaseoWorkspace } from "@getpaseo/client";
 import type { OutputSchema } from "../../output/index.js";
 
 export interface WorkspaceRow {
@@ -30,7 +30,7 @@ export const workspaceWithBackgroundSchema: OutputSchema<WorkspaceRow> = {
   ],
 };
 
-export function toWorkspaceRow(workspace: WorkspaceDescriptorPayload): WorkspaceRow {
+export function toWorkspaceRow(workspace: PaseoWorkspace): WorkspaceRow {
   return {
     workspaceId: workspace.id,
     project: workspace.projectDisplayName,

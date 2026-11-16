@@ -14,6 +14,7 @@ function descriptor(
     projectKey: key,
     projectDisplayName: "acme/app",
     projectCustomName: null,
+    projectDefaultIsolation: null,
     projectIconRevision: iconRevision,
     projectRootPath: root,
     projectKind: "git",
@@ -28,6 +29,7 @@ function workspace(id: string, projectId: string, root: string): WorkspaceDescri
     projectId,
     projectDisplayName: "acme/app",
     projectCustomName: null,
+    projectDefaultIsolation: null,
     projectRootPath: root,
     workspaceDirectory: root,
     projectKind: "git",
@@ -42,6 +44,39 @@ function workspace(id: string, projectId: string, root: string): WorkspaceDescri
 }
 
 describe("buildProjects", () => {
+  test("projects independent host defaults into the settings host entries", () => {
+    const key = "remote:github.com/acme/app";
+    const result = buildProjects({
+      hosts: [
+        {
+          serverId: "host-a",
+          serverName: "Host A",
+          isOnline: true,
+          projects: [{ ...descriptor("prj_a", key, "/a/app"), projectDefaultIsolation: "local" }],
+          workspaces: [],
+        },
+        {
+          serverId: "host-b",
+          serverName: "Host B",
+          isOnline: true,
+          projects: [
+            { ...descriptor("prj_b", key, "/b/app"), projectDefaultIsolation: "worktree" },
+          ],
+          workspaces: [],
+        },
+      ],
+    });
+    expect(
+      result.projects[0]?.hosts.map((host) => ({
+        serverId: host.serverId,
+        defaultIsolation: host.defaultIsolation,
+      })),
+    ).toEqual([
+      { serverId: "host-a", defaultIsolation: "local" },
+      { serverId: "host-b", defaultIsolation: "worktree" },
+    ]);
+  });
+
   test("uses the grouped project list while retaining each host project id", () => {
     const key = "remote:github.com/acme/app";
     const result = buildProjects({

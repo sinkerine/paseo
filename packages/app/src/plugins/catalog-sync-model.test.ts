@@ -1,3 +1,4 @@
+import { normalizeWorkspaceDescriptors } from "@getpaseo/client/internal/daemon-client";
 import { getPluginClientApi } from "./client-state/api";
 import appPackage from "../../package.json";
 import { afterEach, expect, it } from "vitest";
@@ -91,7 +92,7 @@ class CatalogClient extends DaemonClient {
   }
 
   update(message: SessionOutboundMessage) {
-    for (const observer of this.observers) observer.update(message);
+    for (const observer of this.observers) observer.update(normalizeWorkspaceDescriptors(message));
   }
 
   snapshot() {

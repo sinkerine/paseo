@@ -128,7 +128,11 @@ export function createWorkspaceGitObserverService(deps: {
     }
   }
 
-  function syncObserver(cwd: string, options: { isGit: boolean; workspaceId: string }): void {
+  function syncObserver(
+    cwd: string | undefined,
+    options: { isGit: boolean; workspaceId: string },
+  ): void {
+    if (cwd === undefined) throw new Error("Workspace execution directory is required");
     const normalizedCwd = resolve(cwd);
     const currentState = workspaceStates.get(options.workspaceId);
     if (currentState && currentState.cwd !== normalizedCwd) {

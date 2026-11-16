@@ -1,3 +1,5 @@
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
+import { areEquivalentPaths } from "../../../utils/path.js";
 import { registerPluginTools } from "./plugin-tools.js";
 import type { FinishSubscriptions, FinishRegistration } from "../finish-subscriptions/index.js";
 import type { AgentMessageDelivery } from "../agent-messages/index.js";
@@ -116,6 +118,27 @@ import {
 } from "./types.js";
 import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-config";
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
+
+export async function resolveToolWorkspaceIsolation(input: {
+  explicitIsolation: ProjectIsolation | undefined;
+  projectId: string | undefined;
+  path: string | undefined;
+  resolveScopedCwd: (rawPath: string | undefined, opts: { required: boolean }) => string;
+  projectRegistry: Pick<ProjectRegistry, "get" | "list"> | undefined;
+}): Promise<ProjectIsolation> {
+  if (input.explicitIsolation !== undefined) return input.explicitIsolation;
+  if (!input.projectRegistry) return "local";
+  let project;
+  if (input.projectId) project = await input.projectRegistry.get(input.projectId);
+  else {
+    const cwd = input.resolveScopedCwd(input.path, { required: true });
+    project = (await input.projectRegistry.list()).find(
+      (entry) => entry.archivedAt === null && areEquivalentPaths(entry.rootPath, cwd),
+    );
+  }
+  if (!project || project.archivedAt !== null || project.kind !== "git") return "local";
+  return project.defaultIsolation ?? "local";
+}
 
 export interface PaseoToolHostDependencies {
   agentMessages?: () => AgentMessageDelivery;
@@ -904,6 +927,21 @@ function createToolCatalog(
     return expandUserPath(trimmedCwd);
   };
 
+  async function resolveLocalWorkspaceCwd(
+    requestedPath?: string,
+    projectId?: string,
+  ): Promise<string> {
+    if (requestedPath !== undefined || !projectId)
+      return resolveScopedCwd(requestedPath, { required: true });
+    if (!options.projectRegistry) throw new Error("Project registry is not configured");
+    const rootPath = await resolveWorktreeSourceCwd({ projectId }, options.projectRegistry);
+    const cwd = resolveScopedCwd(rootPath, { required: true });
+    if (!areEquivalentPaths(cwd, rootPath)) {
+      throw new PaseoToolInputError(`Project ${projectId} is outside the allowed cwd`);
+    }
+    return cwd;
+  }
+
   async function resolveTerminalWorkspaceId(resolvedCwd: string): Promise<string> {
     // An agent-spawned terminal belongs to the caller agent's workspace. Only if
     // the caller has no workspace do we mint one for the cwd.
@@ -1402,7 +1440,10 @@ function createToolCatalog(
       description:
         "Create a workspace using an existing local checkout or a new Paseo-managed worktree.",
       inputSchema: {
-        isolation: z.enum(["local", "worktree"]),
+        isolation: z
+          .enum(["local", "worktree"])
+          .optional()
+          .describe("Workspace isolation. Defaults to the project setting, or local when unset."),
         path: z
           .string()
           .optional()
@@ -1451,7 +1492,7 @@ function createToolCatalog(
       outputSchema: WorkspaceAutomationSummarySchema.shape,
     },
     async ({
-      isolation,
+      isolation: explicitIsolation,
       path,
       projectId,
       title,
@@ -1464,9 +1505,16 @@ function createToolCatalog(
       prNumber,
       forge,
     }) => {
+      const isolation = await resolveToolWorkspaceIsolation({
+        explicitIsolation,
+        projectId,
+        path,
+        resolveScopedCwd,
+        projectRegistry: options.projectRegistry,
+      });
       let workspace: PersistedWorkspaceRecord;
       if (isolation === "local") {
-        const cwd = resolveScopedCwd(path, { required: true });
+        const cwd = await resolveLocalWorkspaceCwd(path, projectId);
         if (!(await isExistingDirectory(cwd))) {
           throw new PaseoToolInputError(`Directory not found: ${cwd}`);
         }

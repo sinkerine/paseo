@@ -1,3 +1,18 @@
+export {
+  normalizeWorkspaceDescriptors,
+  normalizeProjectPlacement,
+  normalizeWorkspaceGitHubRuntime,
+  type NormalizedProjectPlacement,
+  type NormalizedWorkspaceDescriptor,
+  type NormalizedWorkspaceGitHubRuntime,
+  type NormalizedSessionOutboundMessage,
+} from "./workspace-descriptors.js";
+import {
+  normalizeWorkspaceDescriptors,
+  type NormalizedProjectPlacement as ProjectPlacementPayload,
+  type NormalizedSessionOutboundMessage,
+} from "./workspace-descriptors.js";
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import {
   DiffStreamRouter,
   DiffSubscriptionError,
@@ -26,7 +41,8 @@ import {
   type TimelineSubscription,
 } from "./connection/index.js";
 import { CreationClient } from "./creation/index.js";
-import type { CreationSnapshot, ClientNotificationScope } from "@getpaseo/protocol/messages";
+import type { NormalizedCreationSnapshot as CreationSnapshot } from "./workspace-descriptors.js";
+import type { ClientNotificationScope } from "@getpaseo/protocol/messages";
 import type { z } from "zod";
 import type { SessionEventSubscription } from "@getpaseo/protocol/messages";
 import type { LocalSpeechModel } from "@getpaseo/protocol/speech/rpc-schemas";
@@ -52,7 +68,6 @@ import { validateWSOutboundMessage } from "@getpaseo/protocol/validation/ws-outb
 import type {
   AgentStreamEventPayload,
   AgentSnapshotPayload,
-  ProjectPlacementPayload,
   AgentPermissionResolvedMessage,
   CreateAgentRequestMessage,
   CreatePaseoWorktreeRequest,
@@ -100,7 +115,6 @@ import type {
   ProjectIconGetResponse,
   ProjectAddResponse,
   ProjectCreateDirectoryResponse,
-  OpenProjectResponseMessage,
   WorkspaceGithubSearchRepositoriesResponse,
   ProjectGithubCloneProtocol,
   ProjectGithubCloneResponse,
@@ -130,7 +144,7 @@ import type {
   CaptureTerminalResponse,
   TerminalInput,
   SessionInboundMessage,
-  SessionOutboundMessage,
+  SessionOutboundMessage as WireSessionOutboundMessage,
   SendAgentMessageRequest,
   PaseoConfigRaw,
   PaseoConfigRevision,
@@ -200,6 +214,8 @@ import type {
   BrowserAutomationExecuteRequest,
   BrowserAutomationExecuteResponse,
 } from "@getpaseo/protocol/browser-automation/rpc-schemas";
+
+type SessionOutboundMessage = NormalizedSessionOutboundMessage;
 
 export interface Logger {
   debug(obj: object, msg?: string): void;
@@ -972,7 +988,10 @@ export interface RenameTerminalInput {
   title: string;
   requestId?: string;
 }
-type OpenProjectPayload = OpenProjectResponseMessage["payload"];
+type OpenProjectPayload = Extract<
+  SessionOutboundMessage,
+  { type: "open_project_response" }
+>["payload"];
 type ProjectAddPayload = ProjectAddResponse["payload"];
 export type ProjectCreateDirectoryPayload = ProjectCreateDirectoryResponse["payload"];
 export type WorkspaceGithubSearchRepositoriesPayload =
@@ -2121,7 +2140,7 @@ export class DaemonClient {
     this.endTraceSection(isOpen);
   }
 
-  private beginSessionDispatchTrace(message: SessionOutboundMessage): boolean {
+  private beginSessionDispatchTrace(message: WireSessionOutboundMessage): boolean {
     if (!this.config.trace?.isEnabled()) return false;
     const fields = { messageType: message.type, ...describeRequestIdentity(message) };
     this.traceInstant("paseo.ws.message.inbound", { envelopeType: "session", ...fields });
@@ -3617,6 +3636,20 @@ export class DaemonClient {
     if (!payload.accepted) {
       throw new Error(payload.error ?? "updateAgent rejected");
     }
+  }
+
+  async setProjectIsolation(
+    projectId: string,
+    defaultIsolation: ProjectIsolation | null,
+    requestId?: string,
+  ): Promise<{ defaultIsolation: ProjectIsolation | null }> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"project.isolation.set.response">({
+        requestId,
+        message: { type: "project.isolation.set.request", projectId, defaultIsolation },
+      });
+    if (!payload.accepted) throw new Error(payload.error ?? "setProjectIsolation rejected");
+    return { defaultIsolation: payload.defaultIsolation };
   }
 
   async renameProject(
@@ -7731,8 +7764,8 @@ export class DaemonClient {
     });
   }
 
-  private handleSessionMessage(msg: SessionOutboundMessage): void {
-    msg = this.owned.normalize(msg);
+  private handleSessionMessage(wireMessage: WireSessionOutboundMessage): void {
+    const msg = this.owned.normalize(normalizeWorkspaceDescriptors(wireMessage));
     if (
       msg.type === "providers_snapshot_update" &&
       this.config.providerSnapshots !== "wire" &&

@@ -14,6 +14,7 @@ function project(projectId: string, projectKey = projectId): ProjectDescriptor {
     projectKey,
     projectDisplayName: projectId,
     projectCustomName: null,
+    projectDefaultIsolation: null,
     projectRootPath: `/repos/${projectId}`,
     projectKind: "git",
   };

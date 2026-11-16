@@ -64,6 +64,7 @@ function target(input: {
   projectName: string;
   cwd: string;
   isGit?: boolean;
+  defaultIsolation?: ScheduleProjectTarget["defaultIsolation"];
 }): ScheduleProjectTarget {
   return {
     optionId: buildProjectOptionId(input.serverId, input.projectKey),
@@ -73,6 +74,7 @@ function target(input: {
     projectName: input.projectName,
     cwd: input.cwd,
     isGit: input.isGit ?? true,
+    defaultIsolation: input.defaultIsolation ?? null,
   };
 }
 
@@ -389,6 +391,7 @@ describe("schedule form model", () => {
       projectName: "Plain Project",
       cwd: "/tmp/plain",
       isGit: false,
+      defaultIsolation: null,
     });
     const nonGit = open({
       mode: "create",
@@ -408,6 +411,7 @@ describe("schedule form model", () => {
       projectName: "Git Project",
       cwd: "/tmp/git",
       isGit: true,
+      defaultIsolation: null,
     });
     const unsupportedHost = openWithHosts({
       mode: "create",
@@ -463,6 +467,7 @@ describe("schedule form model", () => {
       projectName: "Plain Project",
       cwd: "/repo/b",
       isGit: false,
+      defaultIsolation: null,
     });
     const form = open({
       mode: "edit",
@@ -759,4 +764,46 @@ describe("schedule form model", () => {
       isolation: "worktree",
     });
   });
+});
+
+it("seeds pinned isolation, clears A to B to A overrides and preserves saved edit config", () => {
+  const a = { ...PROJECT_TARGETS[0]!, defaultIsolation: "worktree" as const };
+  const b = { ...PROJECT_TARGETS[1]!, defaultIsolation: "local" as const };
+  const form = open({
+    mode: "create",
+    defaults: { serverId: "host-a", projectTargets: [a, b], preferences: { isolation: "local" } },
+  });
+  form.setProject(a.optionId, { label: a.projectName });
+  expect(form.getState().isolation).toBe("worktree");
+  form.setIsolation("local");
+  form.setProject(b.optionId, { label: b.projectName });
+  form.setProject(a.optionId, { label: a.projectName });
+  expect(form.getState().isolation).toBe("worktree");
+  form.applyPreferences({ isolation: "local" });
+  expect(form.getState().isolation).toBe("worktree");
+  form.setIsolation("local");
+  form.setHost("host-b");
+  form.setHost("host-a");
+  form.setProject(a.optionId, { label: a.projectName });
+  expect(form.getState().isolation).toBe("worktree");
+  form.close();
+  const saved = scheduleOnHost({
+    serverId: "host-a",
+    serverName: "Host A",
+    cwd: a.cwd,
+    model: "model-a",
+  });
+  const edit = open({
+    mode: "edit",
+    schedule: saved,
+    defaults: {
+      serverId: "host-a",
+      projectTargets: [{ ...a, defaultIsolation: "local" }],
+      preferences: { isolation: "local" },
+    },
+  });
+  expect(edit.getState().isolation).toBe("worktree");
+  edit.applyProjectTargets([{ ...a, defaultIsolation: "local" }]);
+  expect(edit.getState().isolation).toBe("worktree");
+  edit.close();
 });

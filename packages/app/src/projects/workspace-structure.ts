@@ -1,3 +1,4 @@
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import type { ProjectDescriptor, WorkspaceDescriptor } from "@/stores/session-store";
 import { projectDisplayNameFromProjectId } from "@/utils/project-display-name";
 
@@ -6,6 +7,7 @@ export interface WorkspaceStructureHostPlacement {
   projectId: string;
   iconWorkingDir: string;
   worktreeSupport: "supported" | "unsupported" | "unknown";
+  defaultIsolation: ProjectIsolation | null;
   customIconRevision?: string | null;
   iconRevision?: string;
 }
@@ -167,6 +169,7 @@ function addProjectToView(input: {
   const placement: WorkspaceStructureHostPlacement = {
     serverId,
     projectId: project.projectId,
+    defaultIsolation: project.projectDefaultIsolation,
     iconWorkingDir: project.projectRootPath,
     worktreeSupport: project.projectKind === "git" ? "supported" : "unsupported",
     customIconRevision: project.projectCustomIconRevision,

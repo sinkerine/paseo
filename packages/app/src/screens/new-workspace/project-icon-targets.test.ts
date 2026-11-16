@@ -14,6 +14,7 @@ const project: HostProjectListItem = {
       projectId: "project-a",
       iconWorkingDir: "/work/app",
       worktreeSupport: "supported",
+      defaultIsolation: null,
       customIconRevision: "custom-revision",
       iconRevision: "effective-revision",
     },

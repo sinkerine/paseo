@@ -1,3 +1,4 @@
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import type { ProjectDescriptor, WorkspaceDescriptor } from "@/stores/session-store";
 import type { HostProjectListItem } from "@/projects/host-project-model";
 import { buildWorkspaceStructureProjects } from "@/projects/workspace-structure";
@@ -21,6 +22,8 @@ export interface ProjectHostEntry {
   projectId: string;
   projectName: string;
   projectCustomName: string | null;
+  projectKind: ProjectDescriptor["projectKind"];
+  defaultIsolation: ProjectIsolation | null;
   serverName: string;
   isOnline: boolean;
   repoRoot: string;
@@ -88,6 +91,8 @@ interface HostGroup {
   projectId: string;
   projectName: string;
   projectCustomName: string | null;
+  projectKind: ProjectDescriptor["projectKind"];
+  defaultIsolation: ProjectIsolation | null;
   serverName: string;
   isOnline: boolean;
   workspaces: WorkspaceDescriptor[];
@@ -176,6 +181,8 @@ function toHostEntry(group: HostGroup): ProjectHostEntry {
     projectId: group.projectId,
     projectName: group.projectName,
     projectCustomName: group.projectCustomName,
+    projectKind: group.projectKind,
+    defaultIsolation: group.defaultIsolation,
     serverName: group.serverName,
     isOnline: group.isOnline,
     repoRoot,
@@ -243,6 +250,8 @@ function addHostProjects(
       group.hostsByServerId.set(host.serverId, {
         serverId: host.serverId,
         projectId,
+        projectKind: placement.worktreeSupport === "supported" ? "git" : "non_git",
+        defaultIsolation: placement.defaultIsolation,
         projectName: customName?.displayName ?? hostProject.projectName,
         projectCustomName: customName?.customName ?? null,
         serverName: host.serverName,

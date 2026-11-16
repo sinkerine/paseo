@@ -69,6 +69,126 @@ async function compileInlineSchema(sourceSchema: string): Promise<GeneratedSchem
 }
 
 describe("WS outbound zod-aot validation", () => {
+  it("retains the historical generated unknown-key behavior around checkout transforms", async () => {
+    const legacy = await compileInlineSchema(`
+const SourceSchema = z.object({
+  checkout: z.object({
+    cwd: z.string(), isGit: z.literal(true), currentBranch: z.string().nullable(),
+    remoteUrl: z.string().nullable(), worktreeRoot: z.string().optional(),
+    isPaseoOwnedWorktree: z.literal(false), mainRepoRoot: z.string().nullable().optional().default(null),
+  }).transform(value => ({ ...value, worktreeRoot: value.worktreeRoot ?? value.cwd })),
+});
+`);
+    expect(
+      legacy.safeParse({
+        extraPlacement: true,
+        checkout: {
+          cwd: "/repo/sub",
+          isGit: true,
+          currentBranch: null,
+          remoteUrl: null,
+          isPaseoOwnedWorktree: false,
+          extraCheckout: true,
+        },
+      }),
+    ).toMatchObject({
+      success: true,
+      data: { extraPlacement: true, checkout: { extraCheckout: true, worktreeRoot: "/repo/sub" } },
+    });
+  });
+
+  it.each(
+    [undefined, "MERGEABLE", "CONFLICTING", "UNKNOWN", "FUTURE", null, 42, true, {}, []].map(
+      (mergeable) => ({ mergeable }),
+    ),
+  )("keeps nested descriptor validation structural for mergeable $mergeable", ({ mergeable }) => {
+    const workspace = {
+      id: "workspace",
+      projectId: "project",
+      projectDisplayName: "Project",
+      projectRootPath: "/repo",
+      projectKind: "git",
+      workspaceKind: "local_checkout",
+      name: "main",
+      status: "done",
+      activityAt: null,
+      extraWorkspace: true,
+      project: {
+        projectKey: "key",
+        projectName: "Project",
+        extraPlacement: true,
+        checkout: {
+          cwd: "/repo/sub",
+          isGit: true,
+          currentBranch: null,
+          remoteUrl: null,
+          isPaseoOwnedWorktree: false,
+          extraCheckout: true,
+        },
+      },
+      githubRuntime: {
+        extraRuntime: true,
+        pullRequest: {
+          url: "https://forge/pull/1",
+          title: "Change",
+          state: "OPEN",
+          baseRefName: "main",
+          headRefName: "branch",
+          isMerged: false,
+          mergeable,
+          extraPullRequest: true,
+        },
+      },
+    };
+    const decoded = validateWSOutboundMessage({
+      type: "session",
+      message: {
+        type: "workspace_update",
+        payload: { kind: "upsert", workspace },
+      },
+    });
+    expect(decoded).toMatchObject({ success: true, data: { message: { payload: { workspace } } } });
+    if (
+      !decoded.success ||
+      decoded.data.type !== "session" ||
+      decoded.data.message.type !== "workspace_update" ||
+      decoded.data.message.payload.kind !== "upsert"
+    )
+      throw new Error("Descriptor rejected");
+    expect(decoded.data.message.payload.workspace.project?.checkout.worktreeRoot).toBeUndefined();
+    expect(decoded.data.message.payload.workspace.githubRuntime?.pullRequest?.mergeable).toEqual(
+      mergeable,
+    );
+  });
+
+  it.each([null, "local", "worktree"])(
+    "validates project isolation response %s through generated validators",
+    (defaultIsolation) => {
+      const response = {
+        type: "session",
+        message: {
+          type: "project.isolation.set.response",
+          payload: {
+            requestId: "isolation",
+            projectId: "project",
+            accepted: true,
+            defaultIsolation,
+            error: null,
+          },
+        },
+      };
+      expect(validateWSOutboundMessage(response).success).toBe(true);
+      const invalid = {
+        ...response,
+        message: {
+          ...response.message,
+          payload: { ...response.message.payload, defaultIsolation: "invalid" },
+        },
+      };
+      expect(validateWSOutboundMessage(invalid).success).toBe(false);
+    },
+  );
+
   it("preserves optional provider timeline capability in lists and live upserts", () => {
     const legacy = {
       id: "workflow",

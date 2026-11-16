@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkspaceSource } from "./create.js";
+import { buildWorkspaceSource, resolveCliWorkspaceIsolation } from "./create.js";
 
 describe("workspace create source", () => {
   it("maps local isolation to a directory workspace", () => {
     expect(
       buildWorkspaceSource({ isolation: "local", path: "/tmp/project", project: "project-1" }),
     ).toEqual({ kind: "directory", path: "/tmp/project", projectId: "project-1" });
+  });
+
+  it("requires a resolved host project root for project-only local creation", () => {
+    expect(() => buildWorkspaceSource({ isolation: "local", project: "project-1" })).toThrow(
+      "Project root path is required",
+    );
+    expect(
+      buildWorkspaceSource({ isolation: "local", project: "project-1" }, "C:\\host\\repo"),
+    ).toEqual({ kind: "directory", path: "C:\\host\\repo", projectId: "project-1" });
+    expect(
+      buildWorkspaceSource(
+        { isolation: "local", project: "project-1", path: "/explicit" },
+        "/host/repo",
+      ),
+    ).toEqual({ kind: "directory", path: "/explicit", projectId: "project-1" });
   });
 
   it("keeps branch names separate from managed worktree slugs", () => {
@@ -122,4 +137,26 @@ describe("workspace create source", () => {
       "Unsupported workspace isolation",
     );
   });
+});
+
+it("resolves omitted CLI isolation from the exact host project and preserves overrides", () => {
+  const project = {
+    projectId: "A",
+    projectDisplayName: "A",
+    projectRootPath: "/tmp/A",
+    projectKind: "git" as const,
+    projectDefaultIsolation: "worktree" as const,
+  };
+  const input = {
+    explicitIsolation: undefined,
+    projectId: undefined,
+    resolvedPath: "/tmp/A/../A",
+    projects: [project],
+  };
+  expect(resolveCliWorkspaceIsolation(input)).toBe("worktree");
+  expect(resolveCliWorkspaceIsolation({ ...input, explicitIsolation: "local" })).toBe("local");
+  expect(resolveCliWorkspaceIsolation({ ...input, projectId: "missing" })).toBe("local");
+  expect(
+    resolveCliWorkspaceIsolation({ ...input, projects: [{ ...project, projectKind: "non_git" }] }),
+  ).toBe("local");
 });

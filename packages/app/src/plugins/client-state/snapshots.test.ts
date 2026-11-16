@@ -110,6 +110,7 @@ describe("sidebar entity snapshots", () => {
       projectId: "empty",
       projectDisplayName: "Empty",
       projectCustomName: null,
+      projectDefaultIsolation: null,
       projectRootPath: "/empty",
       projectKind: "git" as const,
     };

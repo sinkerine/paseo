@@ -3162,6 +3162,14 @@ export const ru: TranslationResources = {
       },
     },
     project: {
+      workspaces: {
+        title: "Рабочие пространства",
+        info: "Изоляция новых рабочих пространств на этом хосте по умолчанию",
+        defaultIsolation: "Изоляция нового рабочего пространства",
+        defaultIsolationHint: "Запомнить выбор использует последний выбранный тип изоляции",
+        savedToast: "Изоляция рабочего пространства обновлена",
+        options: { rememberLast: "Запомнить выбор" },
+      },
       noEditableTarget: "Этот проект нельзя редактировать на этом хосте.",
       backToProjects: "Вернуться к проектам",
       edit: {

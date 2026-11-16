@@ -3149,6 +3149,14 @@ export const ptBR: TranslationResources = {
       },
     },
     project: {
+      workspaces: {
+        title: "Espaços de trabalho",
+        info: "Isolamento padrão para novos espaços de trabalho neste host",
+        defaultIsolation: "Isolamento do novo espaço de trabalho",
+        defaultIsolationHint: "Lembrar último usa sua última escolha de isolamento",
+        savedToast: "Isolamento do espaço de trabalho atualizado",
+        options: { rememberLast: "Lembrar último" },
+      },
       noEditableTarget: "Este projeto não pode ser editado neste host.",
       backToProjects: "Voltar para projetos",
       edit: {

@@ -1008,6 +1008,35 @@ export const ProjectIconSourceSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("upload"), data: z.string() }),
 ]);
 
+export const ProjectIsolationSchema = z.enum(["local", "worktree"]);
+export type ProjectIsolation = z.infer<typeof ProjectIsolationSchema>;
+
+export const ProjectIsolationSetRequestSchema = z.object({
+  type: z.literal("project.isolation.set.request"),
+  projectId: z.string(),
+  defaultIsolation: ProjectIsolationSchema.nullable(),
+  requestId: z.string(),
+});
+
+export const ProjectIsolationSetResponsePayloadSchema = z.object({
+  requestId: z.string(),
+  projectId: z.string(),
+  accepted: z.boolean(),
+  defaultIsolation: ProjectIsolationSchema.nullable(),
+  error: z.string().nullable(),
+});
+
+export const ProjectIsolationSetResponseSchema = z.object({
+  type: z.literal("project.isolation.set.response"),
+  payload: ProjectIsolationSetResponsePayloadSchema,
+});
+
+export type ProjectIsolationSetRequest = z.infer<typeof ProjectIsolationSetRequestSchema>;
+export type ProjectIsolationSetResponsePayload = z.infer<
+  typeof ProjectIsolationSetResponsePayloadSchema
+>;
+export type ProjectIsolationSetResponse = z.infer<typeof ProjectIsolationSetResponseSchema>;
+
 export const ProjectRenameRequestSchema = z.object({
   type: z.literal("project.rename.request"),
   projectId: z.string(),
@@ -3443,6 +3472,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   CloseItemsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
   ProjectRenameRequestSchema,
+  ProjectIsolationSetRequestSchema,
   ProjectIconSetRequestSchema,
   ProjectRemoveRequestSchema,
   WorkspaceTitleSetRequestSchema,
@@ -4163,50 +4193,35 @@ export const ArtifactMessageSchema = z.object({
   }),
 });
 
-export const ProjectCheckoutLiteNotGitPayloadSchema = z
-  .object({
-    cwd: z.string(),
-    isGit: z.literal(false),
-    currentBranch: z.null(),
-    remoteUrl: z.null(),
-    worktreeRoot: z.null().optional(),
-    isPaseoOwnedWorktree: z.literal(false),
-    mainRepoRoot: z.null(),
-  })
-  .transform((value) => ({
-    ...value,
-    worktreeRoot: null,
-  }));
+export const ProjectCheckoutLiteNotGitPayloadSchema = z.object({
+  cwd: z.string(),
+  isGit: z.literal(false),
+  currentBranch: z.null(),
+  remoteUrl: z.null(),
+  worktreeRoot: z.null().optional(),
+  isPaseoOwnedWorktree: z.literal(false),
+  mainRepoRoot: z.null(),
+});
 
-export const ProjectCheckoutLiteGitNonPaseoPayloadSchema = z
-  .object({
-    cwd: z.string(),
-    isGit: z.literal(true),
-    currentBranch: z.string().nullable(),
-    remoteUrl: z.string().nullable(),
-    worktreeRoot: z.string().optional(),
-    isPaseoOwnedWorktree: z.literal(false),
-    mainRepoRoot: z.string().nullable().optional().default(null),
-  })
-  .transform((value) => ({
-    ...value,
-    worktreeRoot: value.worktreeRoot ?? value.cwd,
-  }));
+export const ProjectCheckoutLiteGitNonPaseoPayloadSchema = z.object({
+  cwd: z.string(),
+  isGit: z.literal(true),
+  currentBranch: z.string().nullable(),
+  remoteUrl: z.string().nullable(),
+  worktreeRoot: z.string().optional(),
+  isPaseoOwnedWorktree: z.literal(false),
+  mainRepoRoot: z.string().nullable().optional().default(null),
+});
 
-export const ProjectCheckoutLiteGitPaseoPayloadSchema = z
-  .object({
-    cwd: z.string(),
-    isGit: z.literal(true),
-    currentBranch: z.string().nullable(),
-    remoteUrl: z.string().nullable(),
-    worktreeRoot: z.string().optional(),
-    isPaseoOwnedWorktree: z.literal(true),
-    mainRepoRoot: z.string(),
-  })
-  .transform((value) => ({
-    ...value,
-    worktreeRoot: value.worktreeRoot ?? value.cwd,
-  }));
+export const ProjectCheckoutLiteGitPaseoPayloadSchema = z.object({
+  cwd: z.string(),
+  isGit: z.literal(true),
+  currentBranch: z.string().nullable(),
+  remoteUrl: z.string().nullable(),
+  worktreeRoot: z.string().optional(),
+  isPaseoOwnedWorktree: z.literal(true),
+  mainRepoRoot: z.string(),
+});
 
 export const ProjectCheckoutLitePayloadSchema = z.union([
   ProjectCheckoutLiteNotGitPayloadSchema,
@@ -4270,7 +4285,8 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
         headRefName: z.string(),
         isMerged: z.boolean(),
         isDraft: z.boolean().optional(),
-        mergeable: z.enum(["MERGEABLE", "CONFLICTING", "UNKNOWN"]).catch("UNKNOWN").optional(),
+        // Accept future and invalid values as before; the client normalizes them after validation.
+        mergeable: z.unknown().optional(),
         checks: z
           .array(
             z.object({
@@ -4303,84 +4319,75 @@ export const WorkspaceGitHubRuntimePayloadSchema = z
   .optional()
   .nullable();
 
-export const WorkspaceDescriptorPayloadSchema = z
-  .object({
-    // Informational creation ancestry; independent of placement and lifecycle.
-    parentWorkspaceId: z.string().optional(),
-    id: z.string(),
-    projectId: z.string(),
-    projectDisplayName: z.string(),
-    // COMPAT(projectCustomName): added in v0.1.76, drop the optional gate when floor >= v0.1.76.
-    // When the user has renamed a project, projectDisplayName carries the resolved
-    // value (customName) and projectCustomName mirrors the raw override so the
-    // settings UI can prefill its input and offer a "reset" action.
-    projectCustomName: z.string().nullable().optional(),
-    // Identifies the project's stored custom icon; null means automatic.
-    // COMPAT(projectCustomIcon): added in v0.2.0, remove after 2027-01-20.
-    projectCustomIconRevision: z.string().nullable().optional(),
-    projectRootPath: z.string(),
-    workspaceDirectory: z.string().optional(),
-    // COMPAT(workspaceSetupObservation): added in v0.12.0, remove optional after 2027-04-19.
-    setupStatus: z.enum(["running", "completed", "failed", "blocked"]).nullable().optional(),
-    // COMPAT(worktreeSlug): added in v0.2.6, remove optional after 2027-01-31.
-    // Present only for Paseo-owned worktrees; this is the basename of their root directory.
-    worktreeSlug: z.string().optional(),
-    projectKind: z.enum(["git", "non_git", "directory"]),
-    // COMPAT(workspaces): keep legacy directory workspace kind parseable.
-    workspaceKind: z.enum(["directory", "local_checkout", "checkout", "worktree"]),
-    name: z.string(),
-    // COMPAT(workspaceTitles): added in v0.1.97, drop the optional gate when floor >= v0.1.97.
-    // When the user has titled a workspace, `name` carries the resolved value
-    // (title) and `title` mirrors the raw override so the rename UI can prefill
-    // its input and offer a "reset to branch name" action. Null means the name
-    // is derived from the branch/directory.
-    title: z.string().nullable().optional(),
-    // COMPAT(workspacePinning): added in v0.1.107, remove optional after 2027-01-12.
-    pinnedAt: z.string().nullable().optional(),
-    // COMPAT(workspaceLabels): added in v0.5.0, remove optional after 2027-08-14.
-    labels: z.array(z.string()).optional(),
-    // Retained for wire parsing of older daemon descriptors.
-    internal: z.boolean().optional(),
-    background: z.boolean().optional(),
-    archivingAt: z.string().nullable().optional().default(null),
-    status: WorkspaceStateBucketSchema,
-    // Best-effort workspace status entry timestamp. Old daemons omit the
-    // field; old clients treat missing and null equivalently. The transform
-    // coerces a missing field to `null` so downstream code never has to
-    // handle `undefined`.
-    statusEnteredAt: z
-      .string()
-      .nullish()
-      .transform((value) => value ?? null),
-    activityAt: z.string().nullable(),
-    createdAt: z.string().optional(),
-    lastUserMessageAt: z.string().nullable().optional(),
-    diffStat: z
-      .object({
-        additions: z.number(),
-        deletions: z.number(),
-      })
-      .nullable()
-      .optional(),
-    scripts: z.array(WorkspaceScriptPayloadSchema).default([]),
-    gitRuntime: WorkspaceGitRuntimePayloadSchema,
-    // COMPAT(githubRuntimeName): legacy wire-field name now carries
-    // forge-neutral runtime data. Introduce and migrate to a neutral
-    // forgeRuntime field before consumers stop using this name. Target cleanup
-    // after 2027-01-17 once the supported client floor is >= v0.2.0.
-    githubRuntime: WorkspaceGitHubRuntimePayloadSchema,
-    // COMPAT(forge): added in v0.2.0-beta.1. Treat an absent forge as GitHub
-    // until 2027-01-17; remove the consumer fallback once the supported daemon
-    // floor is >= v0.2.0.
-    forge: z.string().optional(),
-    project: ProjectPlacementPayloadSchema.optional(),
-    // COMPAT(directorySync): sequence of this latest directory projection.
-    syncSeq: z.number().int().positive().optional(),
-  })
-  .transform((workspace) => ({
-    ...workspace,
-    workspaceDirectory: workspace.workspaceDirectory ?? workspace.projectRootPath,
-  }));
+export const WorkspaceDescriptorPayloadSchema = z.object({
+  // Informational creation ancestry; independent of placement and lifecycle.
+  parentWorkspaceId: z.string().optional(),
+  id: z.string(),
+  projectId: z.string(),
+  projectDisplayName: z.string(),
+  // COMPAT(projectCustomName): added in v0.1.76, drop the optional gate when floor >= v0.1.76.
+  // When the user has renamed a project, projectDisplayName carries the resolved
+  // value (customName) and projectCustomName mirrors the raw override so the
+  // settings UI can prefill its input and offer a "reset" action.
+  projectCustomName: z.string().nullable().optional(),
+  // COMPAT(projectDefaultIsolation): added in v0.15.4, remove optional after 2027-05-14.
+  projectDefaultIsolation: ProjectIsolationSchema.nullable().optional(),
+  // Identifies the project's stored custom icon; null means automatic.
+  // COMPAT(projectCustomIcon): added in v0.2.0, remove after 2027-01-20.
+  projectCustomIconRevision: z.string().nullable().optional(),
+  projectRootPath: z.string(),
+  workspaceDirectory: z.string().optional(),
+  // COMPAT(workspaceSetupObservation): added in v0.12.0, remove optional after 2027-04-19.
+  setupStatus: z.enum(["running", "completed", "failed", "blocked"]).nullable().optional(),
+  // COMPAT(worktreeSlug): added in v0.2.6, remove optional after 2027-01-31.
+  // Present only for Paseo-owned worktrees; this is the basename of their root directory.
+  worktreeSlug: z.string().optional(),
+  projectKind: z.enum(["git", "non_git", "directory"]),
+  // COMPAT(workspaces): keep legacy directory workspace kind parseable.
+  workspaceKind: z.enum(["directory", "local_checkout", "checkout", "worktree"]),
+  name: z.string(),
+  // COMPAT(workspaceTitles): added in v0.1.97, drop the optional gate when floor >= v0.1.97.
+  // When the user has titled a workspace, `name` carries the resolved value
+  // (title) and `title` mirrors the raw override so the rename UI can prefill
+  // its input and offer a "reset to branch name" action. Null means the name
+  // is derived from the branch/directory.
+  title: z.string().nullable().optional(),
+  // COMPAT(workspacePinning): added in v0.1.107, remove optional after 2027-01-12.
+  pinnedAt: z.string().nullable().optional(),
+  // COMPAT(workspaceLabels): added in v0.5.0, remove optional after 2027-08-14.
+  labels: z.array(z.string()).optional(),
+  // Retained for wire parsing of older daemon descriptors.
+  internal: z.boolean().optional(),
+  background: z.boolean().optional(),
+  archivingAt: z.string().nullable().optional().default(null),
+  status: WorkspaceStateBucketSchema,
+  // COMPAT(workspaceStatusEnteredAt): added in v0.1.97, remove default after the daemon floor always sends it.
+  statusEnteredAt: z.string().nullable().optional().default(null),
+  activityAt: z.string().nullable(),
+  createdAt: z.string().optional(),
+  lastUserMessageAt: z.string().nullable().optional(),
+  diffStat: z
+    .object({
+      additions: z.number(),
+      deletions: z.number(),
+    })
+    .nullable()
+    .optional(),
+  scripts: z.array(WorkspaceScriptPayloadSchema).default([]),
+  gitRuntime: WorkspaceGitRuntimePayloadSchema,
+  // COMPAT(githubRuntimeName): legacy wire-field name now carries
+  // forge-neutral runtime data. Introduce and migrate to a neutral
+  // forgeRuntime field before consumers stop using this name. Target cleanup
+  // after 2027-01-17 once the supported client floor is >= v0.2.0.
+  githubRuntime: WorkspaceGitHubRuntimePayloadSchema,
+  // COMPAT(forge): added in v0.2.0-beta.1. Treat an absent forge as GitHub
+  // until 2027-01-17; remove the consumer fallback once the supported daemon
+  // floor is >= v0.2.0.
+  forge: z.string().optional(),
+  project: ProjectPlacementPayloadSchema.optional(),
+  // COMPAT(directorySync): sequence of this latest directory projection.
+  syncSeq: z.number().int().positive().optional(),
+});
 
 export const AgentUpdateMessageSchema = z.object({
   type: z.literal("agent_update"),
@@ -4513,6 +4520,8 @@ export const WorkspaceProjectDescriptorPayloadSchema = z.object({
   projectKey: z.string().optional(),
   projectDisplayName: z.string(),
   projectCustomName: z.string().nullable().optional(),
+  // COMPAT(projectDefaultIsolation): added in v0.15.4, remove optional after 2027-05-14.
+  projectDefaultIsolation: ProjectIsolationSchema.nullable().optional(),
   // COMPAT(projectCustomIcon): added in v0.2.0, remove after 2027-01-20.
   projectCustomIconRevision: z.string().nullable().optional(),
   // Fingerprints the effective icon, including automatic discovery and the
@@ -7409,6 +7418,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentRewindResponseMessageSchema,
   UpdateAgentResponseMessageSchema,
   ProjectRenameResponseSchema,
+  ProjectIsolationSetResponseSchema,
   ProjectIconSetResponseSchema,
   ProjectRemoveResponseSchema,
   WorkspaceTitleSetResponseSchema,

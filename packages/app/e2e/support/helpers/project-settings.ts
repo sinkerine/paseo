@@ -383,3 +383,129 @@ export async function installDaemonConnectionGate(
     },
   };
 }
+
+export async function holdProjectIsolationSave(page: Page): Promise<{
+  fail(): void;
+  recover(): void;
+  commit(): Promise<void>;
+  acknowledge(): Promise<void>;
+}> {
+  let pendingFailure: (() => void) | null = null;
+  let pendingCommit: (() => Promise<void>) | null = null;
+  let holdResponse: ((message: WebSocketMessage) => boolean) | null = null;
+  let heldAcknowledgement: (() => void) | null = null;
+  let heldRequestId: string | null = null;
+  await page.addInitScript(() => {
+    const observedWindow = window as Window & { __projectIsolationReceipts?: string[] };
+    observedWindow.__projectIsolationReceipts = [];
+    const OriginalWebSocket = window.WebSocket;
+    // Observe delivery without replacing transport behavior or app RPC handling.
+    window.WebSocket = class extends OriginalWebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        this.addEventListener("message", (event) => {
+          if (typeof event.data !== "string") return;
+          try {
+            const envelope = JSON.parse(event.data);
+            if (
+              envelope.type === "session" &&
+              envelope.message?.type === "project.isolation.set.response"
+            ) {
+              observedWindow.__projectIsolationReceipts!.push(envelope.message.payload.requestId);
+            }
+          } catch {
+            /* Non-JSON transport frame. */
+          }
+        });
+      }
+    };
+  });
+  let intercept = true;
+  await page.routeWebSocket(daemonWsRoutePattern(), (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      const request = getSessionMessage(message);
+      if (intercept && request?.type === "project.isolation.set.request") {
+        pendingCommit = () => {
+          const committed = Promise.withResolvers<void>();
+          holdResponse = (response) => {
+            const session = getSessionMessage(response);
+            const payload = session?.payload as { requestId?: unknown } | undefined;
+            if (
+              session?.type !== "project.isolation.set.response" ||
+              payload?.requestId !== request.requestId
+            )
+              return false;
+            heldAcknowledgement = () => ws.send(response);
+            heldRequestId = String(request.requestId);
+            holdResponse = null;
+            committed.resolve();
+            return true;
+          };
+          server.send(message);
+          return committed.promise;
+        };
+        pendingFailure = () =>
+          ws.send(
+            JSON.stringify({
+              type: "session",
+              message: {
+                type: "project.isolation.set.response",
+                payload: {
+                  requestId: request.requestId,
+                  projectId: request.projectId,
+                  accepted: false,
+                  defaultIsolation: null,
+                  error: "Disk full",
+                },
+              },
+            }),
+          );
+        return;
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      if (!holdResponse?.(message)) ws.send(message);
+    });
+  });
+  return {
+    async commit() {
+      if (!pendingCommit) throw new Error("No pending isolation request");
+      const commit = pendingCommit;
+      pendingCommit = null;
+      pendingFailure = null;
+      await commit();
+    },
+    async acknowledge() {
+      if (!heldAcknowledgement || !heldRequestId)
+        throw new Error("No held isolation acknowledgement");
+      const requestId = heldRequestId;
+      heldAcknowledgement();
+      heldAcknowledgement = null;
+      await page.waitForFunction(
+        (id) =>
+          (
+            window as Window & { __projectIsolationReceipts?: string[] }
+          ).__projectIsolationReceipts?.includes(id),
+        requestId,
+      );
+      // Observe the UI after the RPC handler and the resulting React paint.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+    },
+    fail() {
+      if (!pendingFailure) throw new Error("No pending isolation request");
+      pendingFailure();
+      pendingFailure = null;
+      pendingCommit = null;
+    },
+    recover() {
+      intercept = false;
+    },
+  };
+}

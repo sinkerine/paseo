@@ -1,5 +1,5 @@
-import { i18n } from "@/i18n/i18next";
 import { useEffect, useRef } from "react";
+import { i18n } from "@/i18n/i18next";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { getDesktopHost } from "@/desktop/host";
 import { useStableEvent } from "@/hooks/use-stable-event";

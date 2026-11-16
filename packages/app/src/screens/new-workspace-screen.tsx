@@ -1,3 +1,11 @@
+import {
+  createIsolationTargetKey,
+  createWorkspaceIsolationDraftState,
+  reduceWorkspaceIsolationDraftState,
+  resolveWorkspaceIsolation,
+  shouldPersistGlobalIsolationPreference,
+} from "./new-workspace/isolation";
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import { useAddHost } from "@/hosts/add-host";
 import type {
   CreateAgentRequestOptions,
@@ -64,6 +72,7 @@ import type { CreateAgentInitialValues } from "@/hooks/use-agent-form-state";
 import { toErrorMessage } from "@/utils/error-messages";
 import {
   getHostProjectId,
+  getDefaultIsolationForHostProject,
   getWorktreeSupportForHostProject,
   hostProjectFromRoute,
   hostProjectFromWorkspace,
@@ -189,37 +198,56 @@ interface WorkspaceIsolationState {
   showRefPicker: boolean;
 }
 
-// Preserve the user's worktree choice while route metadata is provisional. Once
-// the authoritative placement arrives, unsupported projects fall back to local.
+function getWorkspaceIsolationTarget(project: HostProjectListItem | null, serverId: string) {
+  const worktreeSupport = project
+    ? getWorktreeSupportForHostProject({ project, serverId })
+    : "unsupported";
+  const isolationTargetKey = createIsolationTargetKey({
+    serverId,
+    hostProjectId: project ? getHostProjectId(project, serverId) : null,
+    projectViewKey: project?.viewKey,
+  });
+  return { worktreeSupport, isolationTargetKey } as const;
+}
+
 function useWorkspaceIsolation(input: {
+  targetKey: string;
+  projectDefaultIsolation: ProjectIsolation | null;
   supportsMultiplicity: boolean;
   worktreeSupport: "supported" | "unsupported" | "unknown";
-}): WorkspaceIsolationState {
-  const { supportsMultiplicity, worktreeSupport } = input;
-  // The last isolation choice is remembered alongside the other New Workspace
-  // form preferences (provider, model, mode). A manual in-screen pick overrides
-  // the remembered default until the screen remounts.
+}): WorkspaceIsolationState & { changeTarget: (targetKey: string) => void } {
   const { preferences, updatePreferences } = useFormPreferences();
-  const [manualIsolation, setManualIsolation] = useState<"local" | "worktree" | null>(null);
-  const isolation = manualIsolation ?? preferences.isolation ?? "local";
-  const canCreateWorktree = supportsMultiplicity && worktreeSupport !== "unsupported";
-  const isWorktree = isolation === "worktree" && canCreateWorktree;
-
+  const [draft, setDraft] = useState(() => createWorkspaceIsolationDraftState(input.targetKey));
+  const resolved = resolveWorkspaceIsolation({
+    ...input,
+    draft,
+    preferredIsolation: preferences.isolation,
+  });
+  if (resolved.nextDraft !== draft) setDraft(resolved.nextDraft);
+  const changeTarget = useCallback((targetKey: string) => {
+    setDraft((current) =>
+      reduceWorkspaceIsolationDraftState(current, { type: "target-changed", targetKey }),
+    );
+  }, []);
   const setIsolation = useCallback(
-    (value: "local" | "worktree") => {
-      setManualIsolation(value);
-      void updatePreferences({ isolation: value });
+    (value: ProjectIsolation) => {
+      setDraft((current) =>
+        reduceWorkspaceIsolationDraftState(current, {
+          type: "manual-selected",
+          targetKey: input.targetKey,
+          value,
+        }),
+      );
+      if (
+        shouldPersistGlobalIsolationPreference({
+          projectDefaultIsolation: input.projectDefaultIsolation,
+        })
+      )
+        void updatePreferences({ isolation: value });
     },
-    [updatePreferences],
+    [input.targetKey, input.projectDefaultIsolation, updatePreferences],
   );
-
-  return {
-    isolation,
-    setIsolation,
-    effectiveIsolation: isWorktree ? "worktree" : "local",
-    canCreateWorktree,
-    showRefPicker: !supportsMultiplicity || isWorktree,
-  };
+  return { ...resolved, setIsolation, changeTarget };
 }
 
 function normalizeBranchDetails(
@@ -1033,12 +1061,18 @@ export function NewWorkspaceScreen({
     cwd: selectedSourceDirectory ?? "",
   });
 
-  const worktreeSupport = selectedProject
-    ? getWorktreeSupportForHostProject({ project: selectedProject, serverId: selectedServerId })
-    : "unsupported";
   const isPending = isNewWorkspacePending({ pendingAction, isDraftHandoffActive });
-  const { effectiveIsolation, setIsolation, canCreateWorktree, showRefPicker } =
+  const { worktreeSupport, isolationTargetKey } = getWorkspaceIsolationTarget(
+    selectedProject,
+    selectedServerId,
+  );
+  const { effectiveIsolation, setIsolation, canCreateWorktree, showRefPicker, changeTarget } =
     useWorkspaceIsolation({
+      targetKey: isolationTargetKey,
+      projectDefaultIsolation: getDefaultIsolationForHostProject({
+        project: selectedProject,
+        serverId: selectedServerId,
+      }),
       supportsMultiplicity: supportsWorkspaceMultiplicity,
       worktreeSupport,
     });
@@ -1145,19 +1179,49 @@ export function NewWorkspaceScreen({
       // selectProjectOption enforces selectability (worktree-only when
       // multiplicity is off, any project when it's on); don't re-gate here on
       // canCreateWorktree or non-git projects become unselectable.
+      const nextProject = projectByOptionId.get(id);
+      if (nextProject)
+        changeTarget(
+          createIsolationTargetKey({
+            serverId: selectedServerId,
+            hostProjectId: getHostProjectId(nextProject, selectedServerId),
+            projectViewKey: nextProject.viewKey,
+          }),
+        );
       selectProjectOption(id);
       setProjectPickerOpen(false);
       clearPickerSelectionForTargetChange(selectedProjectOptionId, id);
     },
-    [clearPickerSelectionForTargetChange, selectProjectOption, selectedProjectOptionId],
+    [
+      changeTarget,
+      projectByOptionId,
+      selectedServerId,
+      clearPickerSelectionForTargetChange,
+      selectProjectOption,
+      selectedProjectOptionId,
+    ],
   );
 
   const handleSelectWorkspaceHost = useCallback(
     (id: string) => {
+      if (id !== selectedServerId)
+        changeTarget(
+          createIsolationTargetKey({
+            serverId: id,
+            hostProjectId: null,
+            projectViewKey: selectedProject?.viewKey,
+          }),
+        );
       handleSelectHost(id);
       clearPickerSelectionForTargetChange(selectedServerId, id);
     },
-    [clearPickerSelectionForTargetChange, handleSelectHost, selectedServerId],
+    [
+      changeTarget,
+      selectedProject,
+      clearPickerSelectionForTargetChange,
+      handleSelectHost,
+      selectedServerId,
+    ],
   );
 
   const handleAddProject = useCallback(() => {

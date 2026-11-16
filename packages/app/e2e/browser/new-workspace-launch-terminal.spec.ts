@@ -109,6 +109,28 @@ test.describe("New workspace: launching a terminal", () => {
     });
   });
 
+  for (const isolation of ["local", "worktree"] as const) {
+    test(`terminal launch honors project ${isolation} isolation`, async ({ page }) => {
+      await workspace.client.setProjectIsolation(workspace.projectId, isolation);
+      await gotoAppShell(page);
+      await waitForSidebarHydration(page);
+      await openNewWorkspaceComposer(page, workspace);
+      await selectLaunchOption(page, BARE_PROFILE.id);
+      await submitTerminalLaunch(page);
+      await expectWorkspaceOpensWithTerminalTab(page);
+      const pathname = new URL(page.url()).pathname;
+      const workspaceId = decodeURIComponent(pathname.split("/workspace/")[1]!.split("/")[0]!);
+      const created = (await workspace.client.fetchWorkspaces()).entries.find(
+        (entry) => entry.id === workspaceId,
+      );
+      if (!created) throw new Error("Created terminal workspace missing");
+      expect(created.workspaceKind).toBe(isolation === "worktree" ? "worktree" : "local_checkout");
+      if (isolation === "local") expect(created.workspaceDirectory).toBe(workspace.repoPath);
+      else expect(created.workspaceDirectory).not.toBe(workspace.repoPath);
+      await expectTerminalOutputContains(page, "bare-launch-static-line");
+    });
+  }
+
   test("switching terminal profiles restores the prompt and its fullscreen affordance", async ({
     page,
   }) => {

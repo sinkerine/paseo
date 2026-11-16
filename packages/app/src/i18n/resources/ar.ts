@@ -3139,6 +3139,14 @@ export const ar: TranslationResources = {
       },
     },
     project: {
+      workspaces: {
+        title: "مساحات العمل",
+        info: "العزل الافتراضي لمساحات العمل الجديدة على هذا المضيف",
+        defaultIsolation: "عزل مساحة العمل الجديدة",
+        defaultIsolationHint: "يستخدم تذكّر الأخير آخر اختيار لعزل مساحة العمل",
+        savedToast: "تم تحديث عزل مساحة العمل",
+        options: { rememberLast: "تذكّر الأخير" },
+      },
       noEditableTarget: "هذا المشروع غير متاح للتحرير على هذا المضيف.",
       backToProjects: "العودة إلى المشاريع",
       edit: {

@@ -1,3 +1,4 @@
+import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import type { WorkspaceDescriptor } from "@/stores/session-store";
 import type {
   WorkspaceStructureHostPlacement,
@@ -43,6 +44,7 @@ export function hostProjectFromRoute(route: HostProjectRouteContext): HostProjec
         projectId,
         iconWorkingDir,
         worktreeSupport: "unknown",
+        defaultIsolation: null,
       },
     ],
     workspaceKeys: [],
@@ -82,6 +84,7 @@ export function hostProjectFromWorkspace(input: {
         iconWorkingDir,
         worktreeSupport: canCreate ? "supported" : "unsupported",
         customIconRevision: input.workspace.projectCustomIconRevision,
+        defaultIsolation: input.workspace.projectDefaultIsolation ?? null,
       },
     ],
     workspaceKeys: [`${input.serverId}:${input.workspace.id}`],
@@ -269,4 +272,13 @@ export function resolveSelectedHostProject(input: {
     (input.routeProject?.viewKey === selectedViewKey ? input.routeProject : null) ??
     (input.lastActiveProject?.viewKey === selectedViewKey ? input.lastActiveProject : null)
   );
+}
+
+export function getDefaultIsolationForHostProject(input: {
+  project: HostProjectListItem | null;
+  serverId: string;
+}): ProjectIsolation | null {
+  return input.project
+    ? (getHostProjectPlacement(input.project, input.serverId)?.defaultIsolation ?? null)
+    : null;
 }

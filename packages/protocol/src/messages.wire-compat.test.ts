@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
 import {
+  ProjectIsolationSetRequestSchema,
+  ProjectIsolationSetResponseSchema,
+  WorkspaceProjectDescriptorPayloadSchema,
+  WorkspaceDescriptorPayloadSchema,
+  ProjectCheckoutLiteNotGitPayloadSchema,
+  ProjectCheckoutLiteGitNonPaseoPayloadSchema,
+  ProjectCheckoutLiteGitPaseoPayloadSchema,
   MutableDaemonConfigSchema,
   MutableDaemonConfigPatchSchema,
   UsageReportEntrySchema,
@@ -644,4 +651,158 @@ test("speech config reads remain compatible with clients before features and fut
       features: { voiceMode: { stt: { provider: "future", region: "eu" } } },
     }).features?.voiceMode?.stt,
   ).toEqual({ provider: "future", region: "eu" });
+});
+
+test("project isolation fields preserve old and new descriptor parsing", () => {
+  const project = {
+    projectId: "project",
+    projectDisplayName: "Project",
+    projectRootPath: "/repo",
+    projectKind: "git",
+  };
+  const workspace = {
+    ...project,
+    id: "workspace",
+    workspaceDirectory: "/repo",
+    workspaceKind: "local_checkout",
+    name: "main",
+    title: null,
+    status: "done",
+    statusEnteredAt: null,
+    activityAt: null,
+    archivingAt: null,
+    diffStat: null,
+    scripts: [],
+  };
+  for (const schemaAndPayload of [
+    { schema: WorkspaceProjectDescriptorPayloadSchema, payload: project },
+    { schema: WorkspaceDescriptorPayloadSchema, payload: workspace },
+  ]) {
+    const { schema, payload } = schemaAndPayload;
+    expect(schema.safeParse(payload).success).toBe(true);
+    const legacy = schema.omit({ projectDefaultIsolation: true });
+    for (const projectDefaultIsolation of [null, "local", "worktree"]) {
+      const added = { ...payload, projectDefaultIsolation };
+      expect(schema.parse(added)).toMatchObject({ projectDefaultIsolation });
+      expect(legacy.parse(added)).toEqual(legacy.parse(payload));
+    }
+  }
+});
+
+test("checkout wire schemas preserve omitted roots for explicit client normalization", () => {
+  const base = {
+    cwd: "/repo/sub",
+    currentBranch: null,
+    remoteUrl: null,
+    isPaseoOwnedWorktree: false,
+    mainRepoRoot: null,
+  };
+  expect(
+    ProjectCheckoutLiteNotGitPayloadSchema.parse({ ...base, isGit: false }).worktreeRoot,
+  ).toBeUndefined();
+  expect(
+    ProjectCheckoutLiteGitNonPaseoPayloadSchema.parse({ ...base, isGit: true }).worktreeRoot,
+  ).toBeUndefined();
+  expect(
+    ProjectCheckoutLiteGitPaseoPayloadSchema.parse({
+      ...base,
+      isGit: true,
+      isPaseoOwnedWorktree: true,
+      mainRepoRoot: "/repo",
+    }).worktreeRoot,
+  ).toBeUndefined();
+});
+
+test.each(["MERGEABLE", "CONFLICTING", "UNKNOWN", "FUTURE", null, 42, true, {}, []])(
+  "mergeable wire values remain structural: %j",
+  (mergeable) => {
+    const workspace = {
+      id: "workspace",
+      projectId: "project",
+      projectDisplayName: "Project",
+      projectRootPath: "/repo",
+      projectKind: "git",
+      workspaceKind: "local_checkout",
+      name: "main",
+      status: "done",
+      activityAt: null,
+      scripts: [],
+      githubRuntime: {
+        pullRequest: {
+          url: "https://forge/pull/1",
+          title: "Change",
+          state: "OPEN",
+          baseRefName: "main",
+          headRefName: "branch",
+          isMerged: false,
+          mergeable,
+        },
+      },
+    };
+    expect(
+      WorkspaceDescriptorPayloadSchema.parse(workspace).githubRuntime?.pullRequest?.mergeable,
+    ).toEqual(mergeable);
+  },
+);
+
+test("descriptor wire declarations are pure through every nested schema", () => {
+  const seen = new Set<unknown>();
+  const visit = (value: unknown): void => {
+    if (value === null || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    if (value instanceof z.ZodType) {
+      expect(["pipe", "transform", "catch", "preprocess"]).not.toContain(value.def.type);
+      visit(value.def);
+    } else for (const child of Object.values(value)) visit(child);
+  };
+  for (const schema of [
+    WorkspaceDescriptorPayloadSchema,
+    WorkspaceProjectDescriptorPayloadSchema,
+    ProjectIsolationSetRequestSchema,
+    ProjectIsolationSetResponseSchema,
+  ])
+    visit(schema);
+});
+
+test("checkout wire fields retain explicit roots, nullability, discriminants and stripping", () => {
+  const base = { cwd: "/repo/sub", currentBranch: null, remoteUrl: null, extra: true };
+  const variants = [
+    {
+      schema: ProjectCheckoutLiteNotGitPayloadSchema,
+      payload: { ...base, isGit: false, isPaseoOwnedWorktree: false, mainRepoRoot: null },
+      root: null,
+    },
+    {
+      schema: ProjectCheckoutLiteGitNonPaseoPayloadSchema,
+      payload: { ...base, isGit: true, isPaseoOwnedWorktree: false },
+      root: "/repo",
+    },
+    {
+      schema: ProjectCheckoutLiteGitPaseoPayloadSchema,
+      payload: { ...base, isGit: true, isPaseoOwnedWorktree: true, mainRepoRoot: "/repo" },
+      root: "/worktree",
+    },
+  ];
+  for (const { schema, payload, root } of variants) {
+    expect(schema.parse({ ...payload, worktreeRoot: root })).toMatchObject({ worktreeRoot: root });
+    expect(schema.parse({ ...payload, worktreeRoot: undefined }).worktreeRoot).toBeUndefined();
+    expect(schema.parse(payload)).not.toHaveProperty("extra");
+    expect(schema.safeParse({ ...payload, worktreeRoot: 42 }).success).toBe(false);
+    expect(schema.safeParse({ ...payload, isGit: "true" }).success).toBe(false);
+  }
+  expect(
+    ProjectCheckoutLiteGitNonPaseoPayloadSchema.parse(variants[1]!.payload).mainRepoRoot,
+  ).toBeNull();
+  expect(
+    ProjectCheckoutLiteGitNonPaseoPayloadSchema.safeParse({
+      ...variants[1]!.payload,
+      worktreeRoot: null,
+    }).success,
+  ).toBe(false);
+  expect(
+    ProjectCheckoutLiteGitPaseoPayloadSchema.safeParse({
+      ...variants[2]!.payload,
+      worktreeRoot: null,
+    }).success,
+  ).toBe(false);
 });

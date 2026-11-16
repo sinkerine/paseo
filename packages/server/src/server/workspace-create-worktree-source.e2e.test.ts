@@ -1,13 +1,27 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { promisify } from "node:util";
+import { execFile, execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, onTestFinished, test } from "vitest";
 
 import { DaemonClient } from "./test-utils/index.js";
+import { createPaseoApi } from "@getpaseo/client";
 import { WebSocket } from "ws";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createAgentMcpServer } from "./agent/mcp-server.js";
+import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
+import { FileBackedProjectRegistry, FileBackedWorkspaceRegistry } from "./workspace-registry.js";
+import { createTestLogger } from "../test-utils/test-logger.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   DaemonClient as SocketDaemonClient,
@@ -929,3 +943,486 @@ test("agent creation rejects legacy worktree intent without provisioning or exec
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("project isolation syncs across clients, preserves explicit SDK sources and defaults omitted MCP isolation", async () => {
+  const daemon = await createTestPaseoDaemon({ mcpEnabled: true });
+  const { repoDir, tempRoot } = createGitRepoWithBranch();
+  const creator = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  const viewer = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  const mcp = new Client({ name: "project-isolation-test", version: "1.0.0" });
+  const api = createPaseoApi(creator);
+  const viewerApi = createPaseoApi(viewer);
+  try {
+    await creator.connect();
+    await viewer.connect();
+    const added = await creator.addProject(repoDir);
+    if (!added.project) throw new Error(added.error ?? "Missing project");
+    const projectId = added.project.projectId;
+    const local = await api.workspaces.create({
+      source: { kind: "directory", path: repoDir, projectId },
+    });
+    const observation = viewer.observeWorkspaces();
+    await observation.ready;
+    const messages: import("@getpaseo/protocol/messages").SessionOutboundMessage[] = [];
+    viewer.subscribeRawMessages((message) => messages.push(message));
+    viewerApi.projects.subscribe(() => {});
+    const registryPath = path.join(daemon.paseoHome, "projects/projects.json");
+    for (const defaultIsolation of ["worktree", "local", null] as const) {
+      await api.projects.setIsolation(projectId, defaultIsolation);
+      await expect
+        .poll(
+          async () =>
+            (await viewer.listProjects()).projects.find(
+              (project) => project.projectId === projectId,
+            )?.projectDefaultIsolation,
+        )
+        .toBe(defaultIsolation);
+      await expect
+        .poll(
+          async () =>
+            (await viewer.fetchWorkspaces()).entries.find((workspace) => workspace.id === local.id)
+              ?.projectDefaultIsolation,
+        )
+        .toBe(defaultIsolation);
+      expect(JSON.parse(readFileSync(registryPath, "utf8"))).toContainEqual(
+        expect.objectContaining({ projectId, defaultIsolation }),
+      );
+    }
+    await expect
+      .poll(
+        () =>
+          messages.filter(
+            (message) =>
+              message.type === "project.update" &&
+              message.payload.kind === "upsert" &&
+              message.payload.project.projectDefaultIsolation === "worktree",
+          ).length,
+      )
+      .toBeGreaterThan(0);
+    await expect
+      .poll(
+        () =>
+          messages.filter(
+            (message) =>
+              message.type === "workspace_update" &&
+              message.payload.kind === "upsert" &&
+              message.payload.workspace.id === local.id &&
+              message.payload.workspace.projectDefaultIsolation === "worktree",
+          ).length,
+      )
+      .toBeGreaterThan(0);
+    await creator.setProjectIsolation(projectId, "worktree");
+    for (const isolation of [null, "worktree"] as const) {
+      await creator.setProjectIsolation(projectId, isolation);
+      await viewer.fetchWorkspaces();
+      messages.length = 0;
+      const bytes = readFileSync(registryPath, "utf8");
+      await creator.setProjectIsolation(projectId, isolation);
+      await viewer.listProjects();
+      expect(readFileSync(registryPath, "utf8")).toBe(bytes);
+      expect(
+        messages.filter(
+          (message) => message.type === "project.update" || message.type === "workspace_update",
+        ),
+      ).toEqual([]);
+    }
+    const explicitLocal = await api.workspaces.create({
+      source: { kind: "directory", path: repoDir, projectId },
+    });
+    expect(explicitLocal.current()?.workspaceKind).toBe("local_checkout");
+    await mcp.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${daemon.port}/mcp/agents`)),
+    );
+    const inherited = await mcp.callTool({
+      name: "create_workspace",
+      arguments: { path: repoDir, projectId },
+    });
+    expect(inherited.isError).not.toBe(true);
+    expect(inherited.structuredContent).toMatchObject({ kind: "worktree" });
+    const explicit = await mcp.callTool({
+      name: "create_workspace",
+      arguments: { path: repoDir, projectId, isolation: "local" },
+    });
+    expect(explicit.isError).not.toBe(true);
+    expect(explicit.structuredContent).toMatchObject({ kind: "local_checkout" });
+    await creator.setProjectIsolation(projectId, "local");
+    const explicitWorktree = await api.workspaces.create({
+      source: { kind: "worktree", projectId, cwd: repoDir },
+    });
+    expect(explicitWorktree.current()?.workspaceKind).toBe("worktree");
+    await expect(creator.setProjectIsolation("missing-project", "local")).rejects.toThrow(
+      "Project not found",
+    );
+    expect(existsSync(path.join(repoDir, "paseo.json"))).toBe(false);
+    await observation.release();
+  } finally {
+    await viewerApi.dispose();
+    await api.dispose();
+    await mcp.close();
+    await creator.close();
+    await viewer.close();
+    await daemon.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}, 180000);
+
+test("preserves worktree default across Git removal and restoration while rejecting non-Git writes", async () => {
+  const daemon = await createTestPaseoDaemon({ mcpEnabled: true });
+  const { repoDir, tempRoot } = createGitRepoWithBranch();
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  const mcp = new Client({ name: "isolation-reconciliation", version: "1.0.0" });
+  try {
+    await client.connect();
+    const added = await client.addProject(repoDir);
+    if (!added.project) throw new Error(added.error ?? "Missing project");
+    const projectId = added.project.projectId;
+    await client.setProjectIsolation(projectId, "worktree");
+    renameSync(path.join(repoDir, ".git"), path.join(repoDir, "saved-git"));
+    await expect
+      .poll(
+        async () =>
+          (await client.listProjects()).projects.find((project) => project.projectId === projectId)
+            ?.projectKind,
+        { timeout: 30_000 },
+      )
+      .toBe("non_git");
+    expect(
+      (await client.listProjects()).projects.find((project) => project.projectId === projectId)
+        ?.projectDefaultIsolation,
+    ).toBe("worktree");
+    const registryPath = path.join(daemon.paseoHome, "projects/projects.json");
+    const before = readFileSync(registryPath, "utf8");
+    await expect(client.setProjectIsolation(projectId, "worktree")).rejects.toThrow(
+      "Worktree isolation requires a Git project",
+    );
+    expect(readFileSync(registryPath, "utf8")).toBe(before);
+    await mcp.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${daemon.port}/mcp/agents`)),
+    );
+    const created = await mcp.callTool({
+      name: "create_workspace",
+      arguments: { projectId, path: repoDir },
+    });
+    expect(created.isError).not.toBe(true);
+    expect(created.structuredContent).toMatchObject({ kind: "directory" });
+    renameSync(path.join(repoDir, "saved-git"), path.join(repoDir, ".git"));
+    await expect
+      .poll(
+        async () =>
+          (await client.listProjects()).projects.find((project) => project.projectId === projectId)
+            ?.projectKind,
+        { timeout: 30_000 },
+      )
+      .toBe("git");
+    expect(
+      (await client.listProjects()).projects.find((project) => project.projectId === projectId)
+        ?.projectDefaultIsolation,
+    ).toBe("worktree");
+    await client.setProjectIsolation(projectId, null);
+    await client.setProjectIsolation(projectId, "local");
+  } finally {
+    await mcp.close();
+    await client.close();
+    await daemon.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}, 180_000);
+
+test("CLI project isolation and omitted workspace isolation use the host registry", async () => {
+  const daemon = await createTestPaseoDaemon();
+  const { repoDir, tempRoot } = createGitRepoWithBranch();
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  const cliEntry = path.resolve(import.meta.dirname, "../../../cli/dist/index.js");
+  const cli = async (...args: string[]) => {
+    const result = await promisify(execFile)(
+      process.execPath,
+      [cliEntry, "--host", `127.0.0.1:${daemon.port}`, ...args, "--json"],
+      { cwd: repoDir, env: { ...process.env, PASEO_HOME: daemon.paseoHome }, timeout: 30_000 },
+    );
+    return JSON.parse(result.stdout);
+  };
+  try {
+    await client.connect();
+    const added = await client.addProject(repoDir);
+    if (!added.project) throw new Error(added.error ?? "Missing project");
+    const projectId = added.project.projectId;
+    expect(await cli("project", "isolation", projectId)).toMatchObject({
+      projectId,
+      defaultIsolation: null,
+    });
+    expect(await cli("project", "isolation", projectId, "worktree")).toMatchObject({
+      projectId,
+      defaultIsolation: "worktree",
+    });
+    const listed = await cli("project", "ls");
+    expect(listed).toContainEqual(
+      expect.objectContaining({ projectId, defaultIsolation: "worktree" }),
+    );
+    const inherited = await cli("workspace", "create", "--project", projectId);
+    expect(inherited).toMatchObject({ isolation: "worktree" });
+    const explicit = await cli(
+      "workspace",
+      "create",
+      "--project",
+      projectId,
+      "--isolation",
+      "local",
+    );
+    expect(explicit).toMatchObject({ isolation: "local" });
+    const fromCwd = await cli("workspace", "create");
+    expect(fromCwd).toMatchObject({ isolation: "worktree" });
+    expect(await cli("project", "isolation", projectId, "--reset")).toMatchObject({
+      projectId,
+      defaultIsolation: null,
+    });
+    await expect(cli("project", "isolation", projectId, "invalid")).rejects.toThrow();
+    await expect(cli("project", "isolation", projectId, "local", "--reset")).rejects.toThrow();
+  } finally {
+    await client.close();
+    await daemon.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}, 180_000);
+
+const projectOnlyVariants = ["unset", "local", "explicit-local", "non-git", "degraded"] as const;
+
+for (const scoped of [false, true]) {
+  test.each(projectOnlyVariants)(
+    `MCP projectId-only local target uses project root: scoped=${scoped}, %s`,
+    async (variant) => {
+      const daemon = await createTestPaseoDaemon({ mcpEnabled: true });
+      const target = createGitRepoWithBranch();
+      const caller = createGitRepoWithBranch();
+      const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+      const mcp = new Client({ name: "project-only-root", version: "1" });
+      try {
+        await client.connect();
+        const targetRoot =
+          variant === "non-git" ? path.join(target.tempRoot, "notes") : target.repoDir;
+        if (variant === "non-git") mkdirSync(targetRoot);
+        const added = await client.addProject(targetRoot);
+        if (!added.project) throw new Error(added.error ?? "Missing target project");
+        const projectId = added.project.projectId;
+        if (variant === "local") await client.setProjectIsolation(projectId, "local");
+        if (variant === "explicit-local" || variant === "degraded")
+          await client.setProjectIsolation(projectId, "worktree");
+        if (variant === "degraded") {
+          renameSync(path.join(targetRoot, ".git"), path.join(targetRoot, "saved-git"));
+          await expect
+            .poll(
+              async () =>
+                (await client.listProjects()).projects.find((p) => p.projectId === projectId)
+                  ?.projectKind,
+            )
+            .toBe("non_git");
+        }
+        const workspace = await client.createWorkspace({
+          source: { kind: "directory", path: caller.repoDir },
+        });
+        if (!workspace.workspace) throw new Error("Missing caller workspace");
+        const parent = await client.createAgent({
+          config: { provider: "claude", cwd: caller.repoDir },
+          workspaceId: workspace.workspace.id,
+        });
+        const url = new URL(`http://127.0.0.1:${daemon.port}/mcp/agents`);
+        if (scoped) url.searchParams.set("callerAgentId", parent.id);
+        await mcp.connect(new StreamableHTTPClientTransport(url));
+        const created = await mcp.callTool({
+          name: "create_workspace",
+          arguments: {
+            projectId,
+            ...(variant === "explicit-local" ? { isolation: "local" } : {}),
+          },
+        });
+        expect(created.isError).not.toBe(true);
+        expect(created.structuredContent).toMatchObject({
+          projectId,
+          cwd: targetRoot,
+          isolation: "local",
+        });
+        const entries = (await client.fetchWorkspaces()).entries;
+        expect(
+          entries
+            .filter((entry) => entry.projectId === projectId)
+            .map((entry) => entry.workspaceDirectory),
+        ).toEqual([targetRoot]);
+      } finally {
+        await mcp.close();
+        await client.close();
+        await daemon.close();
+        await rm(target.tempRoot, { recursive: true, force: true });
+        await rm(caller.tempRoot, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+}
+
+test.each(projectOnlyVariants)(
+  "CLI projectId-only local target uses project root from another cwd: %s",
+  async (variant) => {
+    const daemon = await createTestPaseoDaemon();
+    const target = createGitRepoWithBranch();
+    const caller = createGitRepoWithBranch();
+    const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+    const cliEntry = path.resolve(import.meta.dirname, "../../../cli/dist/index.js");
+    const cli = async (...args: string[]) => {
+      const result = await promisify(execFile)(
+        process.execPath,
+        [cliEntry, "--host", `127.0.0.1:${daemon.port}`, ...args, "--json"],
+        {
+          cwd: caller.repoDir,
+          env: { ...process.env, PASEO_HOME: daemon.paseoHome },
+          timeout: 30_000,
+        },
+      );
+      return JSON.parse(result.stdout);
+    };
+    try {
+      await client.connect();
+      const targetRoot =
+        variant === "non-git" ? path.join(target.tempRoot, "notes") : target.repoDir;
+      if (variant === "non-git") mkdirSync(targetRoot);
+      const added = await client.addProject(targetRoot);
+      if (!added.project) throw new Error(added.error ?? "Missing target project");
+      const projectId = added.project.projectId;
+      if (variant === "local") await client.setProjectIsolation(projectId, "local");
+      if (variant === "explicit-local" || variant === "degraded")
+        await client.setProjectIsolation(projectId, "worktree");
+      if (variant === "degraded") {
+        renameSync(path.join(targetRoot, ".git"), path.join(targetRoot, "saved-git"));
+        await expect
+          .poll(
+            async () =>
+              (await client.listProjects()).projects.find((p) => p.projectId === projectId)
+                ?.projectKind,
+          )
+          .toBe("non_git");
+      }
+      expect(
+        await cli(
+          "workspace",
+          "create",
+          "--project",
+          projectId,
+          ...(variant === "explicit-local" ? ["--isolation", "local"] : []),
+        ),
+      ).toMatchObject({ cwd: targetRoot, isolation: "local" });
+      expect(
+        (await client.fetchWorkspaces()).entries
+          .filter((entry) => entry.projectId === projectId)
+          .map((entry) => entry.workspaceDirectory),
+      ).toEqual([targetRoot]);
+      await expect(
+        cli("workspace", "create", "--project", "missing", "--isolation", "local"),
+      ).rejects.toThrow();
+      const explicitPath = path.join(targetRoot, "explicit-child");
+      mkdirSync(explicitPath);
+      expect(
+        await cli(
+          "workspace",
+          "create",
+          "--project",
+          projectId,
+          "--path",
+          explicitPath,
+          "--isolation",
+          "local",
+        ),
+      ).toMatchObject({ cwd: explicitPath });
+    } finally {
+      await client.close();
+      await daemon.close();
+      await rm(target.tempRoot, { recursive: true, force: true });
+      await rm(caller.tempRoot, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);
+
+test.each(["custom-cwd-disabled", "locked-cwd"] as const)(
+  "MCP projectId-only rejects a clamped target without misattachment: %s",
+  async (restriction) => {
+    const daemon = await createTestPaseoDaemon();
+    const target = createGitRepoWithBranch();
+    const caller = createGitRepoWithBranch();
+    const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+    const mcp = new Client({ name: "restricted-project-root", version: "1" });
+    const logger = createTestLogger();
+    const providers = new ProviderSnapshotManager({ logger });
+    const registry = new FileBackedProjectRegistry(
+      path.join(daemon.paseoHome, "projects/projects.json"),
+      logger,
+    );
+    let server: Awaited<ReturnType<typeof createAgentMcpServer>> | undefined;
+    try {
+      await client.connect();
+      const targetProject = await client.addProject(target.repoDir);
+      if (!targetProject.project) throw new Error("Missing target project");
+      const workspace = await client.createWorkspace({
+        source: { kind: "directory", path: caller.repoDir },
+      });
+      if (!workspace.workspace) throw new Error("Missing caller workspace");
+      const parent = await client.createAgent({
+        config: { provider: "claude", cwd: caller.repoDir },
+        workspaceId: workspace.workspace.id,
+      });
+      // Bind the production caller-context port to each real cwd policy. MCP SDK
+      // transports exercise the real server; provisioning uses the real daemon RPC.
+      server = await createAgentMcpServer({
+        agentManager: daemon.daemon.agentManager,
+        agentStorage: daemon.daemon.agentStorage,
+        providerSnapshotManager: providers,
+        projectRegistry: registry,
+        callerAgentId: parent.id,
+        resolveCallerContext: () =>
+          restriction === "locked-cwd" ? { lockedCwd: caller.repoDir } : { allowCustomCwd: false },
+        createDirectoryWorkspace: async (cwd, title, projectId) => {
+          const created = await client.createWorkspace({
+            source: { kind: "directory", path: cwd, projectId },
+            ...(title ? { title } : {}),
+          });
+          if (!created.workspace) throw new Error(created.error ?? "Missing created workspace");
+          const persisted = await new FileBackedWorkspaceRegistry(
+            path.join(daemon.paseoHome, "projects/workspaces.json"),
+            logger,
+          ).get(created.workspace.id);
+          if (!persisted) throw new Error("Missing durable workspace record");
+          return persisted;
+        },
+        logger,
+      });
+      const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+      await server.connect(serverTransport);
+      await mcp.connect(clientTransport);
+      const before = (await client.fetchWorkspaces()).entries;
+      const rejected = await mcp.callTool({
+        name: "create_workspace",
+        arguments: { projectId: targetProject.project.projectId },
+      });
+      expect(rejected.isError).toBe(true);
+      expect(JSON.stringify(rejected.content)).toContain("outside the allowed cwd");
+      expect((await client.fetchWorkspaces()).entries.map((entry) => entry.id)).toEqual(
+        before.map((entry) => entry.id),
+      );
+      const allowed = await mcp.callTool({
+        name: "create_workspace",
+        arguments: { projectId: workspace.workspace.projectId },
+      });
+      expect(allowed.isError).not.toBe(true);
+      expect(allowed.structuredContent).toMatchObject({
+        cwd: caller.repoDir,
+        projectId: workspace.workspace.projectId,
+      });
+    } finally {
+      await mcp.close();
+      await server?.close();
+      providers.destroy();
+      await client.close();
+      await daemon.close();
+      await rm(target.tempRoot, { recursive: true, force: true });
+      await rm(caller.tempRoot, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);

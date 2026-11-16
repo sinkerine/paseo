@@ -441,14 +441,22 @@ function resolveInitialSubmitCadence(
   return schedule ? undefined : initialCadence;
 }
 
+function resolveDefaultIsolationForTarget(
+  target: ScheduleProjectTarget | null,
+  preferences: FormPreferences | null | undefined,
+): "local" | "worktree" {
+  return target?.defaultIsolation ?? preferences?.isolation ?? "local";
+}
+
 function resolveInitialIsolation(input: {
   config: ReturnType<typeof newAgentConfig>;
   preferences: FormPreferences | undefined;
+  target: ScheduleProjectTarget | null;
 }): "local" | "worktree" {
   if (input.config) {
     return input.config.isolation ?? "local";
   }
-  return input.preferences?.isolation ?? "local";
+  return resolveDefaultIsolationForTarget(input.target, input.preferences);
 }
 
 function resolveSelectedProjectOptionId(target: ScheduleProjectTarget | null): string {
@@ -680,7 +688,11 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
     modeOptions: [],
     availableThinkingOptions: [],
     archiveOnFinish: config?.archiveOnFinish ?? true,
-    isolation: resolveInitialIsolation({ config, preferences: snapshot.defaults.preferences }),
+    isolation: resolveInitialIsolation({
+      config,
+      preferences: snapshot.defaults.preferences,
+      target: selectedProjectTarget,
+    }),
     effectiveIsolation: "local",
     submitArchiveOnFinish: undefined,
     submitIsolation: undefined,
@@ -916,12 +928,9 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
 
   function resolvePreferences(nextState: ScheduleFormState): ScheduleFormState {
     let resolved = nextState;
-    if (
-      snapshot.mode === "create" &&
-      !userModified.isolation &&
-      preferences?.isolation !== undefined
-    ) {
-      resolved = { ...resolved, isolation: preferences.isolation };
+    if (snapshot.mode === "create" && !userModified.isolation) {
+      const target = findProjectTargetByOptionId(projectTargets, resolved.selectedProjectOptionId);
+      resolved = { ...resolved, isolation: resolveDefaultIsolationForTarget(target, preferences) };
     }
     if (providerEntries.length === 0 || resolved.targetKind !== "new-agent") {
       return resolved;
@@ -963,7 +972,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
         return;
       }
       projectTargets = nextTargets;
-      publish(state);
+      publish(resolvePreferences(state));
     },
     applyPreferences(nextPreferences) {
       const normalizedPreferences = nextPreferences ?? null;
@@ -1009,9 +1018,11 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       if (closed || state.selectedServerId === serverId) {
         return;
       }
+      userModified = { ...userModified, isolation: false };
       publish(
         clearProviderSelection({
           ...state,
+          isolation: preferences?.isolation ?? "local",
           selectedServerId: serverId,
           workingDir: "",
           projectDisplay: null,
@@ -1033,8 +1044,13 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       if (!providerScopeChanged && state.selectedProjectOptionId === target.optionId) {
         return;
       }
+      userModified = { ...userModified, isolation: false };
       const nextState = {
         ...state,
+        isolation:
+          snapshot.mode === "create"
+            ? resolveDefaultIsolationForTarget(target, preferences)
+            : state.isolation,
         selectedServerId: target.serverId,
         workingDir: target.cwd,
         projectDisplay: display,

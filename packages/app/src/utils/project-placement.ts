@@ -1,4 +1,8 @@
 import type { ProjectPlacementPayload } from "@getpaseo/protocol/messages";
+import {
+  normalizeProjectPlacement,
+  type NormalizedProjectPlacement,
+} from "@getpaseo/client/internal/daemon-client";
 import { deriveProjectKey, deriveProjectName } from "@/utils/agent-grouping";
 
 function normalizeWorkingDirectory(cwd: string): string {
@@ -6,7 +10,7 @@ function normalizeWorkingDirectory(cwd: string): string {
   return trimmed.length > 0 ? trimmed : ".";
 }
 
-export function deriveProjectPlacementFromCwd(cwd: string): ProjectPlacementPayload {
+export function deriveProjectPlacementFromCwd(cwd: string): NormalizedProjectPlacement {
   const normalizedCwd = normalizeWorkingDirectory(cwd);
   const projectKey = deriveProjectKey(normalizedCwd);
 
@@ -29,6 +33,8 @@ export function deriveProjectPlacementFromCwd(cwd: string): ProjectPlacementPayl
 export function resolveProjectPlacement(input: {
   projectPlacement: ProjectPlacementPayload | null | undefined;
   cwd: string;
-}): ProjectPlacementPayload {
-  return input.projectPlacement ?? deriveProjectPlacementFromCwd(input.cwd);
+}): NormalizedProjectPlacement {
+  return input.projectPlacement == null
+    ? deriveProjectPlacementFromCwd(input.cwd)
+    : normalizeProjectPlacement(input.projectPlacement);
 }

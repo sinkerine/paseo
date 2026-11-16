@@ -19,6 +19,10 @@ import { runAppearanceFontSizeRegression } from "./appearance-font-size.electron
 import { runAdaptiveThemeRegression } from "./appearance-theme.electron.mjs";
 import { runSettingsScrollRegression } from "./settings-scroll.electron.mjs";
 import { buildFillFixture, verifyReactFormFill } from "./browser-fill.electron.mjs";
+import {
+  prepareProjectIsolationFixture,
+  runProjectIsolationRegression,
+} from "./project-isolation.electron.mjs";
 import { runSettingsMemoryRegression } from "./settings-memory.electron.mjs";
 import { runTabFocusMultiwindowRegression } from "./tab-focus-multiwindow.electron.mjs";
 
@@ -1499,6 +1503,21 @@ async function startWindowManager({ runtimeDir, artifactDir, children }) {
   }
 }
 
+function desktopLaunchCommand(inspectorPort) {
+  const desktopArgs = [
+    process.execPath,
+    devRunner,
+    `--inspect=127.0.0.1:${inspectorPort}`,
+    ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+  ];
+  const desktopCommand = process.platform === "linux" ? "xvfb-run" : desktopArgs.shift();
+  const desktopCommandArgs =
+    process.platform === "linux"
+      ? ["-a", "--server-args=-screen 0 1280x800x24", ...desktopArgs]
+      : desktopArgs;
+  return { command: desktopCommand, args: desktopCommandArgs };
+}
+
 async function main() {
   const artifactDir =
     process.env.PASEO_DESKTOP_E2E_ARTIFACT_DIR ??
@@ -1520,6 +1539,10 @@ async function main() {
   ]);
   const listen = `127.0.0.1:${daemonPort}`;
   seedPaseoHome(paseoHome, listen, workspaceRoot);
+  const isolationProject =
+    process.env.PASEO_DESKTOP_PROJECT_ISOLATION_ONLY === "1"
+      ? prepareProjectIsolationFixture(paseoHome)
+      : null;
   const target = await startTargetPage();
   seedPluginLinks(paseoHome, workspaceIds[0], target.url, workspaceIds[1]);
   const remoteHome = path.join(runtimeDir, "remote-home");
@@ -1588,17 +1611,8 @@ async function main() {
     children.push(remoteDaemon);
     await waitForPort(remotePort, "remote daemon", remoteDaemon);
 
-    const desktopArgs = [
-      process.execPath,
-      devRunner,
-      `--inspect=127.0.0.1:${inspectorPort}`,
-      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
-    ];
-    const desktopCommand = process.platform === "linux" ? "xvfb-run" : desktopArgs.shift();
-    const desktopCommandArgs =
-      process.platform === "linux"
-        ? ["-a", "--server-args=-screen 0 1280x800x24", ...desktopArgs]
-        : desktopArgs;
+    const { command: desktopCommand, args: desktopCommandArgs } =
+      desktopLaunchCommand(inspectorPort);
     if (tabFocusOnly) {
       const metro = spawnLogged(
         "metro",
@@ -1696,6 +1710,23 @@ async function main() {
       const pluginLinks = await checkPluginLinks();
       writeJson(path.join(artifactDir, "result.json"), { pluginLinks });
       console.log("Plugin external links and workspace browser passed.");
+      return;
+    }
+    if (isolationProject) {
+      const projectIsolation = await runProjectIsolationRegression({
+        page,
+        paseoHome,
+        project: isolationProject,
+        artifactDir,
+      });
+      writeJson(path.join(artifactDir, "result.json"), { projectIsolation });
+      console.log("Desktop project isolation regression passed.");
+      return;
+    }
+    if (process.env.PASEO_DESKTOP_SETTINGS_MEMORY_ONLY === "1") {
+      const settingsMemory = await runSettingsMemoryRegression(page);
+      writeJson(path.join(artifactDir, "result.json"), { settingsMemory });
+      console.log("Desktop Settings memory regression passed.");
       return;
     }
     const settingsScroll = await runSettingsScrollRegression(page, (size) =>

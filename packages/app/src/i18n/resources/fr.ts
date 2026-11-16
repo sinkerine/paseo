@@ -3178,6 +3178,14 @@ export const fr: TranslationResources = {
       },
     },
     project: {
+      workspaces: {
+        title: "Espaces de travail",
+        info: "Isolation par défaut des nouveaux espaces de travail sur cet hôte",
+        defaultIsolation: "Isolation du nouvel espace de travail",
+        defaultIsolationHint: "Mémoriser le dernier reprend votre dernier choix d’isolation",
+        savedToast: "Isolation de l’espace de travail mise à jour",
+        options: { rememberLast: "Mémoriser le dernier" },
+      },
       noEditableTarget: "Ce projet n’est pas modifiable sur cet hôte.",
       backToProjects: "Retour aux projets",
       edit: {
