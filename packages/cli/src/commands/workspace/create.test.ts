@@ -154,6 +154,18 @@ it("resolves omitted CLI isolation from the exact host project and preserves ove
     projects: [project],
   };
   expect(resolveCliWorkspaceIsolation(input)).toBe("worktree");
+  expect(
+    resolveCliWorkspaceIsolation({
+      ...input,
+      projects: [{ ...project, projectDefaultIsolation: null }],
+    }),
+  ).toBe("worktree");
+  expect(
+    resolveCliWorkspaceIsolation({
+      ...input,
+      projects: [{ ...project, projectDefaultIsolation: "local" }],
+    }),
+  ).toBe("local");
   expect(resolveCliWorkspaceIsolation({ ...input, explicitIsolation: "local" })).toBe("local");
   expect(resolveCliWorkspaceIsolation({ ...input, projectId: "missing" })).toBe("local");
   expect(

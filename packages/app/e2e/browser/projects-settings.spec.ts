@@ -259,14 +259,14 @@ test.describe("Projects settings", () => {
     await openProjectSettings(page, editableProject.name);
     const row = page.getByTestId("project-isolation-row");
     const trigger = row.getByRole("button");
-    await expect(row).toContainText("Remember last");
+    await expect(row).toContainText("New worktree");
     await trigger.click();
     await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
     await expect(trigger).toBeDisabled();
     gate.fail();
     await expect(row.getByRole("alert")).toHaveText("Disk full");
     await expect(trigger).toBeEnabled();
-    await expect(row).toContainText("Remember last");
+    await expect(row).toContainText("New worktree");
     gate.recover();
     await trigger.click();
     await page.getByRole("menuitem", { name: "Local", exact: true }).click();
@@ -314,7 +314,7 @@ test.describe("Projects settings", () => {
       await gate.commit();
       await gate.acknowledge();
       await expect(row.getByRole("button")).toBeEnabled();
-      await expect(row).toContainText("Remember last");
+      await expect(row).toContainText("New worktree");
       await expect(page.getByText("Workspace isolation updated", { exact: true })).toHaveCount(0);
     } finally {
       await other.cleanup();
@@ -542,15 +542,15 @@ test.describe("Projects settings — compact navigation", () => {
     await page.getByRole("button", { name: "Projects", exact: true }).click();
     await openProjectSettings(page, editableProject.name);
     const row = page.getByTestId("project-isolation-row");
-    await expect(row).toContainText("Remember last");
+    await expect(row).toContainText("New worktree");
     await row.getByRole("button").click();
     await page.getByRole("menuitem", { name: "Local", exact: true }).click();
     await expect(row).toContainText("Local");
     await page.reload();
     await expect(row).toContainText("Local");
     await row.getByRole("button").click();
-    await page.getByRole("menuitem", { name: "Remember last", exact: true }).click();
-    await expect(row).toContainText("Remember last");
+    await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+    await expect(row).toContainText("New worktree");
     await expect(page.getByTestId("save-button")).toBeEnabled();
   });
 

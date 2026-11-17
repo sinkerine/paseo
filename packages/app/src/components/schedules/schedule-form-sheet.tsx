@@ -158,8 +158,6 @@ function updateSelectionPreferences(input: {
   model: string;
   mode: string;
   thinkingOptionId: string;
-  isolation: "local" | "worktree";
-  persistIsolation: boolean;
 }): FormPreferences {
   const model = input.model.trim();
   const mode = input.mode.trim();
@@ -174,7 +172,6 @@ function updateSelectionPreferences(input: {
         ...(model && thinkingOptionId ? { thinkingByModel: { [model]: thinkingOptionId } } : {}),
       },
     }),
-    ...(input.persistIsolation ? { isolation: input.isolation } : {}),
   };
 }
 
@@ -302,16 +299,9 @@ function OpenScheduleFormSheet({
         model: state.selectedModel,
         mode: state.selectedMode,
         thinkingOptionId: state.selectedThinkingOptionId,
-        isolation: state.isolation,
-        persistIsolation:
-          (projectTargets.find((target) => target.optionId === state.selectedProjectOptionId)
-            ?.defaultIsolation ?? null) === null,
       }),
     );
   }, [
-    projectTargets,
-    state.selectedProjectOptionId,
-    state.isolation,
     state.selectedMode,
     state.selectedModel,
     state.selectedProvider,

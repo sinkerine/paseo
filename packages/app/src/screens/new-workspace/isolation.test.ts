@@ -4,7 +4,6 @@ import {
   createWorkspaceIsolationDraftState,
   reduceWorkspaceIsolationDraftState,
   resolveWorkspaceIsolation,
-  shouldPersistGlobalIsolationPreference,
 } from "./isolation";
 
 describe("workspace isolation draft", () => {
@@ -14,7 +13,7 @@ describe("workspace isolation draft", () => {
     projectViewKey: "provisional",
   });
   test.each([undefined, "local", "worktree"] as const)(
-    "defaults to New worktree and respects remembered choice %s",
+    "defaults to New worktree regardless of legacy remembered choice %s",
     (preferredIsolation) => {
       const input = {
         draft: createWorkspaceIsolationDraftState(targetKey),
@@ -24,9 +23,7 @@ describe("workspace isolation draft", () => {
         supportsMultiplicity: true,
         worktreeSupport: "supported" as const,
       };
-      expect(resolveWorkspaceIsolation(input).effectiveIsolation).toBe(
-        preferredIsolation ?? "worktree",
-      );
+      expect(resolveWorkspaceIsolation(input).effectiveIsolation).toBe("worktree");
       expect(
         resolveWorkspaceIsolation({ ...input, worktreeSupport: "unsupported" }).effectiveIsolation,
       ).toBe("local");
@@ -50,10 +47,6 @@ describe("workspace isolation draft", () => {
       effectiveIsolation: "local",
       canCreateWorktree: false,
     });
-    expect(shouldPersistGlobalIsolationPreference({ projectDefaultIsolation: "local" })).toBe(
-      false,
-    );
-    expect(shouldPersistGlobalIsolationPreference({ projectDefaultIsolation: null })).toBe(true);
   });
   for (const other of [
     { serverId: "H1", hostProjectId: "B" },
@@ -78,7 +71,6 @@ describe("workspace isolation draft", () => {
           draft,
           targetKey,
           projectDefaultIsolation: "local",
-          preferredIsolation: "worktree",
           supportsMultiplicity: true,
           worktreeSupport: "supported",
         }).effectiveIsolation,

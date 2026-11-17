@@ -38,7 +38,7 @@ export function createProjectCommand(): Command {
       .description("Read, set, or reset the project workspace isolation default")
       .argument("<project-id>", "Project id")
       .argument("[isolation]", "local or worktree")
-      .option("--reset", "Remember the caller's last isolation choice")
+      .option("--reset", "Restore the default (New worktree for Git projects, Local otherwise)")
       .allowExcessArguments(false),
   ).action(withOutput(runIsolationCommand));
 

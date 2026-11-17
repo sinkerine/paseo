@@ -137,7 +137,7 @@ export async function resolveToolWorkspaceIsolation(input: {
     );
   }
   if (!project || project.archivedAt !== null || project.kind !== "git") return "local";
-  return project.defaultIsolation ?? "local";
+  return project.defaultIsolation ?? "worktree";
 }
 
 export interface PaseoToolHostDependencies {
@@ -1443,7 +1443,9 @@ function createToolCatalog(
         isolation: z
           .enum(["local", "worktree"])
           .optional()
-          .describe("Workspace isolation. Defaults to the project setting, or local when unset."),
+          .describe(
+            "Workspace isolation. Defaults to the project setting, otherwise worktree for Git projects or local.",
+          ),
         path: z
           .string()
           .optional()

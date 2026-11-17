@@ -216,8 +216,8 @@ test.describe("New workspace host project preservation", () => {
       const row = page.getByTestId("project-isolation-row");
       await expect(row).toContainText("Local");
       await row.getByRole("button").click();
-      await page.getByRole("menuitem", { name: "Remember last", exact: true }).click();
-      await expect(row).toContainText("Remember last");
+      await page.getByRole("menuitem", { name: "New worktree", exact: true }).click();
+      await expect(row).toContainText("New worktree");
       expect(
         (await secondary.listProjects()).projects.find(
           (project) => project.projectId === crossHostProject.secondaryProjectId,
@@ -237,7 +237,7 @@ test.describe("New workspace host project preservation", () => {
         (await primary.listProjects()).projects.find(
           (project) => project.projectId === crossHostProject.primaryProjectId,
         )?.projectDefaultIsolation,
-      ).toBe(null);
+      ).toBe("worktree");
     } finally {
       await primary.close();
       await secondary.close();

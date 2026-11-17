@@ -13,7 +13,6 @@ export interface ResolveWorkspaceIsolationInput {
   draft: WorkspaceIsolationDraftState;
   targetKey: string;
   projectDefaultIsolation: ProjectIsolation | null;
-  preferredIsolation: ProjectIsolation | undefined;
   supportsMultiplicity: boolean;
   worktreeSupport: "supported" | "unsupported" | "unknown";
 }
@@ -60,11 +59,7 @@ export function resolveWorkspaceIsolation(
     type: "target-changed",
     targetKey: input.targetKey,
   });
-  const isolation =
-    nextDraft.manualIsolation ??
-    input.projectDefaultIsolation ??
-    input.preferredIsolation ??
-    "worktree";
+  const isolation = nextDraft.manualIsolation ?? input.projectDefaultIsolation ?? "worktree";
   const canCreateWorktree = input.supportsMultiplicity && input.worktreeSupport !== "unsupported";
   const isWorktree = isolation === "worktree" && canCreateWorktree;
   return {
@@ -74,10 +69,4 @@ export function resolveWorkspaceIsolation(
     canCreateWorktree,
     showRefPicker: !input.supportsMultiplicity || isWorktree,
   };
-}
-
-export function shouldPersistGlobalIsolationPreference(input: {
-  projectDefaultIsolation: ProjectIsolation | null;
-}): boolean {
-  return input.projectDefaultIsolation === null;
 }

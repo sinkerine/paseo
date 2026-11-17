@@ -443,20 +443,19 @@ function resolveInitialSubmitCadence(
 
 function resolveDefaultIsolationForTarget(
   target: ScheduleProjectTarget | null,
-  preferences: FormPreferences | null | undefined,
 ): "local" | "worktree" {
-  return target?.defaultIsolation ?? preferences?.isolation ?? "local";
+  if (!target?.isGit) return "local";
+  return target.defaultIsolation ?? "worktree";
 }
 
 function resolveInitialIsolation(input: {
   config: ReturnType<typeof newAgentConfig>;
-  preferences: FormPreferences | undefined;
   target: ScheduleProjectTarget | null;
 }): "local" | "worktree" {
   if (input.config) {
     return input.config.isolation ?? "local";
   }
-  return resolveDefaultIsolationForTarget(input.target, input.preferences);
+  return resolveDefaultIsolationForTarget(input.target);
 }
 
 function resolveSelectedProjectOptionId(target: ScheduleProjectTarget | null): string {
@@ -690,7 +689,6 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
     archiveOnFinish: config?.archiveOnFinish ?? true,
     isolation: resolveInitialIsolation({
       config,
-      preferences: snapshot.defaults.preferences,
       target: selectedProjectTarget,
     }),
     effectiveIsolation: "local",
@@ -930,7 +928,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
     let resolved = nextState;
     if (snapshot.mode === "create" && !userModified.isolation) {
       const target = findProjectTargetByOptionId(projectTargets, resolved.selectedProjectOptionId);
-      resolved = { ...resolved, isolation: resolveDefaultIsolationForTarget(target, preferences) };
+      resolved = { ...resolved, isolation: resolveDefaultIsolationForTarget(target) };
     }
     if (providerEntries.length === 0 || resolved.targetKind !== "new-agent") {
       return resolved;
@@ -1022,7 +1020,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       publish(
         clearProviderSelection({
           ...state,
-          isolation: preferences?.isolation ?? "local",
+          isolation: "local",
           selectedServerId: serverId,
           workingDir: "",
           projectDisplay: null,
@@ -1048,9 +1046,7 @@ export function openScheduleForm(snapshot: ScheduleFormSnapshot): ScheduleFormMo
       const nextState = {
         ...state,
         isolation:
-          snapshot.mode === "create"
-            ? resolveDefaultIsolationForTarget(target, preferences)
-            : state.isolation,
+          snapshot.mode === "create" ? resolveDefaultIsolationForTarget(target) : state.isolation,
         selectedServerId: target.serverId,
         workingDir: target.cwd,
         projectDisplay: display,

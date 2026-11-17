@@ -724,7 +724,7 @@ describe("schedule form model", () => {
       selectedModel: "model-b",
       selectedMode: "load-test",
       selectedThinkingOptionId: "high",
-      isolation: "worktree",
+      isolation: "local",
     });
 
     const userEdited = open({
@@ -764,6 +764,23 @@ describe("schedule form model", () => {
       isolation: "worktree",
     });
   });
+});
+
+it("defaults Git schedules to worktrees regardless of legacy isolation preferences", () => {
+  const projectTarget = PROJECT_TARGETS[0]!;
+  const form = open({
+    mode: "create",
+    defaults: {
+      serverId: "host-a",
+      projectTargets: [projectTarget],
+      preferences: { isolation: "local" },
+    },
+  });
+  form.setProject(projectTarget.optionId, { label: "Project A" });
+  expect(form.getState().isolation).toBe("worktree");
+  form.setIsolation("local");
+  expect(form.getState().isolation).toBe("local");
+  form.close();
 });
 
 it("seeds pinned isolation, clears A to B to A overrides and preserves saved edit config", () => {

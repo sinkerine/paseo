@@ -23,7 +23,7 @@ export function createWorkspaceCommand(): Command {
       .description("Create a workspace")
       .option(
         "--isolation <local|worktree>",
-        "Workspace isolation (default: project setting or local)",
+        "Workspace isolation (default: project setting, otherwise worktree for Git projects or local)",
       )
       .option("--path <path>", "Local directory or source checkout (default: current)")
       .option("--project <id>", "Existing project id")

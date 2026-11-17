@@ -3,7 +3,6 @@ import {
   createWorkspaceIsolationDraftState,
   reduceWorkspaceIsolationDraftState,
   resolveWorkspaceIsolation,
-  shouldPersistGlobalIsolationPreference,
 } from "./new-workspace/isolation";
 import type { ProjectIsolation } from "@getpaseo/protocol/messages";
 import { useAddHost } from "@/hosts/add-host";
@@ -216,12 +215,10 @@ function useWorkspaceIsolation(input: {
   supportsMultiplicity: boolean;
   worktreeSupport: "supported" | "unsupported" | "unknown";
 }): WorkspaceIsolationState & { changeTarget: (targetKey: string) => void } {
-  const { preferences, updatePreferences } = useFormPreferences();
   const [draft, setDraft] = useState(() => createWorkspaceIsolationDraftState(input.targetKey));
   const resolved = resolveWorkspaceIsolation({
     ...input,
     draft,
-    preferredIsolation: preferences.isolation,
   });
   if (resolved.nextDraft !== draft) setDraft(resolved.nextDraft);
   const changeTarget = useCallback((targetKey: string) => {
@@ -238,14 +235,8 @@ function useWorkspaceIsolation(input: {
           value,
         }),
       );
-      if (
-        shouldPersistGlobalIsolationPreference({
-          projectDefaultIsolation: input.projectDefaultIsolation,
-        })
-      )
-        void updatePreferences({ isolation: value });
     },
-    [input.targetKey, input.projectDefaultIsolation, updatePreferences],
+    [input.targetKey],
   );
   return { ...resolved, setIsolation, changeTarget };
 }

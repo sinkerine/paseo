@@ -2303,64 +2303,67 @@ describe("create_agent MCP tool", () => {
     }
   });
 
-  it("creates a worktree workspace from a project root without a path", async () => {
-    const { agentManager, agentStorage } = createTestDeps();
-    const project = createPersistedProjectRecord({
-      projectId: "project-source",
-      rootPath: REPO_CWD,
-      kind: "git",
-      displayName: "source",
-      createdAt: "2026-07-18T00:00:00.000Z",
-      updatedAt: "2026-07-18T00:00:00.000Z",
-    });
-    const receivedInputs: CreatePaseoWorktreeInput[] = [];
-    const createPaseoWorktree: CreatePaseoWorktreeWorkflowFn = async (input) => {
-      receivedInputs.push(input);
-      return {
-        worktree: { branchName: "project-worktree", worktreePath: TARGET_CWD },
-        intent: { kind: "branch-off", branchName: "project-worktree", baseBranch: "main" },
-        workspace: createPersistedWorkspaceRecord({
-          workspaceId: "ws-project-source",
-          projectId: project.projectId,
-          cwd: TARGET_CWD,
-          kind: "worktree",
-          displayName: "project-worktree",
-          title: input.title ?? null,
-          createdAt: "2026-07-18T00:00:00.000Z",
-          updatedAt: "2026-07-18T00:00:00.000Z",
-        }),
-        repoRoot: REPO_CWD,
-        created: true,
+  it.each([undefined, "worktree"] as const)(
+    "creates a worktree workspace from a project root with isolation %s",
+    async (isolation) => {
+      const { agentManager, agentStorage } = createTestDeps();
+      const project = createPersistedProjectRecord({
+        projectId: "project-source",
+        rootPath: REPO_CWD,
+        kind: "git",
+        displayName: "source",
+        createdAt: "2026-07-18T00:00:00.000Z",
+        updatedAt: "2026-07-18T00:00:00.000Z",
+      });
+      const receivedInputs: CreatePaseoWorktreeInput[] = [];
+      const createPaseoWorktree: CreatePaseoWorktreeWorkflowFn = async (input) => {
+        receivedInputs.push(input);
+        return {
+          worktree: { branchName: "project-worktree", worktreePath: TARGET_CWD },
+          intent: { kind: "branch-off", branchName: "project-worktree", baseBranch: "main" },
+          workspace: createPersistedWorkspaceRecord({
+            workspaceId: "ws-project-source",
+            projectId: project.projectId,
+            cwd: TARGET_CWD,
+            kind: "worktree",
+            displayName: "project-worktree",
+            title: input.title ?? null,
+            createdAt: "2026-07-18T00:00:00.000Z",
+            updatedAt: "2026-07-18T00:00:00.000Z",
+          }),
+          repoRoot: REPO_CWD,
+          created: true,
+        };
       };
-    };
-    const server = await createAgentMcpServer({
-      agentManager,
-      agentStorage,
-      providerSnapshotManager: createOpenCodeManager().manager,
-      projectRegistry: {
-        get: async (projectId) => (projectId === project.projectId ? project : null),
-        list: async () => [project],
-      },
-      createPaseoWorktree,
-      logger,
-    });
+      const server = await createAgentMcpServer({
+        agentManager,
+        agentStorage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        projectRegistry: {
+          get: async (projectId) => (projectId === project.projectId ? project : null),
+          list: async () => [project],
+        },
+        createPaseoWorktree,
+        logger,
+      });
 
-    const response = await invokeToolWithParsedInput(registeredTool(server, "create_workspace"), {
-      isolation: "worktree",
-      projectId: project.projectId,
-      worktreeSlug: "project-worktree",
-      title: "Project workspace",
-    });
-
-    expect(response.structuredContent.workspaceId).toBe("ws-project-source");
-    expect(receivedInputs).toEqual([
-      expect.objectContaining({
-        cwd: REPO_CWD,
+      const response = await invokeToolWithParsedInput(registeredTool(server, "create_workspace"), {
+        isolation,
         projectId: project.projectId,
+        worktreeSlug: "project-worktree",
         title: "Project workspace",
-      }),
-    ]);
-  });
+      });
+
+      expect(response.structuredContent.workspaceId).toBe("ws-project-source");
+      expect(receivedInputs).toEqual([
+        expect.objectContaining({
+          cwd: REPO_CWD,
+          projectId: project.projectId,
+          title: "Project workspace",
+        }),
+      ]);
+    },
+  );
 
   it("preserves branch checkout and pull request checkout workspace modes", async () => {
     const { agentManager, agentStorage } = createTestDeps();

@@ -363,6 +363,16 @@ test.describe("Schedules project target", () => {
     await waitForSidebarHydration(page);
     await openNewWorkspaceComposer(page, gamma);
     await selectWorkspaceIsolation(page, "local");
+    await page.evaluate(() => {
+      const key = "@paseo:create-agent-preferences";
+      const preferences = JSON.parse(localStorage.getItem(key) ?? "{}");
+      localStorage.setItem(key, JSON.stringify({ ...preferences, isolation: "local" }));
+      const nonce = localStorage.getItem("@paseo:e2e-seed-nonce");
+      if (!nonce) throw new Error("Missing fixture seed nonce");
+      localStorage.setItem("@paseo:e2e-disable-default-seed-once", nonce);
+    });
+    await page.reload();
+    await waitForSidebarHydration(page);
     await page.getByRole("button", { name: "Schedules", exact: true }).click();
     await page.getByTestId("schedules-empty-new").click();
     const selectProject = async (workspace: SeededWorkspace) => {
@@ -371,8 +381,10 @@ test.describe("Schedules project target", () => {
         .getByTestId(`schedule-project-option-${projectEquivalenceViewKey(workspace.projectKey)}`)
         .click();
     };
-    await selectProject(alpha);
+    await selectProject(gamma);
     const isolation = page.getByTestId("schedule-isolation-trigger");
+    await expect(isolation).toContainText("Worktree");
+    await selectProject(alpha);
     await expect(isolation).toContainText("Worktree");
     await isolation.click();
     await page.getByTestId("schedule-isolation-local").click();

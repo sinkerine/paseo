@@ -351,7 +351,8 @@ function ProjectWorkspacesGroup({
   }
   const handleIsolationChange = useCallback(
     (value: string) => {
-      mutation.mutate(value === "local" || value === "worktree" ? value : null, {
+      if (value !== "local" && value !== "worktree") return;
+      mutation.mutate(value, {
         // Per-call callbacks stop when this target's observer unmounts.
         onSuccess: () =>
           toast.show(t("settings.project.workspaces.savedToast"), { variant: "success" }),
@@ -360,7 +361,6 @@ function ProjectWorkspacesGroup({
     [mutation, t, toast],
   );
   const options = [
-    { value: "remember", label: t("settings.project.workspaces.options.rememberLast") },
     { value: "local", label: t("newWorkspace.isolation.local") },
     { value: "worktree", label: t("newWorkspace.isolation.worktree") },
   ];
@@ -374,9 +374,8 @@ function ProjectWorkspacesGroup({
         <SettingsSelect
           testID="project-isolation-row"
           label={t("settings.project.workspaces.defaultIsolation")}
-          hint={t("settings.project.workspaces.defaultIsolationHint")}
           error={mutation.error?.message}
-          value={selectedHost.defaultIsolation ?? "remember"}
+          value={selectedHost.defaultIsolation ?? "worktree"}
           options={options}
           disabled={mutation.isPending}
           onValueChange={handleIsolationChange}

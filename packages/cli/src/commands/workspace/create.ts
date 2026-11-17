@@ -149,7 +149,7 @@ export function resolveCliWorkspaceIsolation(input: {
       ? entry.projectId === input.projectId
       : resolve(entry.projectRootPath) === resolve(input.resolvedPath),
   );
-  return project?.projectKind === "git" ? (project.projectDefaultIsolation ?? "local") : "local";
+  return project?.projectKind === "git" ? (project.projectDefaultIsolation ?? "worktree") : "local";
 }
 
 export async function runCreateCommand(

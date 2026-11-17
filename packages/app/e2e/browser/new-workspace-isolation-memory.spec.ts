@@ -30,12 +30,7 @@ import { createTempGitRepo } from "../support/helpers/workspace";
 import { getServerId } from "../support/helpers/server-id";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 
-// Regression for "the local / worktree selection in the new workspace is not
-// remembered." The isolation choice persists in the create-form preferences
-// (FormPreferences.isolation), so it must survive the create→reopen remount:
-// creating a worktree workspace navigates away from /new and unmounts it, and
-// reopening New Workspace has to still show "New worktree".
-test.describe("New workspace isolation memory", () => {
+test.describe("New workspace isolation defaults", () => {
   let client: Awaited<ReturnType<typeof connectNewWorkspaceDaemonClient>>;
   const localWorkspaceIds = new Set<string>();
   const createdWorktreeDirectories = new Set<string>();
@@ -60,7 +55,7 @@ test.describe("New workspace isolation memory", () => {
     await client?.close().catch(() => undefined);
   });
 
-  test("remembers the worktree isolation choice after creating a workspace", async ({ page }) => {
+  test("defaults to worktree after creating a workspace", async ({ page }) => {
     const serverId = getServerId();
     const tempRepo = await createTempGitRepo("isolation-memory-", { branches: ["main", "dev"] });
 
@@ -134,7 +129,18 @@ for (const viewport of [
       await gotoAppShell(page);
       await waitForSidebarHydration(page);
       // Keep the sidebar available for its real entry paths, then verify compact controls.
+      await page.evaluate(() => {
+        const key = "@paseo:create-agent-preferences";
+        const preferences = JSON.parse(localStorage.getItem(key) ?? "{}");
+        localStorage.setItem(key, JSON.stringify({ ...preferences, isolation: "local" }));
+        const nonce = localStorage.getItem("@paseo:e2e-seed-nonce");
+        if (!nonce) throw new Error("Missing fixture seed nonce");
+        localStorage.setItem("@paseo:e2e-disable-default-seed-once", nonce);
+      });
+      await page.reload();
+      await waitForSidebarHydration(page);
       await openNewWorkspaceComposer(page, gamma);
+      await expectWorkspaceIsolationSelected(page, "worktree");
       await selectWorkspaceIsolation(page, "local");
       await select(alpha);
       await page.setViewportSize(viewport);
@@ -145,7 +151,7 @@ for (const viewport of [
       await select(alpha);
       await expectWorkspaceIsolationSelected(page, "worktree");
       await select(gamma);
-      await expectWorkspaceIsolationSelected(page, "local");
+      await expectWorkspaceIsolationSelected(page, "worktree");
       await selectWorkspaceIsolation(page, "worktree");
       await select(alpha);
       await selectWorkspaceIsolation(page, "local");
