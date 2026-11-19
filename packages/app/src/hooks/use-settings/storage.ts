@@ -98,6 +98,8 @@ export interface AppSettings {
   sidebarRowItems: SidebarRowItems;
   sidebarChecksDisplay: SidebarChecksDisplay;
   worktreeSetupPromptEnabled: boolean;
+  /** Plugin workspace row badge items by `<pluginId>/<itemId>`; a missing key shows. */
+  sidebarPluginRowBadgeItems: Record<string, boolean>;
   /** Top-level sidebar rows in display order; empty means the default order, all visible. */
   sidebarNavItems: SidebarNavPreference[];
   /** Sidebar footer items in display order; empty means the default order, all visible. */
@@ -160,6 +162,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   sidebarRowItems: DEFAULT_SIDEBAR_ROW_ITEMS,
   sidebarChecksDisplay: DEFAULT_SIDEBAR_CHECKS_DISPLAY,
   worktreeSetupPromptEnabled: true,
+  sidebarPluginRowBadgeItems: {},
   sidebarNavItems: [],
   sidebarFooterItems: [],
   usage: DEFAULT_USAGE_PREFERENCES,
@@ -259,6 +262,7 @@ const StoredAppSettingsSchema = z
       .optional()
       .catch(DEFAULT_SIDEBAR_CHECKS_DISPLAY),
     worktreeSetupPromptEnabled: z.boolean().catch(true),
+    sidebarPluginRowBadgeItems: z.record(z.string(), z.boolean()).catch({}),
     sidebarNavItems: z.array(z.object({ key: z.string(), visible: z.boolean() })).catch([]),
     sidebarFooterItems: z.array(z.object({ key: z.string(), visible: z.boolean() })).catch([]),
     usage: UsagePreferencesSchema,

@@ -519,8 +519,20 @@ function createBottomAnchorControllerDriver(
       cancelPendingRequest("user_scroll");
       setModeInternal("detached");
     },
-    endUserScroll(_params) {
+    // A gesture ending short stays detached unless a newer prompt submission requested the end.
+    // Passive output must not move the rows the finger just let go of.
+    endUserScroll(params) {
       isUserScrollActive = false;
+      // Submit arrives with the user's action; rewind and tail jumps can arrive after a fetch.
+      // A newer gesture would have detached again, so only a still-sticky submit owns release.
+      if (pendingRequest?.reason === "message-sent" && mode === "sticky-bottom") {
+        evaluate(false, "user_scroll_end");
+        return;
+      }
+      if (!params.isAtEnd) {
+        cancelPendingRequest("user_scrolled_away");
+        setModeInternal("detached");
+      }
     },
     detachByUser() {
       cancelPendingRequest("user_scrolled_away");

@@ -1,6 +1,7 @@
 import type { AgentTimelineItem, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import { isTimelineTurnTrigger } from "@getpaseo/protocol/timeline-turn";
 import type { AgentToolCallData, PluginTimelineStreamItem, StreamItem } from "@/types/stream";
+import { cloneAndFreeze } from "../freeze";
 import type { TimelineItemTransform } from "./model";
 
 type AssistantPhase = "streaming" | "complete";
@@ -9,18 +10,6 @@ const projectionCache = new WeakMap<
   TimelineItemTransform,
   WeakMap<StreamItem, Partial<Record<AssistantPhase, StreamItem[]>>>
 >();
-
-function cloneAndFreeze<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map((entry) => cloneAndFreeze(entry))) as T;
-  }
-  if (value !== null && typeof value === "object") {
-    return Object.freeze(
-      Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cloneAndFreeze(entry)])),
-    ) as T;
-  }
-  return value;
-}
 
 function sourceToolCallTimelineItem(data: AgentToolCallData): ToolCallTimelineItem {
   const { callId, name, status, error, detail, metadata, agentMessage } = data;

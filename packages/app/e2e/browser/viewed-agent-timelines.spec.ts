@@ -123,8 +123,8 @@ async function selectAgent(page: Page, title: string) {
 
 async function expectForkFailureWithoutOverlappingStatus(page: Page) {
   const expectContinuousToast = await observeToastReplacement(page);
-  await page.getByRole("button", { name: "Fork chat from here" }).last().click();
-  await page.getByRole("menuitem", { name: "Fork in a new tab", exact: true }).click();
+  await page.getByTestId("assistant-fork-menu-trigger").last().click();
+  await page.getByRole("menuitem", { name: "Copy chat to a new tab", exact: true }).click();
   await expect(
     page.getByRole("alert").filter({ hasText: "Transport not connected" }),
   ).toBeVisible();
@@ -136,7 +136,7 @@ async function expectForkFailureWithoutOverlappingStatus(page: Page) {
 async function observeToastReplacement(page: Page) {
   const observation = await page
     .getByRole("alert")
-    .filter({ hasText: "Reconnecting to host" })
+    .filter({ hasText: "Reconnecting" })
     .evaluateHandle((toast) => {
       const frames: Array<{ connected: boolean; opacity: number; transform: string }> = [];
       let frame = 0;

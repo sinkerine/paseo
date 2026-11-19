@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   AgentStatusSchema,
   AgentTimelineItemPayloadSchema,
+  ForgeWebSchema,
   WorkspaceGitHubRuntimePayloadSchema,
 } from "@getpaseo/protocol/messages";
 import { AgentProviderSchema } from "@getpaseo/protocol/provider-manifest";
@@ -21,6 +22,7 @@ import {
   type AgentToolCallData,
   type StreamItem,
 } from "@/types/stream";
+import type { UnsettledTurn } from "@/timeline/turn-liveness";
 import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { clearLegacyReplicaCache } from "./legacy-cleanup";
 import {
@@ -68,6 +70,8 @@ export interface CachedTimeline {
   items: StreamItem[];
   range: AgentTimelineCursorState | null;
   hasOlder: boolean;
+  /** Set when these messages were captured while a turn was open and not yet caught up. */
+  unsettledTurn?: UnsettledTurn;
 }
 
 const PERSIST_DELAY_MS = 1_000;
@@ -335,6 +339,7 @@ const StoredWorkspaceSchema = z.strictObject({
   gitRuntime: WorkspaceGitRuntimeSchema,
   githubRuntime: WorkspaceGitHubRuntimePayloadSchema,
   forge: z.string().optional(),
+  forgeWeb: ForgeWebSchema.optional(),
 });
 
 const StoredProjectSchema = z.strictObject({
@@ -360,6 +365,9 @@ const StoredTimelineSchema = z.strictObject({
     })
     .nullable(),
   hasOlder: z.boolean(),
+  unsettledTurn: z
+    .strictObject({ turnId: z.string().nullable(), startedAt: IsoDateSchema.nullable() })
+    .optional(),
 });
 
 type StoredAgent = z.infer<typeof StoredAgentSchema>;
@@ -416,6 +424,16 @@ function deserializeTimeline(stored: StoredTimeline | null): CachedTimeline | nu
     items: stored.items.map(deserializeTimelineItem),
     range: stored.range,
     hasOlder: stored.hasOlder,
+    ...(stored.unsettledTurn
+      ? {
+          unsettledTurn: {
+            turnId: stored.unsettledTurn.turnId,
+            startedAt: stored.unsettledTurn.startedAt
+              ? new Date(stored.unsettledTurn.startedAt)
+              : null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -760,6 +778,7 @@ function serializeWorkspace(workspace: WorkspaceDescriptor): StoredWorkspace {
     gitRuntime: workspace.gitRuntime,
     githubRuntime: workspace.githubRuntime,
     forge: workspace.forge,
+    forgeWeb: workspace.forgeWeb,
   };
 }
 
@@ -821,6 +840,14 @@ function serializeTimeline(timeline: CachedTimeline): StoredTimeline | null {
       ? { epoch: range.epoch, startSeq: range.startSeq, endSeq: range.endSeq }
       : null,
     hasOlder: canPersistCoverage ? timeline.hasOlder : false,
+    ...(timeline.unsettledTurn
+      ? {
+          unsettledTurn: {
+            turnId: timeline.unsettledTurn.turnId,
+            startedAt: timeline.unsettledTurn.startedAt?.toISOString() ?? null,
+          },
+        }
+      : {}),
   };
 }
 
