@@ -222,7 +222,9 @@ describe("Pi workflow tracker", () => {
     writeFileSync(sessionFile, "malformed transcript is handled by the host");
     fixture.writeStatus({ steps: [step({ sessionFile })] });
     const first = fixture.tracker.poll();
-    expect(first?.childSessions).toEqual([{ id: childId, file: sessionFile }]);
+    expect(first?.childSessions).toEqual([
+      { id: childId, file: sessionFile, lifetime: "conversation" },
+    ]);
     expect(event(first, childId)).toEqual({
       type: "upsert",
       id: childId,
@@ -687,7 +689,9 @@ describe("Pi workflow tracker", () => {
     expect(event(mapping, workflowGroupSubagentId(runId, "T1"))).toMatchObject({
       status: "completed",
     });
-    expect(mapping?.childSessions).toEqual([{ id: childId, file: sessionFile }]);
+    expect(mapping?.childSessions).toEqual([
+      { id: childId, file: sessionFile, lifetime: "conversation" },
+    ]);
     expect(fixture.tracker.mapNotice(terminal(fixture.asyncDir))?.childSessions).toEqual([]);
     expect(fixture.tracker.poll()).toBeUndefined();
   });
@@ -787,7 +791,9 @@ describe("workflow mission recovery", () => {
       });
       const recovered = fixture.tracker.recoverMission(mission);
       expect(event(recovered, rootId)).toMatchObject({ status: "canceled" });
-      expect(recovered?.childSessions).toEqual([{ id: childId, file: "/child" }]);
+      expect(recovered?.childSessions).toEqual([
+        { id: childId, file: "/child", lifetime: "conversation" },
+      ]);
       expect(fixture.tracker.recoverMission(mission)).toBeUndefined();
     },
   );

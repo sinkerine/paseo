@@ -17,6 +17,11 @@ export const ptBR: TranslationResources = {
     clear: "Limpar",
     accepted: "Comando aceito",
   },
+  pluginCombobox: {
+    searching: "Pesquisando…",
+    empty: "Nenhum resultado",
+    failed: "Falha na pesquisa: {{message}}",
+  },
   paneFind: {
     connectionFailure:
       "Não foi possível pesquisar nesta conversa. Verifique a conexão com o host e tente novamente.",
@@ -101,14 +106,23 @@ export const ptBR: TranslationResources = {
       close: "Fechar menu",
     },
     commandCenter: {
-      placeholder: "Buscar comandos, arquivos, espaços de trabalho e agentes...",
+      placeholder: "Pesquisar espaços de trabalho, arquivos e ações...",
+      placeholderWithoutFiles: "Pesquisar espaços de trabalho e ações...",
       filePlaceholder: "Pesquisar arquivos...",
+      workspacePlaceholder: "Pesquisar espaços de trabalho...",
+      actionPlaceholder: "Pesquisar ações...",
       searchingFiles: "Pesquisando arquivos...",
       noMatches: "Nenhuma correspondência",
       actions: "Ações",
       files: "Arquivos",
       workspaces: "Espaços de trabalho",
-      agents: "Agentes",
+      recentWorkspaces: "Espaços de trabalho recentes",
+      tabs: {
+        all: "Tudo",
+        workspaces: "Espaços de trabalho",
+        files: "Arquivos",
+        actions: "Ações",
+      },
       newAgent: "Novo agente",
       open: "Abrir {{name}}",
       openInSidePane: "Abrir {{name}} no painel lateral",
@@ -272,7 +286,7 @@ export const ptBR: TranslationResources = {
     states: {
       notFound: "Agente não encontrado",
       failedToLoad: "Falha ao carregar agente",
-      reconnecting: "Reconectando ao host",
+      reconnecting: "Reconectando",
       updating: "Atualizando mensagens",
       timelineSyncFailed: "Não foi possível atualizar o histórico do agente.",
       timelineSyncRetrying: "Tentando novamente…",
@@ -404,6 +418,7 @@ export const ptBR: TranslationResources = {
       otherPlaceholder: "Outro...",
     },
     backgroundWork: {
+      heartbeat: "Batimento",
       pillOne: "1 tarefa em segundo plano",
       pillMany: "{{count}} tarefas em segundo plano",
       notRunning: "Não está mais em execução",
@@ -494,8 +509,7 @@ export const ptBR: TranslationResources = {
         archivedTitle: "Workspace arquivado",
         restoreDescription:
           "Restaure {{workspaceName}} para voltar aos seus agentes. A worktree usará a branch {{branch}}.",
-        restoreWithoutBranchDescription:
-          "Restaure {{workspaceName}} para voltar aos seus agentes. Uma nova branch partirá da base salva ou da branch padrão do repositório.",
+        restoreWithoutBranchDescription: "Restaure {{workspaceName}} para voltar aos seus agentes.",
         unarchiveDescription:
           "{{workspaceName}} está arquivado. Desarquive-o para abri-lo novamente.",
         restoreAction: "Restaurar",
@@ -1218,6 +1232,8 @@ export const ptBR: TranslationResources = {
     title: "Novidades",
     installed: "Instalada",
     showMore: "Mostrar mais",
+    showAllChanges: "Mostrar todas as mudanças",
+    hideAllChanges: "Ocultar todas as mudanças",
     openWebsite: "Changelog completo",
     error: {
       title: "Não foi possível carregar o changelog",
@@ -2055,6 +2071,7 @@ export const ptBR: TranslationResources = {
     hostUnavailable: "Host de download indisponível.",
     cancelled: "Download cancelado.",
     failed: "Falha ao baixar arquivo.",
+    httpFailed: "Falha ao baixar arquivo (HTTP {{status}}).",
     shareFile: "Compartilhar arquivo",
     shareFileNamed: "Compartilhar {{fileName}}",
   },
@@ -2253,6 +2270,7 @@ export const ptBR: TranslationResources = {
     turnOn: "Ativar",
 
     options: "Configurações",
+    host: "Host",
     refreshFailed: "Não foi possível atualizar o uso",
     noHosts: "Nenhum host conectado",
     agentError: "Não foi possível carregar o uso: {{reason}}",
@@ -2269,6 +2287,8 @@ export const ptBR: TranslationResources = {
     loginExpired: "O login expirou {{relativeTime}}. {{remedy}}",
     title: "Uso do plano",
     refresh: "Atualizar",
+    reorderCard: "Reordenar {{source}}",
+    showCard: "Mostrar {{source}}",
     refreshAll: "Atualizar tudo",
     refreshing: "Atualizando...",
     loading: "Carregando uso...",

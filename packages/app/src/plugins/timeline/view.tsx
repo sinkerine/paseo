@@ -1,4 +1,3 @@
-import { PluginClientStateProvider } from "@getpaseo/plugin/client/host";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import React, { type ComponentType, type ComponentProps, useMemo } from "react";
@@ -8,7 +7,6 @@ import { useIsCompactFormFactor } from "@/constants/layout";
 import { useHostRuntimeClient, useHosts } from "@/runtime/host-runtime";
 import type { Theme } from "@/styles/theme";
 import type { PluginTimelineStreamItem } from "@/types/stream";
-import { createPluginClientStateSource } from "../client-state/source";
 import { useInstalledPlugin } from "../registry";
 import { PluginInstallationProvider } from "../installation-provider";
 import { SurfaceErrorBoundary } from "../surface-error-boundary";
@@ -72,7 +70,6 @@ function PluginTimelineItemBody({
   const hostLabel = hosts.find((host) => host.serverId === serverId)?.label ?? serverId;
   const host = useMemo(() => ({ id: serverId, label: hostLabel }), [hostLabel, serverId]);
   const layout = useMemo(() => ({ compact, platform: resolvePluginPlatform() }), [compact]);
-  const stateSource = useMemo(() => createPluginClientStateSource(serverId), [serverId]);
 
   if (!plugin || !renderer || !parsed || !client) {
     return (
@@ -101,10 +98,8 @@ function PluginTimelineItemBody({
   return (
     <SurfaceErrorBoundary installation={plugin} resetKey={item.data} Surface={Component}>
       <PluginInstallationProvider plugin={plugin}>
-        <PluginClientStateProvider source={stateSource}>
-          <Component {...props} />
-          {renderer.turnActions === "inline" ? null : turnFooter}
-        </PluginClientStateProvider>
+        <Component {...props} />
+        {renderer.turnActions === "inline" ? null : turnFooter}
       </PluginInstallationProvider>
     </SurfaceErrorBoundary>
   );

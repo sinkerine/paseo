@@ -38,7 +38,11 @@ import type { ProjectRegistry, WorkspaceRegistry } from "./workspace-registry.js
 import type { ProjectUpdate } from "./workspace-reconciliation-service.js";
 import type { ScheduleService } from "./schedule/service.js";
 import type { CheckoutDiffManager, CheckoutDiffMetrics } from "./checkout-diff-manager.js";
-import type { DaemonConfigStore, MutableDaemonConfig } from "./daemon-config-store.js";
+import {
+  toWireDaemonConfig,
+  type DaemonConfigStore,
+  type MutableDaemonConfig,
+} from "./daemon-config-store.js";
 import {
   type ServerInfoStatusPayload,
   type ScriptStatusUpdateMessage,
@@ -725,23 +729,39 @@ export class VoiceAssistantWebSocketServer {
     this.agentManager = agentManager;
     this.agentStorage = agentStorage;
     this.agentMessages = createAgentMessageDelivery({
+      tryRunOutOfBand: (request, onAccepted) =>
+        agentManager.tryRunOutOfBand(
+          request.recipientId,
+          request.prompt,
+          { clientMessageId: request.messageIds[0] },
+          onAccepted,
+        ),
+      isRunning: (agentId) => agentManager.hasInFlightRun(agentId),
+      hasPendingPermission: (agentId) => agentManager.hasPendingPermissions(agentId),
+      subscribe: (notify) =>
+        agentManager.subscribe(
+          (event) => {
+            if (event.type === "agent_state") notify(event.agent.id);
+          },
+          { replayState: false },
+        ),
       dispatch: async (batch) => {
-        const { disposition } = await sendPreparedPromptToAgent({
+        const dispatch = await sendPreparedPromptToAgent({
           agentManager,
           agentStorage,
           agentId: batch.recipientId,
           prompt: batch.prompt,
           activeTurnBehavior: batch.activeTurnBehavior,
+          idleOnly: batch.idleOnly,
           sessionMode: batch.sessionMode,
           clearPendingPermissions: batch.clearPendingPermissions,
           unarchive: batch.unarchive,
           runOptions: { clientMessageId: batch.messageIds[0] },
-          onDispatch: batch.onDispatch,
           logger: this.logger,
         });
-        if (disposition === "turn_started")
-          await waitForAgentRunStartWithTimeout(agentManager, batch.recipientId);
-        return disposition;
+        if (dispatch.disposition === "turn_started")
+          await waitForAgentRunStartWithTimeout(agentManager, batch.recipientId, dispatch.started);
+        return dispatch.disposition;
       },
       onError: (err, batch) =>
         this.logger.error(
@@ -979,9 +999,7 @@ export class VoiceAssistantWebSocketServer {
       callback(false, 403, "Host not allowed");
       return;
     }
-    const sameOrigin = isWebSocketSameOrigin(origin, requestHost);
-
-    if (!origin || allowedOrigins.has("*") || allowedOrigins.has(origin) || sameOrigin) {
+    if (!origin || isDaemonOriginAllowed(origin, requestHost, allowedOrigins)) {
       callback(true);
     } else {
       this.incrementRuntimeCounter("originRejected");
@@ -2028,6 +2046,8 @@ export class VoiceAssistantWebSocketServer {
         usageSetting: true,
         usageSources: true,
         ownedSubscriptions: true,
+        providerOptionControls: true,
+        entityMetadata: true,
         diffSubscription: true,
         binaryChunkingV1: true,
         agentRequestReceipts: true,
@@ -2087,6 +2107,8 @@ export class VoiceAssistantWebSocketServer {
         pluginGitManagement: true,
         pluginSourceInstallation: true,
         pluginSourceUpdates: true,
+        // COMPAT(pluginRegistry): added in v0.16.0, remove gate after 2027-05-15.
+        pluginRegistry: true,
         pluginLogs: true,
         // COMPAT(pluginThemes): added in v0.5.0, remove gate after 2027-08-20.
         pluginThemes: true,
@@ -2183,6 +2205,8 @@ export class VoiceAssistantWebSocketServer {
         // COMPAT(providerRemoval): added in v0.1.105, drop the gate when floor >= v0.1.105.
         providerRemoval: true,
         hopliteProvider: this.providerSnapshotManager.supportsConfigRequiredProvider("hoplite"),
+        // COMPAT(fxProvider): added after v0.15.3, remove after 2027-05-09 once host floor includes the bundled adapter.
+        fxProvider: this.providerSnapshotManager.supportsConfigRequiredProvider("fx"),
         // COMPAT(importSessionWorkspaceTarget): added in v0.1.110, remove gate after 2027-01-16.
         importSessionWorkspaceTarget: true,
         // COMPAT(importSessionSearch): added in v0.7.3, remove gate after 2027-03-02.
@@ -2192,6 +2216,8 @@ export class VoiceAssistantWebSocketServer {
         forgeProviders: true,
         // COMPAT(selectiveAgentTimeline): added in v0.1.106, remove after 2027-01-12.
         selectiveAgentTimeline: true,
+        // COMPAT(timelineFreshnessCheck): added after v0.15.3, remove after 2027-05-09.
+        timelineFreshnessCheck: true,
         explicitEventSubscriptions: true,
         // COMPAT(canonicalSubmittedPrompts): added in v0.2.6, remove gate after 2027-01-30.
         canonicalSubmittedPrompts: true,
@@ -2233,7 +2259,7 @@ export class VoiceAssistantWebSocketServer {
       type: "status",
       payload: {
         status: "daemon_config_changed",
-        config,
+        config: toWireDaemonConfig(config),
       },
     });
   }
@@ -3258,6 +3284,22 @@ function isLoopbackAlias(hostname: string): boolean {
     return true;
   }
   return /^127(?:\.\d{1,3}){3}$/.test(normalized);
+}
+
+/**
+ * Whether a page at `origin` may talk to the daemon reached at `requestHost`. The WebSocket
+ * upgrade and the HTTP CORS check both use it, so a page that can connect can also fetch.
+ */
+export function isDaemonOriginAllowed(
+  origin: string,
+  requestHost: string | null,
+  allowedOrigins: Set<string>,
+): boolean {
+  return (
+    allowedOrigins.has("*") ||
+    allowedOrigins.has(origin) ||
+    isWebSocketSameOrigin(origin, requestHost)
+  );
 }
 
 export function isWebSocketSameOrigin(

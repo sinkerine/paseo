@@ -52,7 +52,7 @@ export function useAgentProfileStartShortcut(input: StartShortcutInput) {
         model: resolved.modelId,
         modeId: resolved.modeId,
         thinkingOptionId: resolved.thinkingOptionId,
-        featureValues: resolved.featureValues,
+        providerOptions: resolved.options,
       });
       void client
         .createAgent({ workspaceId: input.workspaceId, config })

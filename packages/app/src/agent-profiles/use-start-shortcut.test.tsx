@@ -82,7 +82,7 @@ describe("immediate profile agent creation", () => {
         model: "model",
         modeId: "plan",
         thinkingOptionId: "high",
-        featureValues: { feature: true },
+        options: { feature: true },
       },
     ];
     queryClient.setQueryData(daemonConfigQueryKey("host-a"), {
@@ -110,7 +110,7 @@ describe("immediate profile agent creation", () => {
         model: "model",
         modeId: "plan",
         thinkingOptionId: "high",
-        featureValues: { feature: true },
+        providerOptions: { feature: true },
       },
     });
     expect(boundary.show).toHaveBeenCalledWith("Starting agent: Saved", { durationMs: null });

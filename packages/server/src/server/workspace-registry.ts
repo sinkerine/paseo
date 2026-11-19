@@ -1,3 +1,4 @@
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { promises as fs } from "node:fs";
 
 import type { Logger } from "pino";
@@ -76,6 +77,7 @@ const PersistedWorkspaceRecordSchema = z.object({
     .nullable()
     .optional()
     .transform((value) => value ?? null),
+  head: z.string().optional(),
   // Exact checkout/worktree root backing cwd. This differs from cwd when the
   // selected project is a subdirectory inside a repository. Persist it so
   // archive and recovery do not need the directory to still exist in order to
@@ -107,6 +109,8 @@ const PersistedWorkspaceRecordSchema = z.object({
     .optional()
     .transform((value) => value ?? null),
   labels: z.array(z.string()).optional(),
+  // Plugin-owned data. Paseo stores it and never reads a key.
+  metadata: z.record(z.string(), z.custom<JsonValue>()).default({}),
   untrustedSource: UntrustedWorkspaceSourceSchema.optional(),
   // Public discovery visibility. Contents retain their ordinary lifecycle.
   background: z.boolean().optional().default(false),
@@ -128,6 +132,7 @@ export interface WorkspaceMutationContext {
 
 export interface WorkspaceArchiveContext {
   autoArchivedChangeRequestUrl?: string;
+  head?: string;
 }
 
 export interface ProjectMutation {
@@ -596,6 +601,7 @@ export class FileBackedWorkspaceRegistry
           ...existing,
           updatedAt: archivedAt,
           archivedAt,
+          head: context?.head,
           ...(context?.autoArchivedChangeRequestUrl
             ? { autoArchivedChangeRequestUrl: context.autoArchivedChangeRequestUrl }
             : {}),
@@ -712,6 +718,7 @@ export function createPersistedWorkspaceRecord(input: {
   autoArchivedChangeRequestUrl?: string | null;
   pinnedAt?: string | null;
   labels?: string[];
+  metadata?: Record<string, JsonValue>;
   untrustedSource?: UntrustedWorkspaceSource;
   background?: boolean;
 }): PersistedWorkspaceRecord {

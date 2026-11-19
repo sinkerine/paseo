@@ -11,6 +11,7 @@ const Args = z
     task: z.string().trim().min(1).optional(),
     async: z.boolean().optional(),
     action: z.unknown().optional(),
+    message: z.string().optional(),
   })
   .passthrough();
 const Row = z
@@ -46,6 +47,13 @@ export const piSubagents: PiExtension = {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
     const workflows = createPiWorkflowTracker({ readSessions });
+    const rememberSession = (file: string, run?: AsyncRun) => {
+      const reads = run?.resumedRun?.readSessions ?? readSessions;
+      if (reads.has(file)) return false;
+      reads.add(file);
+      readSessions.add(file);
+      return true;
+    };
     /** Keyed by async directory, which both status.json and the completion notice carry. */
     const asyncRuns = new Map<string, AsyncRun>();
     const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
@@ -81,8 +89,7 @@ export const piSubagents: PiExtension = {
               ? "failed"
               : "completed",
         });
-        if (row.sessionFile && !readSessions.has(row.sessionFile)) {
-          readSessions.add(row.sessionFile);
+        if (row.sessionFile && rememberSession(row.sessionFile)) {
           childSessions.push({ id, file: row.sessionFile });
         }
       }
@@ -126,8 +133,9 @@ export const piSubagents: PiExtension = {
         typeof call.result === "object" ? call.result?.details : null,
       );
       if (!details.success) return undefined;
-      const { mode, runId, asyncDir } = details.data;
-      if (mode !== "single" || !runId || !asyncDir) return undefined;
+      const { mode, asyncId, asyncDir, results } = details.data;
+      const runId = details.data.runId ?? asyncId;
+      if (mode !== "single" || !runId || !asyncDir || results.length !== 0) return undefined;
       if (!asyncRuns.has(asyncDir)) {
         asyncRuns.set(asyncDir, {
           dir: asyncDir,
@@ -141,7 +149,16 @@ export const piSubagents: PiExtension = {
       callsByRun.set(runId, call.callId);
       return (
         projectAsyncSpawn(details.data) ?? {
-          subagents: [{ type: "upsert" as const, id: call.callId, status: "running" as const }],
+          subagents: [
+            {
+              type: "upsert" as const,
+              id: call.callId,
+              title: "Subagent",
+              description: args.data.message ?? args.data.task,
+              toolCallId: call.callId,
+              status: "running" as const,
+            },
+          ],
         }
       );
     };
@@ -238,21 +255,20 @@ export const piSubagents: PiExtension = {
         const subagents: NonNullable<PiExtensionToolMapping["subagents"]> = [];
         const childSessions: NonNullable<PiExtensionToolMapping["childSessions"]> = [];
         // Each run's session line follows its async directory line; earlier lines are child output.
-        let owner: string | undefined;
+        let run: AsyncRun | undefined;
         for (const line of lines) {
           const dir = line.match(/^Retention-managed async directory: (.+)$/)?.[1];
           if (dir) {
-            owner = asyncRuns.get(dir)?.owner;
-            if (owner) subagents.push({ type: "upsert", id: owner, status });
+            run = asyncRuns.get(dir);
+            if (run) subagents.push({ type: "upsert", id: run.owner, status });
             continue;
           }
-          const file = owner ? line.match(/^Session file: (.+)$/)?.[1] : undefined;
-          if (!owner || !file) continue;
-          if (!readSessions.has(file)) {
-            readSessions.add(file);
-            childSessions.push({ id: owner, file });
+          const file = run ? line.match(/^Session file: (.+)$/)?.[1] : undefined;
+          if (!run || !file) continue;
+          if (rememberSession(file, run)) {
+            childSessions.push({ id: run.owner, file, lifetime: "conversation" });
           }
-          owner = undefined;
+          run = undefined;
         }
         return subagents.length ? { subagents, childSessions } : undefined;
       },
