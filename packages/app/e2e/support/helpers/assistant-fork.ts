@@ -65,10 +65,10 @@ function inFlightTurn(page: Page) {
  * and the next press lands on the trigger where it is now.
  */
 async function openForkMenu(page: Page, trigger: ReturnType<Page["getByRole"]>): Promise<void> {
-  const forkInNewTab = page.getByRole("menuitem", { name: "Copy chat to a new tab" });
+  const copyInNewTab = page.getByRole("menuitem", { name: "Copy chat to a new tab" });
   await expect(async () => {
     await trigger.click({ timeout: 5_000 });
-    await expect(forkInNewTab).toBeVisible({ timeout: 5_000 });
+    await expect(copyInNewTab).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 30_000 });
 }
 

@@ -94,7 +94,7 @@ describe("async run lifecycle", () => {
       sessionFile: "child.jsonl",
     };
     const snapshot = status("running", [step]);
-    const childSessions = [{ id: "call/1", file: "child.jsonl" }];
+    const childSessions = [{ id: "call/1", file: "child.jsonl", lifetime: "conversation" }];
     expect(projectRun(registered, snapshot, sessions).childSessions).toEqual(childSessions);
     snapshot.state = "paused";
     expect(projectRun(registered, snapshot, sessions).childSessions).toEqual([]);

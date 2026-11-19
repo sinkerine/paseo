@@ -825,6 +825,7 @@ export interface AgentSession {
    * Returning void means the requested selection was accepted. No status read is required. */
   setModel?(modelId: string | null): Promise<void | { model: string | null }>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
+  getNativeForkLeaf?(): Promise<string | null>;
   /**
    * Apply an options patch. `options` holds only the keys the patch touches, resolved against
    * the `config.json` defaults; `null` means nothing is set for the key, so return it to the
@@ -839,7 +840,6 @@ export interface AgentSession {
    * ended, so the stored options still match what runs.
    */
   applyOptions?(options: ProviderOptions): Promise<Record<string, unknown> | void>;
-  getNativeForkLeaf?(): Promise<string | null>;
   revertConversation?(input: { messageId: string }): Promise<void>;
   revertFiles?(input: { messageId: string }): Promise<void>;
   revertBoth?(input: { messageId: string }): Promise<void>;

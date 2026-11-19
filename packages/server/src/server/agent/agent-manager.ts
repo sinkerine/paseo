@@ -1880,8 +1880,8 @@ export class AgentManager {
       agentId: resolvedAgentId,
       workspaceId: input.workspaceId,
       labels: input.labels,
-      includeProviderSubagents: true,
       launchedOptions,
+      includeProviderSubagents: true,
       launchConfig: providerLaunchConfig,
       launchContext,
     });
@@ -1929,9 +1929,9 @@ export class AgentManager {
       handedToRegistration = true;
       signal.removeEventListener("abort", onAbort);
       const agent = await this.registerSession(imported.session, importedConfig, options.agentId, {
+        launchedOptions: options.launchedOptions,
         labels: options.labels,
         workspaceId: options.workspaceId,
-        launchedOptions: options.launchedOptions,
         timelineRows,
         timelineNextSeq: timelineRows.length + 1,
         persistence: imported.persistence,
@@ -2063,6 +2063,7 @@ export class AgentManager {
       },
     );
     const providerLaunchConfig = this.resolveProviderLaunchConfig(launchConfig, launchContext);
+    const launchedOptions = this.launchOptionsFor({ client, own: storedConfig.providerOptions });
     this.assertNativeForkSourceCanFork(source.id, input.target, hasLaterTurn);
     let imported: Awaited<ReturnType<NonNullable<AgentClient["forkSession"]>>> | undefined;
     try {
@@ -2091,7 +2092,7 @@ export class AgentManager {
         labels: {},
         initialTitle: title,
         includeProviderSubagents: false,
-        launchedOptions: this.launchOptionsFor({ client, own: storedConfig.providerOptions }),
+        launchedOptions,
         launchConfig: providerLaunchConfig,
         launchContext,
         launchEnv: source.launchEnv,
@@ -5405,6 +5406,21 @@ export class AgentManager {
     );
   }
 
+  private settleLiveTerminalEvent(
+    agent: ActiveManagedAgent,
+    turnId: string | undefined,
+    disposition: ActiveTurnTerminalDisposition,
+    isForegroundEvent: boolean,
+  ): void {
+    this.runs.settleTerminalRun(agent.id, turnId);
+    if (isForegroundEvent) {
+      this.finalizeForegroundTurn(agent, turnId);
+    } else if (disposition !== "stale" && !agent.activeForegroundTurnId) {
+      // Publish autonomous readiness after the tracked run settles.
+      this.emitState(agent);
+    }
+  }
+
   private async handleStreamEvent(
     agent: ActiveManagedAgent,
     event: AgentStreamEvent,
@@ -5476,7 +5492,7 @@ export class AgentManager {
 
     if (!options?.fromHistory) {
       if (isTurnTerminalEvent(event)) {
-        this.settleLiveTerminalEvent(agent, eventTurnId, isForegroundEvent, terminalDisposition);
+        this.settleLiveTerminalEvent(agent, eventTurnId, terminalDisposition, isForegroundEvent);
       }
 
       if (flags.shouldDispatchEvent) {
@@ -5487,21 +5503,6 @@ export class AgentManager {
     this.traceHandleStreamEventEnd(agent, event, eventTurnId, flags);
 
     return flags.shouldNotifyWaiters;
-  }
-
-  private settleLiveTerminalEvent(
-    agent: ActiveManagedAgent,
-    turnId: string | undefined,
-    isForeground: boolean,
-    disposition: ActiveTurnTerminalDisposition,
-  ): void {
-    this.runs.settleTerminalRun(agent.id, turnId);
-    if (isForeground) {
-      this.finalizeForegroundTurn(agent, turnId);
-    } else if (disposition !== "stale" && !agent.activeForegroundTurnId) {
-      // Publish autonomous readiness only after the tracked run has settled.
-      this.emitState(agent);
-    }
   }
 
   private traceHandleStreamEventStart(

@@ -378,7 +378,7 @@ export function prepareMarkdownSource(
   // An external link to anything but an https URL keeps its label and loses the brackets and
   // destination around it, so edits inside the label still apply.
   function dropUnsafeDestination(node: Nodes, start: number, end: number) {
-    if (node.type !== "link" && node.type !== "linkReference") return;
+    if (!external || (node.type !== "link" && node.type !== "linkReference")) return;
     const target = node.type === "link" ? node : definitions.get(node.identifier);
     if (pluginOverviewUrl(target?.url)) return;
     const labelStart = node.children[0]?.position?.start.offset;
@@ -390,17 +390,6 @@ export function prepareMarkdownSource(
     addEdit({ start, end: labelStart, text: "" });
     addEdit({ start: labelEnd, end, text: "" });
   }
-  function adaptTextAroundProtectedRanges(start: number, end: number) {
-    let cursor = start;
-    const first = firstRangeEndingAfter(protectedText, start);
-    for (let index = first; index < protectedText.length; index++) {
-      const range = protectedText[index];
-      if (range.start >= end) break;
-      adaptText(cursor, Math.max(cursor, range.start));
-      cursor = Math.min(end, range.end);
-    }
-    adaptText(cursor, end);
-  }
   function visit(node: Nodes, previous?: Nodes) {
     const position = node.position;
     const start = position?.start.offset;
@@ -410,7 +399,7 @@ export function prepareMarkdownSource(
       if (containingMath && start >= containingMath.start && end <= containingMath.end) return;
       if (node.type === "paragraph") splitStandaloneImages(node, start, end);
       splitTableFromParagraph(node, previous, start, position.start.line);
-      if (external) dropUnsafeDestination(node, start, end);
+      dropUnsafeDestination(node, start, end);
       if (node.type === "link") {
         const title = workspaceHoverTitle(node, source.slice(start, end), workspaceRoot);
         if (title !== null)
@@ -428,7 +417,17 @@ export function prepareMarkdownSource(
         collectImage(node, start, end);
         return;
       }
-      if (node.type === "text") adaptTextAroundProtectedRanges(start, end);
+      if (node.type === "text") {
+        let cursor = start;
+        const first = firstRangeEndingAfter(protectedText, start);
+        for (let index = first; index < protectedText.length; index++) {
+          const range = protectedText[index];
+          if (range.start >= end) break;
+          adaptText(cursor, Math.max(cursor, range.start));
+          cursor = Math.min(end, range.end);
+        }
+        adaptText(cursor, end);
+      }
     }
     if ("children" in node)
       node.children.forEach((child, index) => visit(child, node.children[index - 1]));

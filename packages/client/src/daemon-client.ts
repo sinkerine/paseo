@@ -7981,8 +7981,8 @@ export class DaemonClient {
   }
 
   private handleSessionMessage(wireMessage: WireSessionOutboundMessage): void {
-    const withProviderOptions = this.legacyProviderOptions()?.normalize(wireMessage) ?? wireMessage;
-    const msg = this.owned.normalize(normalizeWorkspaceDescriptors(withProviderOptions));
+    const withOptions = this.legacyProviderOptions()?.normalize(wireMessage) ?? wireMessage;
+    const msg = this.owned.normalize(normalizeWorkspaceDescriptors(withOptions));
     if (
       msg.type === "providers_snapshot_update" &&
       this.config.providerSnapshots !== "wire" &&

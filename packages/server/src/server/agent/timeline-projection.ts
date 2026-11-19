@@ -268,8 +268,8 @@ function mergeAssistantChunks(entries: readonly WorkingEntry[]): WorkingEntry[] 
     const shouldMerge =
       previous &&
       previous.seqEnd + 1 === entry.seqStart &&
-      previous.providerMessageId === entry.providerMessageId &&
-      continuesAssistantMessage(previous, entry);
+      continuesAssistantMessage(previous, entry) &&
+      previous.providerMessageId === entry.providerMessageId;
 
     if (!shouldMerge || !previous) {
       output.push(entry);

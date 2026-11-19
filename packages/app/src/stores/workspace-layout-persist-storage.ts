@@ -80,6 +80,7 @@ export function createWorkspaceLayoutPersistStorage(
   ): Promise<void>;
 } {
   let baseline: WorkspaceLayoutPersistedState = { layoutByWorkspace: {} };
+  let beforeHydrationRepair: WorkspaceLayoutPersistedState | undefined;
   let pending: Promise<void> | null = null;
   let revision = 0;
   const mergedStorage: StateStorage = {
@@ -102,12 +103,12 @@ export function createWorkspaceLayoutPersistStorage(
           if (latest?.version === WORKSPACE_LAYOUT_PERSIST_VERSION) {
             const currentKeys = workspaceKeys(projection.state);
             const previousKeys = workspaceKeys(baseline);
-            const changed = [...currentKeys].filter((key) =>
-              slices.some(
-                (slice) =>
-                  JSON.stringify(projection.state[slice]?.[key]) !==
-                  JSON.stringify(baseline[slice]?.[key]),
-              ),
+            const changed = [...currentKeys].filter(
+              (key) =>
+                !sameWorkspace(projection.state, baseline, key) ||
+                (beforeHydrationRepair !== undefined &&
+                  !sameWorkspace(beforeHydrationRepair, baseline, key) &&
+                  sameWorkspace(latest.state, beforeHydrationRepair, key)),
             );
             const purged = [...previousKeys].filter((key) => !currentKeys.has(key));
             const state = { ...latest.state };
@@ -126,9 +127,11 @@ export function createWorkspaceLayoutPersistStorage(
           if (written instanceof Promise)
             return written.then(() => {
               baseline = projection.state;
+              beforeHydrationRepair = undefined;
               return undefined;
             });
           baseline = projection.state;
+          beforeHydrationRepair = undefined;
         };
         const latest = backingStorage.getItem(name);
         return latest instanceof Promise ? latest.then(merge) : merge(latest);
@@ -145,6 +148,7 @@ export function createWorkspaceLayoutPersistStorage(
     },
     removeItem(name) {
       baseline = { layoutByWorkspace: {} };
+      beforeHydrationRepair = undefined;
       return backingStorage.removeItem(name);
     },
   };
@@ -172,6 +176,8 @@ export function createWorkspaceLayoutPersistStorage(
     },
     // Hydration restores focus and derives explorer keys before the window can edit a layout.
     setHydratedBaseline(state) {
+      // Persist repairs on the next write while respecting edits made by another window.
+      beforeHydrationRepair = baseline;
       baseline = WorkspaceLayoutPersistedStateSchema.parse(state);
     },
   };

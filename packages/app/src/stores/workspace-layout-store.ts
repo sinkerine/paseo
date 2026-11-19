@@ -660,6 +660,22 @@ function hasSingleBootstrapNewTabOrdinaryPane(
   );
 }
 
+function preserveCompactExplorerVisibility(
+  layoutMode: WorkspaceLayoutStore["layoutMode"],
+  previous: ReturnType<typeof getOpenTabPlacement>,
+  next: WorkspaceLayout,
+): WorkspaceLayout {
+  const paneId = previous.explorerSidebarPaneId;
+  if (layoutMode !== "compact" || !paneId) return next;
+  return (
+    setPaneHiddenInLayout({
+      layout: next,
+      paneId,
+      hidden: findPaneById(previous.layout.root, paneId)?.hidden === true,
+    }) ?? next
+  );
+}
+
 function getOpenTabPlacement(
   state: WorkspaceLayoutStore,
   workspaceKey: string,
@@ -717,17 +733,6 @@ function getOpenTabPlacement(
     explorerSidebarPaneId,
     reservedTabIds: new Set(getSheets(state, workspaceKey).map((sheet) => sheet.tab.tabId)),
   };
-}
-
-function preserveCompactExplorerVisibility(
-  layoutMode: WorkspaceLayoutStore["layoutMode"],
-  placement: ReturnType<typeof getOpenTabPlacement>,
-  openedLayout: WorkspaceLayout,
-): WorkspaceLayout {
-  const paneId = placement.explorerSidebarPaneId;
-  if (layoutMode !== "compact" || !paneId) return openedLayout;
-  const hidden = findPaneById(placement.layout.root, paneId)?.hidden === true;
-  return setPaneHiddenInLayout({ layout: openedLayout, paneId, hidden }) ?? openedLayout;
 }
 
 function withoutFocusRestoration(
@@ -1427,27 +1432,22 @@ export function createWorkspaceLayoutStore(
           if (!result) {
             return null;
           }
-          const openedLayout = preserveCompactExplorerVisibility(
-            get().layoutMode,
-            placement,
-            result.layout,
-          );
           const nextLayout = keepWorkspaceFocusOutOfExplorerSidebar(
-            openedLayout,
+            preserveCompactExplorerVisibility(get().layoutMode, placement, result.layout),
             placement.explorerSidebarPaneId,
             placement.layout.focusedPaneId,
           );
           const shouldPinAgent = input.pin === true && normalizedTarget.kind === "agent";
           set((state) => ({
+            ...(input.intent === "background"
+              ? {}
+              : withoutFocusRestoration(state, normalizedWorkspaceKey)),
             ...advancePanelRevision(state, normalizedWorkspaceKey, result.tabId, normalizedTarget),
             ...(input.intent === "background"
               ? {}
-              : {
-                  ...withoutFocusRestoration(state, normalizedWorkspaceKey),
-                  // A tab brought to the front dismisses the sheet over it.
-                  ...dismissSheets(state, normalizedWorkspaceKey),
-                  focusRequest: { workspaceKey: normalizedWorkspaceKey, tabId: result.tabId },
-                }),
+              : { focusRequest: { workspaceKey: normalizedWorkspaceKey, tabId: result.tabId } }),
+            // A tab brought to the front dismisses the sheet over it.
+            ...(input.intent === "background" ? {} : dismissSheets(state, normalizedWorkspaceKey)),
             hiddenAgentIdsByWorkspace:
               normalizedTarget.kind !== "agent"
                 ? state.hiddenAgentIdsByWorkspace

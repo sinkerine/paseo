@@ -169,9 +169,10 @@ scrollers and editable fields keep their own wheel/key ownership. Keyboard/compo
 viewport resizing may change geometry; baseline after that movement settles, then further output
 must preserve visible text. Keep native jump animation bounded by mounted content and cancel it on
 a gesture.
-A prompt submitted during a gesture requests the end after that gesture finishes. A later
-gesture takes ownership again. Rewind and tail-fetch completions can arrive after the action that
-requested them, so a gesture ending away from the end cancels them.
+
+A prompt submitted during the gesture can request the end after the gesture finishes. A new
+drag after submitting takes ownership again. Late rewind and tail-fetch completions yield to
+the reader’s gesture.
 
 ### Draw distance
 

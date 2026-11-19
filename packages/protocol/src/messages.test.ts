@@ -164,10 +164,10 @@ describe("workspace descriptor message compatibility", () => {
     expect(parsed.payload.entries[0]).toMatchObject({
       projectKind: "non_git",
       workspaceKind: "directory",
-      workspaceDirectory: "/repo/app",
       gitRuntime: null,
       githubRuntime: null,
     });
+    expect(parsed.payload.entries[0]?.workspaceDirectory).toBeUndefined();
   });
 });
 

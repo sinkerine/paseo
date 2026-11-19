@@ -4,7 +4,7 @@ import {
   formatAgentMessage,
   formatSystemNotificationPrompt,
 } from "./agent-messages/index.js";
-import { expect, test, vi, onTestFinished } from "vitest";
+import { describe, expect, test, vi, onTestFinished } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10239,6 +10239,8 @@ test("a sender's start wait follows its prompt across a stale-session retry", as
 
 test("a sender's start wait follows its prompt when the session is stale before the wait begins", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-immediate-stale-start-"));
+  const resumeReached = deferred<void>();
+  const allowResume = deferred<void>();
   class StaleStartSession extends TestAgentSession {
     override async startTurn(): Promise<{ turnId: string }> {
       throw new StaleProviderSessionError("stale-bridge");
@@ -10247,6 +10249,15 @@ test("a sender's start wait follows its prompt when the session is stale before 
   class StaleStartClient extends ResumeTrackingTestAgentClient {
     override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
       return new StaleStartSession(config);
+    }
+
+    override async resumeSession(
+      handle: AgentPersistenceHandle,
+      config?: Partial<AgentSessionConfig>,
+    ): Promise<AgentSession> {
+      resumeReached.resolve();
+      await allowResume.promise;
+      return super.resumeSession(handle, config);
     }
   }
   const client = new StaleStartClient();
@@ -10259,10 +10270,12 @@ test("a sender's start wait follows its prompt when the session is stale before 
     const dispatch = await startAgentRun(manager, agent.id, "Retry this prompt", logger, {
       runOptions: { clientMessageId: "immediate-stale-start" },
     });
-    // The stale start has failed and been cleared before the sender begins waiting.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Pause reopening after the stale start has cleared, before a retry can start.
+    await resumeReached.promise;
     expect(manager.hasInFlightRun(agent.id)).toBe(false);
-    await expect(dispatchStarted(dispatch)).resolves.toBeUndefined();
+    const started = dispatchStarted(dispatch);
+    allowResume.resolve();
+    await expect(started).resolves.toBeUndefined();
     await client.waitForRetryStart();
     expect(manager.getTimeline(agent.id).filter((item) => item.type === "user_message")).toEqual([
       expect.objectContaining({
@@ -10271,6 +10284,7 @@ test("a sender's start wait follows its prompt when the session is stale before 
       }),
     ]);
   } finally {
+    allowResume.resolve();
     manager.prepareForShutdown();
     await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
     await manager.flushForShutdown();
@@ -15695,7 +15709,6 @@ test("forkAgentSession abort during destination registration closes and discards
   expect((await storage.listAll()).map((agent) => agent.id)).toEqual([source.id]);
   expect(manager.listAgents().map((agent) => agent.id)).toEqual([source.id]);
 });
-
 test("workspace archive preserves a loaded history agent stamp and stamps cascaded children", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "workspace-stamp-"));
   const storage = new AgentStorage(join(workdir, "agents"), logger);

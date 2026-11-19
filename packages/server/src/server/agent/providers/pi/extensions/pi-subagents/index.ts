@@ -46,12 +46,14 @@ export const piSubagents: PiExtension = {
   createSession: () => {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
-    const rememberSession = (file: string) => {
-      if (readSessions.has(file)) return false;
+    const workflows = createPiWorkflowTracker({ readSessions });
+    const rememberSession = (file: string, run?: AsyncRun) => {
+      const reads = run?.resumedRun?.readSessions ?? readSessions;
+      if (reads.has(file)) return false;
+      reads.add(file);
       readSessions.add(file);
       return true;
     };
-    const workflows = createPiWorkflowTracker({ readSessions });
     /** Keyed by async directory, which both status.json and the completion notice carry. */
     const asyncRuns = new Map<string, AsyncRun>();
     const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
@@ -261,19 +263,10 @@ export const piSubagents: PiExtension = {
             if (run) subagents.push({ type: "upsert", id: run.owner, status });
             continue;
           }
-          const file = line.match(/^Session file: (.+)$/)?.[1];
+          const file = run ? line.match(/^Session file: (.+)$/)?.[1] : undefined;
           if (!run || !file) continue;
-          const resumed = run.resumedRun;
-          if (resumed ? !resumed.readSessions.has(file) : rememberSession(file)) {
-            if (resumed) {
-              resumed.readSessions.add(file);
-              readSessions.add(file);
-            }
-            childSessions.push({
-              id: run.owner,
-              file,
-              ...(resumed && { lifetime: "conversation" }),
-            });
+          if (rememberSession(file, run)) {
+            childSessions.push({ id: run.owner, file, lifetime: "conversation" });
           }
           run = undefined;
         }

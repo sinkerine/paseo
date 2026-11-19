@@ -55,14 +55,14 @@ type OlderHistoryInput = Pick<
 >;
 
 interface MountTimelineOptions {
-  olderHistory?: OlderHistoryInput;
   onUserScrollIntent?: () => void;
+  olderHistory?: OlderHistoryInput;
   isMobileBreakpoint?: boolean;
 }
 
 function mountTimeline(
   historyMounted: StreamItem[],
-  { olderHistory, onUserScrollIntent, isMobileBreakpoint = true }: MountTimelineOptions = {},
+  { onUserScrollIntent, olderHistory, isMobileBreakpoint = true }: MountTimelineOptions = {},
 ) {
   const strategy = createWebStreamStrategy({ isMobileBreakpoint });
   const viewportRef = React.createRef<StreamViewportHandle>();
@@ -167,7 +167,7 @@ describe("web disclosure hold", () => {
   );
 
   it.each([{ isMobileBreakpoint: true }, { isMobileBreakpoint: false }])(
-    "preserves the end landing through history virtualization, then rests (compact: $isMobileBreakpoint)",
+    "keeps the end position through virtualization and rests after landing (compact: $isMobileBreakpoint)",
     async (options) => {
       const history = Array.from({ length: 80 }, (_, index) => row(index));
       const timeline = mountTimeline(history, options);
@@ -179,7 +179,7 @@ describe("web disclosure hold", () => {
       });
       await timeline.settle();
       expect(timeline.distanceFromEnd()).toBeLessThanOrEqual(1);
-      const offset = timeline.scrollTop();
+      const lastHistoryRowTop = timeline.rowTop("message-79");
 
       timeline.render({
         historyVirtualized: history.slice(0, 60),
@@ -187,7 +187,7 @@ describe("web disclosure hold", () => {
         liveHead: [row(80)],
       });
       await timeline.settle();
-      expect(timeline.scrollTop()).toBe(offset);
+      expect(timeline.rowTop("message-79")).toBe(lastHistoryRowTop);
       expect(timeline.distanceFromEnd()).toBeGreaterThan(1);
     },
   );
