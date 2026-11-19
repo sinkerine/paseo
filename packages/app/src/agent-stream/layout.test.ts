@@ -222,9 +222,10 @@ describe("layoutStream", () => {
   it("keeps separate footers for an assistant turn and an adjacent tool-only turn", () => {
     const priorAssistant = assistantMessage("prior", 1, undefined, "turn-1");
     const nextTool = toolCall("next-tool", 2, "turn-2");
+    const finalThought = { ...thought("final-thought", 3), turnId: "turn-2" };
     const layout = layoutFor({
       platform: "web",
-      tail: [priorAssistant, nextTool],
+      tail: [priorAssistant, nextTool, finalThought],
       timingIds: [priorAssistant.id],
     });
 

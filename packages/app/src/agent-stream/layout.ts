@@ -84,9 +84,7 @@ function findTurnFooterSource(input: {
   boundaryAboveItems?: StreamItem[] | null;
   boundaryAboveIndex?: number | null;
 }): TurnFooterSource | null {
-  const last = input.items[input.startIndex];
-  const toolFallback: TurnFooterSource | null =
-    last?.kind === "tool_call" ? { item: last, items: input.items, index: input.startIndex } : null;
+  let toolFallback: TurnFooterSource | null = null;
   let items = input.items;
   let index = input.startIndex;
   let canCrossBoundary = true;
@@ -105,6 +103,7 @@ function findTurnFooterSource(input: {
       if (item.kind === "assistant_message" || (item.kind === "plugin" && item.sourceAssistant)) {
         return { item, items, index };
       }
+      if (item.kind === "tool_call") toolFallback ??= { item, items, index };
       laterItem = item;
     }
 
