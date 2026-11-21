@@ -149,7 +149,7 @@ providers, prerequisite setup, and cleanup. Keep one journey active at a time.
 
 ```qex-e2e electron-one-worker
 {
-  "resources": { "cpu": 4, "mem": "16GiB" },
+  "resources": { "cpu": 4, "mem": "8GiB" },
   "timeout": "90m"
 }
 ```
