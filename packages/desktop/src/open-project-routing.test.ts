@@ -35,8 +35,38 @@ describe("open-project-routing", () => {
         argv.push(projectDirectory);
       }
 
-      expect(parseOpenProjectPathFromArgv({ argv, isDefaultApp: true })).toBe(
+      expect(parseOpenProjectPathFromArgv({ argv, appPath: appDirectory })).toBe(
         projectArgument === null ? null : projectDirectory,
+      );
+    },
+  );
+
+  it.each([null, "positional", "flagged"])(
+    "skips the Electron app directory after Chromium switches with a %s project argument",
+    (projectArgument) => {
+      const root = mkdtempSync(path.join(tmpdir(), "paseo-electron-relaunch-"));
+      launchDirectories.push(root);
+      const appPath = path.join(root, "electron-app");
+      const projectPath = path.join(root, "my-project");
+      mkdirSync(appPath);
+      mkdirSync(projectPath);
+      const argv = [
+        "/nix/store/electron/bin/electron",
+        "--no-sandbox",
+        "--class=paseo-desktop",
+        "--allow-file-access-from-files",
+        "--ozone-platform=wayland",
+        appPath,
+      ];
+      if (projectArgument === "flagged") {
+        argv.push("--open-project");
+      }
+      if (projectArgument !== null) {
+        argv.push(projectPath);
+      }
+
+      expect(parseOpenProjectPathFromArgv({ argv, appPath })).toBe(
+        projectArgument === null ? null : projectPath,
       );
     },
   );
@@ -47,7 +77,7 @@ describe("open-project-routing", () => {
     expect(
       parseOpenProjectPathFromArgv({
         argv: ["/Applications/Paseo.app/Contents/MacOS/Paseo", projectPath],
-        isDefaultApp: false,
+        appPath: null,
       }),
     ).toBe(projectPath);
   });
@@ -63,7 +93,7 @@ describe("open-project-routing", () => {
           "--no-sandbox",
           projectPath,
         ],
-        isDefaultApp: false,
+        appPath: null,
       }),
     ).toBe(projectPath);
   });
@@ -76,14 +106,14 @@ describe("open-project-routing", () => {
     expect(
       parseOpenProjectPathFromArgv({
         argv: ["/Applications/Paseo.app/Contents/MacOS/Paseo", "--version", flagLikeDirectory],
-        isDefaultApp: false,
+        appPath: null,
       }),
     ).toBe(flagLikeDirectory);
 
     expect(
       parseOpenProjectPathFromArgv({
         argv: ["/Applications/Paseo.app/Contents/MacOS/Paseo", "--version"],
-        isDefaultApp: false,
+        appPath: null,
       }),
     ).toBeNull();
   });
@@ -94,7 +124,7 @@ describe("open-project-routing", () => {
     expect(
       parseOpenProjectPathFromArgv({
         argv: ["/Applications/Paseo.app/Contents/MacOS/Paseo", "--open-project", projectPath],
-        isDefaultApp: false,
+        appPath: null,
       }),
     ).toBe(projectPath);
   });

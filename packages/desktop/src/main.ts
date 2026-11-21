@@ -398,9 +398,10 @@ if (process.platform === "linux") {
   });
 }
 
+const electronAppPath = process.defaultApp ? app.getAppPath() : null;
 let pendingOpenProjectPath = parseOpenProjectPathFromArgv({
   argv: process.argv,
-  isDefaultApp: process.defaultApp,
+  appPath: electronAppPath,
 });
 let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
 
@@ -981,8 +982,7 @@ function setupSingleInstanceLock(): boolean {
     log.info("[open-project] second-instance commandLine:", commandLine);
     const openProjectPath = parseOpenProjectPathFromArgv({
       argv: commandLine,
-      // Unpackaged Electron includes its app directory in second-instance argv too.
-      isDefaultApp: process.defaultApp,
+      appPath: electronAppPath,
     });
     log.info("[open-project] second-instance openProjectPath:", openProjectPath);
     // Relaunching the app (CLI `paseo [path]`, double-click, etc.) opens a new

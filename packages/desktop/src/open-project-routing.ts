@@ -18,11 +18,21 @@ function isExistingDirectoryAbsolutePath(candidate: string): boolean {
 
 export function parseOpenProjectPathFromArgv(input: {
   argv: string[];
-  isDefaultApp: boolean;
+  appPath: string | null;
 }): string | null {
-  const effectiveArgs = input.argv
-    .slice(input.isDefaultApp ? 2 : 1)
-    .filter((arg) => !OPEN_PROJECT_IGNORED_ARG_PREFIXES.some((prefix) => arg.startsWith(prefix)));
+  const args = input.argv.slice(1);
+  // Chromium can move switches ahead of the app path when forwarding a second launch.
+  const resolvedAppPath = input.appPath === null ? null : path.resolve(input.appPath);
+  const appPathIndex =
+    resolvedAppPath === null
+      ? -1
+      : args.findIndex((arg) => !arg.startsWith("-") && path.resolve(arg) === resolvedAppPath);
+  if (appPathIndex !== -1) {
+    args.splice(appPathIndex, 1);
+  }
+  const effectiveArgs = args.filter(
+    (arg) => !OPEN_PROJECT_IGNORED_ARG_PREFIXES.some((prefix) => arg.startsWith(prefix)),
+  );
 
   const positionalProjectPath = effectiveArgs.find(
     (arg) => !arg.startsWith("-") && isExistingDirectoryAbsolutePath(arg),
