@@ -5,6 +5,7 @@ import type { PiRuntime, PiRuntimeSession } from "./runtime.js";
 import { piSessionForkHelperSource } from "./session-fork-helper.js";
 import { z } from "zod";
 import {
+  hasNoUnobservedNativeMessages,
   NativeSessionForkFramingSchema,
   type NativeSessionForkFraming,
 } from "../../native-fork-framing.js";
@@ -166,6 +167,7 @@ function validateFramingCoverage({
 }: PiFramingCoverageInput): number {
   const path = source.path;
   const start = framing.startEntryId === null ? -1 : positions.get(framing.startEntryId);
+  const covered = framing.observedLeafId === null ? -1 : positions.get(framing.observedLeafId);
   const sourceMatches =
     framing.valid &&
     framing.sourceSessionId === source.header.id &&
@@ -173,8 +175,10 @@ function validateFramingCoverage({
   if (
     !sourceMatches ||
     start === undefined ||
+    covered === undefined ||
     selected <= start ||
-    framing.observedLeafId !== path.at(-1)?.id
+    selected > covered ||
+    !hasNoUnobservedNativeMessages(framing, path)
   ) {
     throw new NativeSessionForkError(
       "boundary_mismatch",
@@ -270,7 +274,7 @@ export function resolvePiSessionForkTransaction(
     !sourceRunning ||
     target.kind !== "turn" ||
     !framing ||
-    framing.observedLeafId === source.path.at(-1)?.id
+    hasNoUnobservedNativeMessages(framing, source.path)
   ) {
     return { ...resolvePiForkTarget(source, target), framingSource: source };
   }
@@ -436,6 +440,47 @@ export async function materializePiBranch(input: {
   }
 }
 
+function hasValidFramingBoundaries(
+  framing: NativeSessionForkFraming,
+  path: readonly PiPathEntry[],
+  positions: ReadonlyMap<string, number>,
+  start: number,
+): boolean {
+  const seen = new Set<string>();
+  return !framing.boundaries.some((boundary) => {
+    if (seen.has(boundary.entryId)) return true;
+    seen.add(boundary.entryId);
+    const index = positions.get(boundary.entryId);
+    const entry = index === undefined ? undefined : path[index];
+    return (
+      index === undefined ||
+      index <= start ||
+      !(entry?.type === "custom_message" || (entry?.type === "message" && entry.role === "user"))
+    );
+  });
+}
+
+function resolveRebindCoverageStart(
+  source: PiSessionPath,
+  framing: NativeSessionForkFraming,
+  positions: ReadonlyMap<string, number>,
+): number | undefined {
+  const start = framing.startEntryId === null ? -1 : positions.get(framing.startEntryId);
+  const covered = framing.observedLeafId === null ? -1 : positions.get(framing.observedLeafId);
+  if (
+    !framing.valid ||
+    framing.sourceSessionId !== source.header.id ||
+    framing.sourceNativeHandle !== source.file ||
+    start === undefined ||
+    covered === undefined ||
+    start > covered ||
+    !hasNoUnobservedNativeMessages(framing, source.path)
+  ) {
+    return undefined;
+  }
+  return start;
+}
+
 /** SDK branching preserves non-label ids; carry only observed proof on that copied ancestry. */
 export function rebindPiForkFraming(
   source: PiSessionPath,
@@ -448,15 +493,8 @@ export function rebindPiForkFraming(
   if (!parsed.success) return undefined;
   const framing = parsed.data;
   const positions = new Map(source.path.map((entry, index) => [entry.id, index]));
-  const start = framing.startEntryId === null ? -1 : positions.get(framing.startEntryId);
-  if (
-    !framing.valid ||
-    framing.sourceSessionId !== source.header.id ||
-    framing.sourceNativeHandle !== source.file ||
-    framing.observedLeafId !== source.path.at(-1)?.id ||
-    start === undefined
-  )
-    return undefined;
+  const start = resolveRebindCoverageStart(source, framing, positions);
+  if (start === undefined) return undefined;
   const copied = new Set(branch.path.map((entry) => entry.id));
   let startEntryId = framing.startEntryId;
   if (startEntryId !== null && source.path[start]?.type === "label") {
@@ -464,21 +502,7 @@ export function rebindPiForkFraming(
       source.path.slice(0, start + 1).findLast((entry) => entry.type !== "label")?.id ?? null;
   }
   if (startEntryId !== null && !copied.has(startEntryId)) return undefined;
-  const seen = new Set<string>();
-  if (
-    framing.boundaries.some((boundary) => {
-      if (seen.has(boundary.entryId)) return true;
-      seen.add(boundary.entryId);
-      const index = positions.get(boundary.entryId);
-      const entry = index === undefined ? undefined : source.path[index];
-      return (
-        index === undefined ||
-        index <= start ||
-        !(entry?.type === "custom_message" || (entry?.type === "message" && entry.role === "user"))
-      );
-    })
-  )
-    return undefined;
+  if (!hasValidFramingBoundaries(framing, source.path, positions, start)) return undefined;
   return {
     ...framing,
     startEntryId,

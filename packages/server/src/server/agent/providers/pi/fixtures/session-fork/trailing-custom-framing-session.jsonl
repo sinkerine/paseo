@@ -1,0 +1,16 @@
+{"type":"session","version":3,"id":"11111111-2222-4333-8444-555555555555","timestamp":"2026-01-01T00:00:00.000Z","cwd":"/isolated/project/cwd"}
+{"type":"model_change","id":"e1000001","parentId":null,"timestamp":"2026-01-01T00:00:00.100Z","provider":"test-provider","modelId":"test-model"}
+{"type":"thinking_level_change","id":"e1000002","parentId":"e1000001","timestamp":"2026-01-01T00:00:00.200Z","thinkingLevel":"off"}
+{"type":"message","id":"e1000003","parentId":"e1000002","timestamp":"2026-01-01T00:00:00.300Z","message":{"role":"system","content":"Sanitized system prompt."}}
+{"type":"message","id":"e1000004","parentId":"e1000003","timestamp":"2026-01-01T00:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"First turn prompt."}],"timestamp":1767225601000}}
+{"type":"custom_message","customType":"pi-artifacts.guidance","content":"Sanitized artifact guidance.","display":false,"id":"e1000005","parentId":"e1000004","timestamp":"2026-01-01T00:00:01.100Z"}
+{"type":"custom_message","customType":"hindsight-memory.recall","content":"Sanitized recalled context 1.","display":false,"id":"e1000006","parentId":"e1000005","timestamp":"2026-01-01T00:00:01.200Z"}
+{"type":"message","id":"e1000007","parentId":"e1000006","timestamp":"2026-01-01T00:00:02.000Z","message":{"role":"assistant","api":"test","provider":"test-provider","model":"test-model","content":[{"type":"text","text":"First turn response."}],"stopReason":"stop","timestamp":1767225602000,"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"durationMs":10,"thinkingLevel":"off"}}
+{"type":"custom","customType":"hindsight-memory.state","data":{"step":1},"id":"e1000008","parentId":"e1000007","timestamp":"2026-01-01T00:00:02.100Z"}
+{"type":"custom","customType":"pi-btw/thread","data":{"threadId":"t1"},"id":"e1000009","parentId":"e1000008","timestamp":"2026-01-01T00:00:02.200Z"}
+{"type":"custom","customType":"hindsight-memory.diagnostics","data":{"ok":true},"id":"e1000010","parentId":"e1000009","timestamp":"2026-01-01T00:00:02.300Z"}
+{"type":"message","id":"e1000011","parentId":"e1000010","timestamp":"2026-01-01T00:00:03.000Z","message":{"role":"user","content":[{"type":"text","text":"Second turn prompt."}],"timestamp":1767225603000}}
+{"type":"custom_message","customType":"hindsight-memory.recall","content":"Sanitized recalled context 2.","display":false,"id":"e1000012","parentId":"e1000011","timestamp":"2026-01-01T00:00:03.100Z"}
+{"type":"message","id":"e1000013","parentId":"e1000012","timestamp":"2026-01-01T00:00:04.000Z","message":{"role":"assistant","api":"test","provider":"test-provider","model":"test-model","content":[{"type":"text","text":"Second turn response."}],"stopReason":"stop","timestamp":1767225604000,"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"durationMs":10,"thinkingLevel":"off"}}
+{"type":"custom","customType":"hindsight-memory.state","data":{"step":2},"id":"e1000014","parentId":"e1000013","timestamp":"2026-01-01T00:00:04.100Z"}
+{"type":"custom","customType":"hindsight-memory.state","data":{"step":3},"id":"e1000015","parentId":"e1000014","timestamp":"2026-01-01T00:00:04.200Z"}

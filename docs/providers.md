@@ -207,7 +207,7 @@ Pi's RPC `fork` and `clone` rebind the calling runtime and abort its run. Never 
 
 Pi history hydration must retain structural compactions as well as messages. Their display position follows native ancestry, including invisible context records; compacted model context alone cannot reconstruct the full timeline.
 
-The worker emits no `session_before_fork`; the destination's first runtime event is `session_start` with reason `startup` and a native `parentSession` header. Native files do not record custom-message trigger ownership. Observed source-bound provenance can survive a branch only on validated copied ancestry; ambiguous queued inputs and unobserved historical custom boundaries fail with `boundary_mismatch`. Clone uses the exact leaf, including an unprompted rewind override. See [agent lifecycle](agent-lifecycle.md#relationships) for ownership.
+The worker emits no `session_before_fork`; the destination's first runtime event is `session_start` with reason `startup` and a native `parentSession` header. Native files do not record custom-message trigger ownership. Observed source-bound provenance can survive a branch only on validated copied ancestry; ambiguous queued inputs and unobserved historical custom boundaries fail with `boundary_mismatch`. Non-message entries appended after `observedLeafId` (such as extension `custom` state or idle `model_change`) do not invalidate provenance coverage; on an idle turn fork with framing, any unobserved `message` or `custom_message` fails closed with `boundary_mismatch`, while a running fork can use a proven covered prefix. Clone uses the exact leaf, including an unprompted rewind override. See [agent lifecycle](agent-lifecycle.md#relationships) for ownership.
 
 ## Provider Helper Processes
 

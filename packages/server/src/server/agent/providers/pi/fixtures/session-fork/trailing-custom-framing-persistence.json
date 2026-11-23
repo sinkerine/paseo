@@ -1,0 +1,39 @@
+{
+  "provider": "pi",
+  "sessionId": "11111111-2222-4333-8444-555555555555",
+  "nativeHandle": "/isolated/sessions/2026-01-01T00-00-00-000Z_11111111-2222-4333-8444-555555555555.jsonl",
+  "metadata": {
+    "nativeSessionForkFraming": {
+      "sourceSessionId": "11111111-2222-4333-8444-555555555555",
+      "sourceNativeHandle": "/isolated/sessions/2026-01-01T00-00-00-000Z_11111111-2222-4333-8444-555555555555.jsonl",
+      "startEntryId": "e1000002",
+      "observedLeafId": "e1000013",
+      "valid": true,
+      "boundaries": [
+        {
+          "entryId": "e1000004",
+          "kind": "trigger"
+        },
+        {
+          "entryId": "e1000005",
+          "kind": "unknown"
+        },
+        {
+          "entryId": "e1000006",
+          "kind": "unknown"
+        },
+        {
+          "entryId": "e1000011",
+          "kind": "trigger"
+        },
+        {
+          "entryId": "e1000012",
+          "kind": "unknown"
+        }
+      ]
+    },
+    "cwd": "/isolated/project/cwd",
+    "model": "test-provider/test-model",
+    "thinkingOptionId": "off"
+  }
+}

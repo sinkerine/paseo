@@ -396,3 +396,310 @@ test("inherited ownership requires a valid destination marker on active ancestry
     resolvePiInheritedForkEntries({ ...source, path: source.path.slice(0, 3) }, origin),
   ).toThrowError(expect.objectContaining({ code: "boundary_mismatch" }));
 });
+
+describe("Pi native session fork provenance with non-message tails", () => {
+  const trailingCustomSessionFile = fileURLToPath(
+    new URL("./fixtures/session-fork/trailing-custom-framing-session.jsonl", import.meta.url),
+  );
+  const trailingCustomPersistenceFile = fileURLToPath(
+    new URL("./fixtures/session-fork/trailing-custom-framing-persistence.json", import.meta.url),
+  );
+
+  async function loadTrailingCustomFixture() {
+    const [sessionBytes, savedBytes] = await Promise.all([
+      readFile(trailingCustomSessionFile, "utf8"),
+      readFile(trailingCustomPersistenceFile, "utf8"),
+    ]);
+    const saved = JSON.parse(savedBytes);
+    const framing = NativeSessionForkFramingSchema.parse(saved.metadata.nativeSessionForkFraming);
+    const descriptor = await readPiSessionPath(trailingCustomSessionFile, null);
+    const source = { ...descriptor, file: framing.sourceNativeHandle };
+    const transcript = readPiTranscript(sessionBytes);
+    const store = new InMemoryAgentTimelineStore();
+    store.initialize("trailing-custom-fixture");
+    for await (const event of streamPiHistory(
+      "pi",
+      transcript.messages,
+      transcript.userEntries,
+      {},
+      undefined,
+      undefined,
+      transcript.messageEntryIds,
+    )) {
+      if (event.type === "timeline") {
+        store.append("trailing-custom-fixture", event.item, {
+          providerMessageId: event.providerMessageId,
+        });
+      }
+    }
+    const rows = store.getRows("trailing-custom-fixture");
+    const handle = {
+      provider: "pi",
+      sessionId: framing.sourceSessionId,
+      nativeHandle: framing.sourceNativeHandle,
+      metadata: { nativeSessionForkFraming: structuredClone(framing) },
+    };
+    return { sessionBytes, savedBytes, framing, source, rows, handle };
+  }
+
+  test("AC1: resolves earlier and latest turns when non-message entries follow observedLeafId", async () => {
+    const { sessionBytes, framing, source, rows, handle } = await loadTrailingCustomFixture();
+
+    const turn1Row = rows.find((row) => row.providerMessageId === "e1000007");
+    const turn2Row = rows.find((row) => row.providerMessageId === "e1000013");
+    if (!turn1Row || !turn2Row) throw new Error("Missing expected turn rows in fixture");
+
+    const turn1Target = resolveNativeForkTarget({
+      rows,
+      boundary: { cursor: { epoch: "trailing-custom-fixture", seq: turn1Row.seq } },
+      leafEntryId: null,
+      source: handle,
+    });
+    const turn2Target = resolveNativeForkTarget({
+      rows,
+      boundary: { cursor: { epoch: "trailing-custom-fixture", seq: turn2Row.seq } },
+      leafEntryId: null,
+      source: handle,
+    });
+
+    expect(resolvePiForkTarget(source, turn1Target)).toEqual({ targetEntryId: "e1000010" });
+    expect(resolvePiForkTarget(source, turn2Target)).toEqual({ targetEntryId: "e1000015" });
+    expect(resolvePiSessionForkTransaction(source, turn1Target, false)).toEqual({
+      targetEntryId: "e1000010",
+      framingSource: source,
+    });
+    expect(resolvePiSessionForkTransaction(source, turn2Target, false)).toEqual({
+      targetEntryId: "e1000015",
+      framingSource: source,
+    });
+
+    // Additional non-message tail entry types allowed after observedLeafId.
+    const extraNonMessageTypes = [
+      "model_change",
+      "thinking_level_change",
+      "label",
+      "session_info",
+      "compaction",
+    ];
+    let parentId = source.path.at(-1)!.id;
+    const extendedPath = [...source.path];
+    for (const [index, entryType] of extraNonMessageTypes.entries()) {
+      const id = `tail-nonmsg-${index}`;
+      extendedPath.push({ id, parentId, type: entryType });
+      parentId = id;
+    }
+    const extendedSource = { ...source, path: extendedPath };
+    expect(resolvePiForkTarget(extendedSource, turn1Target)).toEqual({ targetEntryId: "e1000010" });
+    expect(resolvePiForkTarget(extendedSource, turn2Target)).toEqual({ targetEntryId: parentId });
+
+    // AC5: source immutability
+    expect(handle.metadata.nativeSessionForkFraming).toEqual(framing);
+    expect(await readFile(trailingCustomSessionFile, "utf8")).toBe(sessionBytes);
+  });
+
+  test("AC2: rebinds provenance on trailing non-message source and supports second-generation forks", async () => {
+    const { framing, source, handle } = await loadTrailingCustomFixture();
+
+    const earlierCut = source.path.findIndex((entry) => entry.id === "e1000010");
+    const earlierBranch = {
+      file: "/isolated/branch-earlier.jsonl",
+      header: { ...source.header, id: "branch-earlier-id" },
+      path: source.path.slice(0, earlierCut + 1),
+    };
+    const reboundEarlier = rebindPiForkFraming(source, handle, earlierBranch);
+    expect(reboundEarlier).toMatchObject({
+      sourceSessionId: "branch-earlier-id",
+      sourceNativeHandle: earlierBranch.file,
+      observedLeafId: "e1000010",
+      valid: true,
+    });
+    expect(reboundEarlier?.boundaries.map((b) => b.entryId)).toEqual([
+      "e1000004",
+      "e1000005",
+      "e1000006",
+    ]);
+    expect(
+      resolvePiForkTarget(earlierBranch, {
+        kind: "turn",
+        entryId: "e1000007",
+        framing: reboundEarlier,
+      }),
+    ).toEqual({ targetEntryId: "e1000010" });
+
+    const cloneBranch = {
+      file: "/isolated/branch-clone.jsonl",
+      header: { ...source.header, id: "branch-clone-id" },
+      path: [...source.path],
+    };
+    const reboundClone = rebindPiForkFraming(source, handle, cloneBranch);
+    expect(reboundClone).toMatchObject({
+      sourceSessionId: "branch-clone-id",
+      sourceNativeHandle: cloneBranch.file,
+      observedLeafId: "e1000015",
+      valid: true,
+    });
+    expect(reboundClone?.boundaries).toEqual(framing.boundaries);
+    expect(
+      resolvePiForkTarget(cloneBranch, {
+        kind: "turn",
+        entryId: "e1000007",
+        framing: reboundClone,
+      }),
+    ).toEqual({ targetEntryId: "e1000010" });
+    expect(
+      resolvePiForkTarget(cloneBranch, {
+        kind: "turn",
+        entryId: "e1000013",
+        framing: reboundClone,
+      }),
+    ).toEqual({ targetEntryId: "e1000015" });
+    expect(handle.metadata.nativeSessionForkFraming).toEqual(framing);
+  });
+
+  test("AC3: running-source transaction handles non-message tails and in-flight message prefixes", async () => {
+    const { framing, source } = await loadTrailingCustomFixture();
+    const earlierTarget = { kind: "turn" as const, entryId: "e1000007", framing };
+    const latestTarget = { kind: "turn" as const, entryId: "e1000013", framing };
+
+    // (a) Only non-message entries follow observedLeafId while running: uses full framingSource.
+    const txEarlier = resolvePiSessionForkTransaction(source, earlierTarget, true);
+    expect(txEarlier.targetEntryId).toBe("e1000010");
+    expect(txEarlier.framingSource).toBe(source);
+
+    const txLatest = resolvePiSessionForkTransaction(source, latestTarget, true);
+    expect(txLatest.targetEntryId).toBe("e1000015");
+    expect(txLatest.framingSource).toBe(source);
+
+    // (b) In-flight message or custom_message after non-message tail: uses covered prefix up to observedLeafId.
+    const coveredIndex = source.path.findIndex((entry) => entry.id === framing.observedLeafId);
+    const coveredPrefix = source.path.slice(0, coveredIndex + 1);
+    for (const trailingEntry of [
+      { id: "in-flight-msg", parentId: source.path.at(-1)!.id, type: "message", role: "assistant" },
+      { id: "in-flight-custom-msg", parentId: source.path.at(-1)!.id, type: "custom_message" },
+    ]) {
+      const runningSource = { ...source, path: [...source.path, trailingEntry] };
+      const txPrefix = resolvePiSessionForkTransaction(runningSource, earlierTarget, true);
+      expect(txPrefix.targetEntryId).toBe("e1000010");
+      expect(txPrefix.framingSource.path).toEqual(coveredPrefix);
+      // selected === covered
+      expect(() => resolvePiSessionForkTransaction(runningSource, latestTarget, true)).toThrowError(
+        expect.objectContaining({ code: "boundary_mismatch" }),
+      );
+      // selected > covered
+      expect(() =>
+        resolvePiSessionForkTransaction(
+          runningSource,
+          { kind: "turn", entryId: trailingEntry.id, framing },
+          true,
+        ),
+      ).toThrowError(expect.objectContaining({ code: "boundary_mismatch" }));
+    }
+  });
+
+  test("AC4: preserves fail-closed rejection for unobserved messages and invalid coverage", async () => {
+    const { framing, source, handle } = await loadTrailingCustomFixture();
+    const target = { kind: "turn" as const, entryId: "e1000007", framing };
+
+    // Unobserved message (user, assistant, toolResult) or custom_message after observedLeafId when idle.
+    for (const trailing of [
+      { id: "unobserved-user", parentId: source.path.at(-1)!.id, type: "message", role: "user" },
+      {
+        id: "unobserved-assistant",
+        parentId: source.path.at(-1)!.id,
+        type: "message",
+        role: "assistant",
+      },
+      {
+        id: "unobserved-tool",
+        parentId: source.path.at(-1)!.id,
+        type: "message",
+        role: "toolResult",
+      },
+      { id: "unobserved-custom-msg", parentId: source.path.at(-1)!.id, type: "custom_message" },
+    ]) {
+      const badSource = { ...source, path: [...source.path, trailing] };
+      expect(() => resolvePiForkTarget(badSource, target)).toThrowError(
+        expect.objectContaining({ code: "boundary_mismatch" }),
+      );
+      expect(() => resolvePiSessionForkTransaction(badSource, target, false)).toThrowError(
+        expect.objectContaining({ code: "boundary_mismatch" }),
+      );
+      expect(
+        rebindPiForkFraming(badSource, handle, {
+          file: "/isolated/branch.jsonl",
+          header: { ...source.header, id: "branch-id" },
+          path: badSource.path,
+        }),
+      ).toBeUndefined();
+    }
+
+    // observedLeafId missing from active ancestry (truncated or off-branch).
+    const truncated = { ...source, path: source.path.slice(0, 8) };
+    expect(() => resolvePiForkTarget(truncated, target)).toThrowError(
+      expect.objectContaining({ code: "boundary_mismatch" }),
+    );
+    expect(
+      rebindPiForkFraming(
+        source,
+        {
+          ...handle,
+          metadata: { nativeSessionForkFraming: { ...framing, observedLeafId: "off-branch" } },
+        },
+        source,
+      ),
+    ).toBeUndefined();
+
+    // selected <= start
+    expect(() =>
+      resolvePiForkTarget(source, { kind: "turn", entryId: "e1000002", framing }),
+    ).toThrowError(expect.objectContaining({ code: "boundary_mismatch" }));
+
+    // Discriminating selected > covered: selected entry is a non-message entry after observedLeafId
+    // with no unobserved messages anywhere in the suffix.
+    expect(() =>
+      resolvePiForkTarget(source, { kind: "turn", entryId: "e1000014", framing }),
+    ).toThrowError(expect.objectContaining({ code: "boundary_mismatch" }));
+
+    // Discriminating observedLeafId: null with only a non-message suffix (no unobserved messages).
+    const nonMessageOnlySource = {
+      ...source,
+      path: [
+        { id: "nm-1", parentId: null, type: "model_change" },
+        { id: "nm-2", parentId: "nm-1", type: "thinking_level_change" },
+        { id: "nm-3", parentId: "nm-2", type: "custom" },
+      ],
+    };
+    expect(() =>
+      resolvePiForkTarget(nonMessageOnlySource, {
+        kind: "turn",
+        entryId: "nm-2",
+        framing: {
+          ...framing,
+          startEntryId: null,
+          observedLeafId: null,
+          boundaries: [],
+        },
+      }),
+    ).toThrowError(expect.objectContaining({ code: "boundary_mismatch" }));
+
+    // Discriminating rebind start > covered: startEntryId sits on the non-message tail after observedLeafId
+    // with no unobserved messages and valid empty boundaries.
+    expect(
+      rebindPiForkFraming(
+        source,
+        {
+          ...handle,
+          metadata: {
+            nativeSessionForkFraming: {
+              ...framing,
+              startEntryId: "e1000014",
+              observedLeafId: "e1000013",
+              boundaries: [],
+            },
+          },
+        },
+        source,
+      ),
+    ).toBeUndefined();
+  });
+});
