@@ -335,6 +335,12 @@ describe("keyboard-shortcuts", () => {
       action: "workspace.tab.close.current",
     },
     {
+      name: "matches Ctrl+W to close current tab on non-mac desktop when terminal is focused",
+      event: { key: "w", code: "KeyW", ctrlKey: true },
+      context: { isMac: false, usesDesktopBindings: true, focusScope: "terminal" },
+      action: "workspace.tab.close.current",
+    },
+    {
       name: "matches Ctrl+O to open project on non-mac",
       event: { key: "o", code: "KeyO", ctrlKey: true },
       context: { isMac: false },
@@ -557,11 +563,6 @@ describe("keyboard-shortcuts", () => {
       name: "does not close tab with Ctrl+W on mac desktop (Cmd+W only)",
       event: { key: "w", code: "KeyW", ctrlKey: true },
       context: { isMac: true, usesDesktopBindings: true },
-    },
-    {
-      name: "does not close tab with Ctrl+W on non-mac desktop when terminal is focused",
-      event: { key: "w", code: "KeyW", ctrlKey: true },
-      context: { isMac: false, usesDesktopBindings: true, focusScope: "terminal" },
     },
     {
       name: "does not switch tabs with Alt+Shift+] on mac desktop (Cmd+Shift+] only)",

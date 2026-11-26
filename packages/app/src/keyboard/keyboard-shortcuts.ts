@@ -541,7 +541,7 @@ const SHORTCUT_BINDINGS: readonly ShortcutBinding[] = [
     id: "workspace-tab-close-current-ctrl-w-non-mac",
     action: "workspace.tab.close.current",
     combo: "Ctrl+W",
-    when: { mac: false, desktopBindings: true, commandCenter: false, terminal: false },
+    when: { mac: false, desktopBindings: true, commandCenter: false },
     help: {
       id: "workspace-tab-close-current",
       section: "tabs-panes",
